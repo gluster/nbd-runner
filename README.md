@@ -31,12 +31,15 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 ### Usage
 ------
 **Prerequisites:** *this guide assumes that the following are already present*
-- [x] *A gluster volume with name 'block-test'*
+- [x] *A gluster volume with name 'vol-test'*
 - [x] *Open 24007(for glusterd) 24110 and 24111(nbd-runnerd) 111(rpcbind) ports and glusterfs service in your firewall*
 
 <b>Daemon</b>: run nbd-runner on the node where you can access the gluster through gfapi
+```script
+# nbd-runner
+```
 
-<b>CLI</b>: you can choose to run nbd-runner(cli) from any node which has nbd-runnerd running
+<b>CLI</b>: you can choose to run nbd-cli from any node which has nbd-runnerd running
 ```script
 # nbd-cli --help
 Usage:
