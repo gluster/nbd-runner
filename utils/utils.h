@@ -60,6 +60,12 @@ struct nego_header {
     __u8  cfg[0];
 };
 
+struct nbd_ip {
+    char ip[INET_ADDRSTRLEN];
+    struct nbd_ip *next;
+};
+
+struct nbd_ip *nbd_get_local_ips(void);
 bool nbd_valid_size(const char *value);
 ssize_t nbd_parse_size(const char *value, int sector_size);
 int nbd_socket_write(int fd, void *buf, size_t count);

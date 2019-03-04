@@ -10,6 +10,8 @@
 
 #define   _GNU_SOURCE
 
+#include <stdio.h>
+#include <string.h>
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -18,6 +20,10 @@
 #include <sys/utsname.h>
 #include <linux/version.h>
 #include <errno.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "utils.h"
 #include "nbd-log.h"
@@ -201,3 +207,59 @@ err:
 
     return false;
 }
+
+struct nbd_ip *nbd_get_local_ips(void)
+{
+    struct ifreq buf[INET_ADDRSTRLEN];
+    struct ifconf ifc;
+    struct nbd_ip *ips;
+    struct nbd_ip *p, *q;
+    int fd, interface, retn = 0;
+    char *tmp;
+
+    ips = calloc(1, sizeof(struct nbd_ip));
+    if (!ips) {
+        nbd_err("failed to alloc memory for ips!\n");
+        return NULL;
+    }
+
+    p = ips;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd >= 0) {
+        ifc.ifc_len = sizeof(buf);
+        ifc.ifc_buf = (caddr_t)buf;
+        if (!ioctl(fd, SIOCGIFCONF, (char *)&ifc)) {
+            interface = ifc.ifc_len / sizeof(struct ifreq);
+            if (!interface)
+                goto err;
+
+            do {
+                if (!(ioctl(fd, SIOCGIFADDR, (char *)&buf[interface]))) {
+                    tmp = inet_ntoa(((struct sockaddr_in*)(&buf[interface].ifr_addr))->sin_addr);
+                    snprintf(p->ip, INET_ADDRSTRLEN, "%s", tmp);
+                    printf("IP:%s\n", tmp);
+                }
+                if (--interface) {
+                    p->next = calloc(1, sizeof(struct nbd_ip));
+                    if (!p) {
+                        nbd_err("failed to alloc memory for ips!\n");
+                        goto err;
+                    }
+                }
+            } while (interface);
+        }
+    }
+    close(fd);
+    return ips;
+
+err:
+    for (q = ips; q; q = p) {
+        p = q->next;
+        free(q);
+    }
+
+    close(fd);
+    return NULL;
+}
+
