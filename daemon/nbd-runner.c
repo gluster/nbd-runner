@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <event.h>
+#include <arpa/inet.h>
 
 #include "utils.h"
 #include "nbd-log.h"
