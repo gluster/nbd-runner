@@ -47,16 +47,16 @@ struct timeval TIMEOUT = {.tv_sec = 5};
 static void usage(void)
 {
     _nbd_out("Usage:\n"
-             "\tnbd <command> [<args>] [debug]\n\n"
+             "\tnbd <command> [<args>]\n\n"
              "Commands:\n"
              "\thelp\n"
              "\t\tdisplay help for nbd commands\n\n"
-             "\tcreate <volname@host:/path> [prealloc <yes|no>] <size SIZE>\n"
+             "\tcreate <volname@host:/path> [prealloc <yes|no>] <size SIZE> <host HOST>\n"
              "\t\tcreate path file on the volname volume, prealloc is no as default,\n"
              "\t\tand the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)\n\n"
-             "\tdelete <volname@host:/path>\n"
+             "\tdelete <volname@host:/path> <host HOST>\n"
              "\t\tdelete path file on the volname volume\n\n"
-             "\tmap <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] [daemon on|off]\n"
+             "\tmap <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] <host HOST>\n"
              "\t\tmap path file to the nbd device, as default the threads 4, timeout 0 and daemon on\n\n"
              "\tumap <nbd-device>\n"
              "\t\tumap the nbd device\n\n"
@@ -64,7 +64,7 @@ static void usage(void)
              "\t\tlist the mapped|umapped|all nbd devices, all as default\n\n"
              "\tversion\n"
              "\t\tshow version info and exit.\n\n"
-             "\tNOTE: please make sure the 'debug' always be the last one.\n"
+             "\t<host HOST> means the RPC server IP.\n"
             );
 }
 
@@ -225,6 +225,11 @@ static int nbd_create_file(int count, char **options)
         }
     }
 
+    if (!host) {
+        nbd_err("<host HOST> param is a must here!\n");
+        goto err;
+    }
+
     res = nbd_get_sock_addr(host);
     if (!res) {
         nbd_err("failed to get sock addr!\n");
@@ -294,6 +299,11 @@ static int nbd_delete_file(int count, char **options)
             nbd_err("No memory for host!\n");
             goto err;
         }
+    }
+
+    if (!host) {
+        nbd_err("<host HOST> param is a must here!\n");
+        goto err;
     }
 
     res = nbd_get_sock_addr(host);
@@ -680,6 +690,11 @@ static int nbd_map_device(int count, char **options)
             nbd_err("Invalid argument '%s'!\n", options[ind]);
             goto err;
         }
+    }
+
+    if (!host) {
+        nbd_err("<host HOST> param is a must here!\n");
+        goto err;
     }
 
     res = nbd_get_sock_addr(host);

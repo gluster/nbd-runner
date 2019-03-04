@@ -49,14 +49,14 @@ Commands:
 	help
 		display help for nbd commands
 
-	create <volname@host:/path> [prealloc <yes|no>] <size SIZE>
+	create <volname@host:/path> [prealloc <yes|no>] <size SIZE> <host HOST>
 		create path file on the volname volume, prealloc is no as default,
 		and the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)
 
-	delete <volname@host:/path>
+	delete <volname@host:/path> <host HOST>
 		delete path file on the volname volume
 
-	map <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] [daemon on|off]
+	map <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] <host HOST>
 		map path file to the nbd device, as default the threads 4, timeout 0 and daemon on
 
 	umap <nbd-device>
@@ -68,5 +68,4 @@ Commands:
 	version
 		show version info and exit.
 
-	NOTE: please make sure the 'debug' always be the last one.
-```
+	<host HOST> means the RPC server IP.
