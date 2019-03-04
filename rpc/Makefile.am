@@ -6,6 +6,9 @@ noinst_HEADERS = rpc_nbd.h rpc_nbd_svc.h rpc-pragmas.h
 EXTRA_DIST = rpc_nbd.x
 BUILT_SOURCES = rpc_nbd.h rpc_nbd_clnt.c rpc_nbd_svc.c rpc_nbd_xdr.c
 
+libgbrpcxdr_la_CFLAGS = $(TIRPC_CFLAGS)
+libgbrpcxdr_la_LDFLAGS = $(TIRPC_LIBS)
+
 DISTCLEANFILES = Makefile.in $(BUILT_SOURCES)
 CLEANFILES = *~ $(BUILT_SOURCES)
 

@@ -1,0 +1,111 @@
+diff --git a/cli/Makefile.am b/cli/Makefile.am
+index d987432..415a3df 100644
+--- a/cli/Makefile.am
++++ b/cli/Makefile.am
+@@ -2,12 +2,14 @@ sbin_PROGRAMS = nbd-cli
+ 
+ nbd_cli_SOURCES = nbd-cli.c
+ 
+-nbd_cli_CFLAGS = $(KMOD_CFLAGS) $(LIBNL3_CFLAGS) -DDATADIR=\"$(localstatedir)\"         \
+-                        -I$(top_builddir)/ -I$(top_srcdir)/utils/              \
+-                        -I$(top_srcdir)/rpc
++nbd_cli_CFLAGS = $(KMOD_CFLAGS) $(LIBNL3_CFLAGS) $(TIRPC_CFLAGS)        \
++		 -DDATADIR=\"$(localstatedir)\"                         \
++                 -I$(top_builddir)/ -I$(top_srcdir)/utils/              \
++                 -I$(top_srcdir)/rpc
+ 
+-nbd_cli_LDADD = $(KMOD_LIBS) $(LIBNL3_LIBS) $(top_builddir)/rpc/libgbrpcxdr.la \
+-				   $(top_builddir)/utils/libutils.la 
++nbd_cli_LDADD = $(KMOD_LIBS) $(LIBNL3_LIBS) $(TIRPC_LIBS) 		\
++		$(top_builddir)/rpc/libgbrpcxdr.la 			\
++		$(top_builddir)/utils/libutils.la 
+ 
+ DISTCLEANFILES = Makefile.in
+ 
+diff --git a/configure.ac b/configure.ac
+index 67e8a3a..ad2a1dc 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -85,7 +85,14 @@ AC_CHECK_HEADERS([stdio.h stdlib.h string.h stdbool.h stddef.h libkmod.h \
+                   unistd.h errno.h memory.h time.hnetdb.h sys/utsname.h  \
+                   netdb.h netinet/in.h sys/socket.h sys/socket.h netinet/in.h \
+                   pthread.h sys/utsname.h glusterfs/api/glfs.h netlink/netlink.h \
+-                  rpc/pmap_clnt.h inttypes.h fcntl.h linux/nbd.h signal.h glib.h])
++                  rpc/pmap_clnt.h inttypes.h fcntl.h linux/nbd.h signal.h glib.h \
++		  rpc/rpc.h])
++
++PKG_CHECK_MODULES([TIRPC], [libtirpc],,
++                  [AC_MSG_ERROR([tirpc library is required to build nbd-runner])])
++AC_SUBST(TIRPC_CFLAGS)
++AC_SUBST(TIRPC_LIBS)
++
+ 
+ # Checks for libraries.
+ # glusterfs-api versions have a prefix of "7."
+diff --git a/daemon/Makefile.am b/daemon/Makefile.am
+index 52085da..a5254f7 100644
+--- a/daemon/Makefile.am
++++ b/daemon/Makefile.am
+@@ -2,12 +2,14 @@ sbin_PROGRAMS = nbd-runner
+ 
+ nbd_runner_SOURCES = nbd-runner.c nbd-svc-routines.c
+ 
+-nbd_runner_CFLAGS = $(GFAPI_CFLAGS) $(VEVENT_CFLAGS) $(GLIB2_CFLAGS) -DDATADIR=\"$(localstatedir)\"         \
+-                        -I$(top_builddir)/ -I$(top_srcdir)/utils/              \
+-                        -I$(top_srcdir)/rpc
++nbd_runner_CFLAGS = $(GFAPI_CFLAGS) $(EVENT_CFLAGS) $(GLIB2_CFLAGS) 	\
++		    $(TIRPC_CFLAGS) -DDATADIR=\"$(localstatedir)\"      \
++                    -I$(top_builddir)/ -I$(top_srcdir)/utils/           \
++                    -I$(top_srcdir)/rpc
+ 
+-nbd_runner_LDADD = $(PTHREAD) $(GFAPI_LIBS) $(EVENT_LIBS) $(GLIB2_LIBS) $(top_builddir)/rpc/libgbrpcxdr.la \
+-				   $(top_builddir)/utils/libutils.la 
++nbd_runner_LDADD = $(PTHREAD) $(GFAPI_LIBS) $(EVENT_LIBS) $(GLIB2_LIBS) \
++		   $(TIRPC_LIBS) $(top_builddir)/rpc/libgbrpcxdr.la     \
++		   $(top_builddir)/utils/libutils.la 
+ 
+ DISTCLEANFILES = Makefile.in
+ 
+diff --git a/rpc/Makefile.am b/rpc/Makefile.am
+index 2c19e1c..94b2708 100644
+--- a/rpc/Makefile.am
++++ b/rpc/Makefile.am
+@@ -6,6 +6,9 @@ noinst_HEADERS = rpc_nbd.h rpc_nbd_svc.h rpc-pragmas.h
+ EXTRA_DIST = rpc_nbd.x
+ BUILT_SOURCES = rpc_nbd.h rpc_nbd_clnt.c rpc_nbd_svc.c rpc_nbd_xdr.c
+ 
++libgbrpcxdr_la_CFLAGS = $(TIRPC_CFLAGS)
++libgbrpcxdr_la_LDFLAGS = $(TIRPC_LIBS)
++
+ DISTCLEANFILES = Makefile.in $(BUILT_SOURCES)
+ CLEANFILES = *~ $(BUILT_SOURCES)
+ 
+diff --git a/utils/Makefile.am b/utils/Makefile.am
+index ae333ea..ceeeb41 100644
+--- a/utils/Makefile.am
++++ b/utils/Makefile.am
+@@ -4,9 +4,9 @@ libutils_la_SOURCES = utils.c
+ 
+ noinst_HEADERS = utils.h nbd-log.h
+ 
+-libgb_la_CFLAGS = -DDATADIR=\"$(localstatedir)\"               \
+-				  -DCONFDIR=\"$(NBD_RUNNER_WORKDIR)\"  \
+-				  -I$(top_builddir)/ -I$(top_builddir)/rpc
++libgb_la_CFLAGS = $(TIPRC_CFLAGS) -DDATADIR=\"$(localstatedir)\"    	   \
++		  -DCONFDIR=\"$(NBD_RUNNER_WORKDIR)\"	   		   \
++		  -I$(top_builddir)/ -I$(top_builddir)/rpc
+ 
+ libutils_ladir = $(includedir)/utils
+ 
+diff --git a/utils/utils.c b/utils/utils.c
+index e88510a..03aeaf0 100644
+--- a/utils/utils.c
++++ b/utils/utils.c
+@@ -14,7 +14,6 @@
+ #include <dirent.h>
+ #include <sys/stat.h>
+ #include <pthread.h>
+-#include <rpc/pmap_clnt.h>
+ #include <signal.h>
+ #include <sys/utsname.h>
+ #include <linux/version.h>

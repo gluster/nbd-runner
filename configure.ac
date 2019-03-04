@@ -36,21 +36,41 @@ AC_ARG_WITH(sysconfigdir,
             [sysconfigdir='/etc/sysconfig'])
 AC_SUBST(sysconfigdir)
 
-PKG_CHECK_MODULES(KMOD, [libkmod],, [AC_MSG_ERROR([Missing kmod])])
+PKG_CHECK_MODULES(KMOD, [libkmod],,
+                  [AC_MSG_ERROR([kmod library is required to build nbd-runner])])
 AC_SUBST(KMOD_CFLAGS)
 AC_SUBST(KMOD_LIBS)
 
-PKG_CHECK_MODULES(EVENT, [libevent],, [AC_MSG_ERROR([Missing event])])
+PKG_CHECK_MODULES(EVENT, [libevent],,
+                  [AC_MSG_ERROR([libevent library is required to build nbd-runner])])
 AC_SUBST(EVENT_CFLAGS)
 AC_SUBST(EVENT_LIBS)
 
-PKG_CHECK_MODULES(GLIB2, [glib-2.0 >= 2.26.0 gthread-2.0 >= 2.26.0],, AC_MSG_ERROR([Missing glib]))
+PKG_CHECK_MODULES(GLIB2, [glib-2.0 >= 2.26.0 gthread-2.0 >= 2.26.0],,
+                  AC_MSG_ERROR([glib2 library is required to build nbd-runner]))
 AC_SUBST(GLIB2_CFLAGS)
 AC_SUBST(GLIB2_LIBS)
 
-PKG_CHECK_MODULES(LIBNL3, [libnl-genl-3.0 >= 3.1],, AC_MSG_ERROR([Missing libnl3]))
+PKG_CHECK_MODULES(LIBNL3, [libnl-genl-3.0 >= 3.1],,
+                  AC_MSG_ERROR([libnl3 library is required to build nbd-runner]))
 AC_SUBST(LIBNL3_CFLAGS)
 AC_SUBST(LIBNL3_LIBS)
+
+PKG_CHECK_MODULES([TIRPC], [libtirpc],,
+                  [AC_MSG_ERROR([tirpc library is required to build nbd-runner])])
+AC_SUBST(TIRPC_CFLAGS)
+AC_SUBST(TIRPC_LIBS)
+
+# Checks for libraries.
+# glusterfs-api versions have a prefix of "7."
+PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.4.1],,
+                  [AC_MSG_ERROR([gfapi library >= 4.1 is required to build nbd-runner])])
+AC_SUBST(GFAPI_CFLAGS)
+AC_SUBST(GFAPI_LIBS)
+
+AC_CHECK_LIB([pthread], [pthread_mutex_init],[PTHREAD="-lpthread"],
+             AC_MSG_ERROR([Posix threads library is required to build nbd-runner]))
+AC_SUBST(PTHREAD)
 
 AM_INIT_AUTOMAKE([-Wall -Werror foreign nostdinc silent-rules])
 AC_CONFIG_HEADERS([config.h])
@@ -85,18 +105,8 @@ AC_CHECK_HEADERS([stdio.h stdlib.h string.h stdbool.h stddef.h libkmod.h \
                   unistd.h errno.h memory.h time.hnetdb.h sys/utsname.h  \
                   netdb.h netinet/in.h sys/socket.h sys/socket.h netinet/in.h \
                   pthread.h sys/utsname.h glusterfs/api/glfs.h netlink/netlink.h \
-                  rpc/pmap_clnt.h inttypes.h fcntl.h linux/nbd.h signal.h glib.h])
-
-# Checks for libraries.
-# glusterfs-api versions have a prefix of "7."
-PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.4.1],,
-                  [AC_MSG_ERROR([gfapi library >= 4.1 is required to build nbd-runner])])
-AC_SUBST(GFAPI_CFLAGS)
-AC_SUBST(GFAPI_LIBS)
-
-AC_CHECK_LIB([pthread], [pthread_mutex_init],[PTHREAD="-lpthread"],
-             AC_MSG_ERROR([Posix threads library is required to build nbd-runner]))
-AC_SUBST(PTHREAD)
+                  rpc/pmap_clnt.h inttypes.h fcntl.h linux/nbd.h signal.h glib.h \
+		  rpc/rpc.h])
 
 # Dirty hacky stuff to make STATEDIR work
 if test "x$prefix" = xNONE; then
