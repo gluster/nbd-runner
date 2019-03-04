@@ -28,6 +28,8 @@
 
 #define NBD_LOCK_FILE "/run/nbd-runner.lock"
 
+char *listen_host = NULL;
+
 static void *worker_thread(void *arg)
 {
     int sock = *(int *)arg;
@@ -67,8 +69,10 @@ static void *nbd_ios_svc_thread_start(void *arg)
     int listenfd;
     int ret = 0;
 
-    if (arg)
+    if (arg) {
         host = arg;
+        listen_host = strdup(host);
+    }
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
     if(listenfd < 0){

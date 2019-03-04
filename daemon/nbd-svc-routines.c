@@ -34,6 +34,8 @@
 #include "nbd-log.h"
 #include "utils.h"
 
+extern char *listen_host;
+
 #define NBD_GFAPI_LOG_FILE "/var/log/nbd-runner.log"
 #define NBD_GFAPI_LOG_LEVEL 7
 #define NBD_NL_VERSION 1
@@ -409,6 +411,7 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
     struct stat st;
     struct glfs *glfs;
     struct addrinfo hints, *res;
+    struct nbd_ip *ips = NULL, *p, *q;
 
     rep->exit = 0;
 
@@ -454,23 +457,40 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
     rep->size = st.st_size;
     rep->blksize = st.st_blksize;
 
-    nbd_out("blksize: %d\n", rep->blksize);
-#if 0
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
+    if (listen_host) {
+        snprintf(rep->host, 255, "%s", listen_host);
+    } else {
+        ips = nbd_get_local_ips();
+        if (!ips) {
+            rep->exit = -EINVAL;
+            snprintf(rep->out, 8192, "failed to parse the listen IP addr!");
+            nbd_err("failed to parse the listen IP addr!\n");
+            goto err;
+        }
 
-    if (getaddrinfo(NULL, NBD_IOS_SVC_PORT, &hints, &res)) {
-        rep->exit = -errno;
-        snprintf(rep->out, 8192, "getaddrinfo failed!");
-        nbd_err("getaddrinfo failed\n");
-        goto err;
+        p = ips;
+        while (p) {
+            if (strcmp(p->ip, "127.0.0.1"))
+                break;
+
+            p = p->next;
+        }
+
+        if (!p) {
+            rep->exit = -EINVAL;
+            snprintf(rep->out, 8192, "failed to check the listen IP addr!");
+            nbd_err("failed to check the listen IP addr!\n");
+            goto err;
+        }
+        snprintf(rep->host, 255, "%s", p);
     }
-#endif
-    snprintf(rep->host, 64, "%s", "192.168.195.164");
     snprintf(rep->port, 32, "%d", NBD_IOS_SVC_PORT);
 
 err:
+    for (q = ips; q; q = p) {
+        p = q->next;
+        free(q);
+    }
     free(info);
     return true;
 }
