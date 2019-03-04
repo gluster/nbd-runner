@@ -67,7 +67,7 @@ static void *nbd_ios_svc_thread_start(void *arg)
     int listenfd;
     int ret = 0;
 
-    if (!arg)
+    if (arg)
         host = arg;
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
