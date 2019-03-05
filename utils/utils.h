@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <linux/types.h>
 #include <sys/types.h>
+#include "config.h"
 
 #define nbd_version_info ""                                       \
 "nbd-runner (0.1)\n\n"                                              \

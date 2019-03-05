@@ -25,7 +25,12 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 # git clone https://github.com/gluster/nbd-runner.git
 # cd nbd-runner/
 # dnf install autoconf automake libtool glusterfs-api-devel kmod-devel libnl3-devel libevent-devel glib2-devel
-# ./autogen.sh && ./configure && make -j && make install
+# ./autogen.sh
+# ./configure [--with-tirpc=yes] # glibc >= 2.26
+# make -j
+# make install
+#
+# NOTE: Glibc has removed the rpc functions from the [2.26 release](https://sourceware.org/ml/libc-alpha/2017-08/msg00010.html). Instead of relying on glibc providing these, the modern libtirpc library should be used instead. For the old glibc version or some distribute we will still use the glibc instead.
 </pre>
 
 ### Usage
