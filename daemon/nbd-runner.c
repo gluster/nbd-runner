@@ -175,13 +175,15 @@ static void *nbd_rpc_svc_thread_start(void *arg)
 
     ret = bind(listenfd, (struct sockaddr *) &sin, sizeof (sin));
     if (ret < 0) {
-        nbd_err("bind on port %d failed, %s\n", NBD_RPC_SVC_PORT, strerror(errno));
+        nbd_err("bind on port %d failed, %s\n", NBD_RPC_SVC_PORT,
+                strerror(errno));
         goto out;
     }
 
 #if HAVE_TIRPC
     if (listen(listenfd, 16) < 0) {
-        nbd_err("failed to start listening on a socket: %s\n", strerror(errno));
+        nbd_err("failed to start listening on a socket: %s\n",
+                strerror(errno));
         goto out;
     }
 #endif
