@@ -56,10 +56,23 @@ PKG_CHECK_MODULES(LIBNL3, [libnl-genl-3.0 >= 3.1],,
 AC_SUBST(LIBNL3_CFLAGS)
 AC_SUBST(LIBNL3_LIBS)
 
-PKG_CHECK_MODULES([TIRPC], [libtirpc],,
-                  [AC_MSG_ERROR([tirpc library is required to build nbd-runner])])
-AC_SUBST(TIRPC_CFLAGS)
-AC_SUBST(TIRPC_LIBS)
+AC_ARG_WITH([tirpc],
+    [AS_HELP_STRING([--with-tirpc],
+    [do use tirpc])], [], 
+    [with_tirpc=check])
+if test "x$with_tirpc" == "xyes"; then
+    PKG_CHECK_MODULES(TIRPC, [libtirpc >= 1.1.4],
+        [HAVE_TIRPC=1 AC_DEFINE(HAVE_TIRPC, 1, [Define to 1 if we have tirpc support])],
+     
+        [AC_MSG_ERROR([--with-tirpc given but cannot find libtirpc])
+        HAVE_TIRPC=0 AC_DEFINE(HAVE_TIRPC, 0)])   
+
+    AC_SUBST(TIRPC_CFLAGS)
+    AC_SUBST(TIRPC_LIBS)
+else
+    HAVE_TIRPC=0
+    AC_DEFINE(HAVE_TIRPC, 0, [Define to 1 if we have tirpc support])
+fi
 
 # Checks for libraries.
 # glusterfs-api versions have a prefix of "7."

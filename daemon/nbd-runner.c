@@ -157,6 +157,13 @@ static void *nbd_rpc_svc_thread_start(void *arg)
         goto out;
     }
 
+#if HAVE_TIRPC
+    if (listen(listenfd, 16) < 0) {
+        nbd_err("failed to start listening on a socket: %s\n", strerror(errno));
+        goto out;
+    }
+#endif
+
     transp = svctcp_create(listenfd, 0, 0);
     if (!transp) {
         nbd_err("svctcp_create failed, %s\n", strerror(errno));
