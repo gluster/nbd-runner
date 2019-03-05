@@ -46,7 +46,26 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 
 <b>CLI</b>: you can choose to run nbd-cli from any node where the newer nbd.ko module is availible
 ```script
-# nbd-cli --help
+# nbd-runner help
+Usage:
+	nbd-runner [<args>]
+
+Commands:
+	help
+		display help for nbd-runner command
+
+	threads <NUM>
+		specify the IOs threads number
+
+	host <LISTEN_HOST>
+		specify the listenning IP for new comming map opt
+
+	version
+		show version info and exit.
+
+
+
+# nbd-cli help
 Usage:
 	nbd <command> [<args>]
 
@@ -61,8 +80,8 @@ Commands:
 	delete <volname@host:/path> <host HOST>
 		delete path file on the volname volume
 
-	map <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] <host HOST>
-		map path file to the nbd device, as default the threads 4, timeout 0 and daemon on
+	map <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] <host HOST> [readonly]
+		map path file to the nbd device, as default the threads 4, timeout 0, none readonly
 
 	umap <nbd-device>
 		umap the nbd device
@@ -82,6 +101,5 @@ Commands:
 2. split the gluster code as one separate handler
 3. add logger file support
 4. add sysconfig file support
-5. add read-only feature support
-6. add 'nbd-cli list <map|umap|create|all>'
-7. ...
+5. add 'nbd-cli list <map|umap|create|all>'
+6. ...
