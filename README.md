@@ -74,3 +74,13 @@ Commands:
 		show version info and exit.
 
 	<host HOST> means the RPC server IP.
+```
+
+# TODO:
+
+1. add systemd service support
+2. split the gluster code as one separate handler
+3. add logger file support
+4. add sysconfig file support
+5. add read-only feature support
+6. ...

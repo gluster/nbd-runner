@@ -751,6 +751,7 @@ umap_device(struct nl_sock *netfd, int driver_id, int index)
     struct nl_msg *msg;
     int ret = 0;
 
+    printf("index : %d\n", index);
     msg = nlmsg_alloc();
     if (!msg) {
         nbd_err("Couldn't allocate netlink message!\n");
