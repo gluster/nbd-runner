@@ -71,7 +71,7 @@ bool nbd_valid_size(const char *value);
 ssize_t nbd_parse_size(const char *value, int sector_size);
 int nbd_socket_write(int fd, void *buf, size_t count);
 int nbd_socket_read(int fd, void *buf, size_t count);
-int nbd_handle_request(int sock);
+int nbd_handle_request(int sock, int threads);
 bool nbd_minimal_kernel_version_check(void);
 
 #endif /* __UTILS_H */

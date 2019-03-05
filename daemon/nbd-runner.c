@@ -27,14 +27,37 @@
 #include "rpc_nbd_svc.h"
 
 #define NBD_LOCK_FILE "/run/nbd-runner.lock"
+#define NBD_MIN_THREADS  1
+#define NBD_MAX_THREADS  16
 
 char *listen_host = NULL;
 
+struct io_thread_data {
+    int threads;
+    int sockfd;
+};
+
+static void usage(void)
+{
+    _nbd_out("Usage:\n"
+             "\tnbd-runner [<args>]\n\n"
+             "Commands:\n"
+             "\thelp\n"
+             "\t\tdisplay help for nbd-runner command\n\n"
+             "\tthreads <NUM>\n"
+             "\t\tspecify the IOs threads number\n\n"
+             "\thost <LISTEN_HOST>\n"
+             "\t\tspecify the listenning IP for new comming map opt\n\n"
+             "\tversion\n"
+             "\t\tshow version info and exit.\n\n"
+            );
+}
+
 static void *worker_thread(void *arg)
 {
-    int sock = *(int *)arg;
+    struct io_thread_data *data = arg;
 
-    if (nbd_handle_request(sock))
+    if (nbd_handle_request(data->sockfd, data->threads))
         return NULL;
 
     return NULL;
@@ -45,6 +68,7 @@ static void event_handler(int listenfd, short event, void *arg)
     pthread_t thread_id;
     struct sockaddr_storage addr_in;
     socklen_t sin_size = sizeof(addr_in);
+    struct io_thread_data data = {0, };
     int acceptfd;
 
     acceptfd = accept(listenfd, (struct sockaddr*)&addr_in, &sin_size);
@@ -53,7 +77,10 @@ static void event_handler(int listenfd, short event, void *arg)
         return;
     }
 
-    if (pthread_create(&thread_id, NULL, worker_thread, &acceptfd) != 0)
+    data.threads = *(int *)arg;
+    data.sockfd = acceptfd;
+
+    if (pthread_create(&thread_id, NULL, worker_thread, &data) != 0)
         nbd_err("failed to create thread: %s!\n", strerror(errno));
 
     if (pthread_detach(thread_id) != 0)
@@ -68,11 +95,6 @@ static void *nbd_ios_svc_thread_start(void *arg)
     struct event listen_ev;
     int listenfd;
     int ret = 0;
-
-    if (arg) {
-        host = arg;
-        listen_host = strdup(host);
-    }
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
     if(listenfd < 0){
@@ -111,7 +133,7 @@ static void *nbd_ios_svc_thread_start(void *arg)
         goto err;
     }
 
-    event_set(&listen_ev, listenfd, EV_READ|EV_PERSIST, event_handler, NULL);
+    event_set(&listen_ev, listenfd, EV_READ|EV_PERSIST, event_handler, arg);
     event_base_set(base, &listen_ev);
     event_add(&listen_ev, NULL);
     event_base_dispatch(base);
@@ -193,12 +215,60 @@ int main (int argc, char **argv)
     pthread_t rpc_svc_threadid;
     pthread_t ios_svc_threadid;
     struct flock lock = {0, };
+    char *host = NULL;
+    int threads = NBD_MIN_THREADS;
     int ret;
+    int ind;
 
     ret = nbd_log_init();
     if (ret < 0) {
         nbd_err("nbd_log_init failed!\n");
         goto out;
+    }
+
+    ind = 1;
+    while (ind < argc) {
+        if (!strcmp("host", argv[ind])) {
+            if (ind + 1 >= argc) {
+                nbd_err("Invalid argument 'host <LISTEN_HOST>'!\n\n");
+                goto out;
+            }
+
+            listen_host = strdup(argv[ind + 1]);
+            if (!listen_host) {
+                nbd_err("No memory for host!\n");
+                goto out;
+            }
+
+            ind += 2;
+        } else if (!strcmp("threads", argv[ind])) {
+            if (ind + 1 >= argc) {
+                nbd_err("Invalid argument 'threads <NUM>'!\n\n");
+                goto out;
+            }
+
+            threads = atoi(argv[ind + 1]);
+            if (threads <= 0) {
+                nbd_err("Invalid threads, will set it as default %d!\n",
+                        NBD_MIN_THREADS);
+                threads = NBD_MIN_THREADS;
+            }
+
+            if (threads > NBD_MAX_THREADS) {
+                nbd_err("Currently the max threads is %d, will set it to %d!\n",
+                        NBD_MAX_THREADS, NBD_MAX_THREADS);
+                threads = NBD_MAX_THREADS;
+            }
+
+            ind += 2;
+        } else if (!strcmp("help", argv[ind])) {
+            usage();
+            goto out;
+        } else {
+            nbd_err("Invalid argument '%s'!\n\n", argv[ind]);
+            usage();
+            goto out;
+        }
     }
 
     /* make sure only one nbd-runner daemon is running */
@@ -221,7 +291,7 @@ int main (int argc, char **argv)
     pmap_unset(RPC_NBD, RPC_NBD_VERS);
 
     pthread_create(&rpc_svc_threadid, NULL, nbd_rpc_svc_thread_start, NULL);
-    pthread_create(&ios_svc_threadid, NULL, nbd_ios_svc_thread_start, NULL);
+    pthread_create(&ios_svc_threadid, NULL, nbd_ios_svc_thread_start, &threads);
     pthread_join(ios_svc_threadid, NULL);
     pthread_join(rpc_svc_threadid, NULL);
 
@@ -236,6 +306,7 @@ int main (int argc, char **argv)
 out:
     if (lockfd != -1)
         close(lockfd);
+    free(listen_host);
     nbd_log_destroy();
     exit (EXIT_FAILURE);
 }
