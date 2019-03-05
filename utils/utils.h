@@ -58,6 +58,7 @@
 
 struct nego_header {
     __u32 len;
+    __u32 readonly;
     __u8  cfg[0];
 };
 

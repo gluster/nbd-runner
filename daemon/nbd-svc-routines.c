@@ -573,13 +573,16 @@ int nbd_handle_request(int sock, int threads)
     struct gluster_volinfo *info = NULL;
     struct pool_request *req;
     struct nbd_request request;
+    struct nbd_reply reply;
     GThreadPool *nbd_thread_pool;
     int ret = -1;
     struct sigaction sa;
     glfs_fd_t *gfd = NULL;
     glfs_t *glfs = NULL;
     struct nego_header hdr;
+    bool readonly = false;
     char *cfg = NULL;
+    int cmd;
 
     nbd_thread_pool = g_thread_pool_new(_handle_request, NULL, threads,
             false, NULL);
@@ -596,6 +599,8 @@ int nbd_handle_request(int sock, int threads)
         ret = -1;
         goto err;
     }
+
+    readonly = !!hdr.readonly;
 
     cfg = calloc(1, 1024);
     ret = nbd_socket_read(sock, cfg, hdr.len);
@@ -641,6 +646,20 @@ int nbd_handle_request(int sock, int threads)
             goto err;
         }
 
+        cmd = ntohl(request.type) & NBD_CMD_MASK_COMMAND;
+        if (readonly && cmd != NBD_CMD_READ && cmd != NBD_CMD_FLUSH) {
+            reply.magic = htonl(NBD_REPLY_MAGIC);
+            reply.error = htonl(EROFS);
+            memcpy(&(reply.handle), &(request.handle), sizeof(request.handle));
+
+            pthread_spin_lock(&nbd_write_lock);
+            nbd_socket_write(sock, &reply, sizeof(struct nbd_reply));
+            pthread_spin_unlock(&nbd_write_lock);
+
+            printf("cmd : %d\n", cmd);
+            continue;
+        }
+
         req = calloc(1, sizeof(struct pool_request));
         if (!req) {
             nbd_err("Failed to alloc memory for pool request!\n");
@@ -652,7 +671,7 @@ int nbd_handle_request(int sock, int threads)
         req->gfd = gfd;
         req->sock = sock;
         req->offset = be64toh(request.from);
-        req->cmd = ntohl(request.type) & NBD_CMD_MASK_COMMAND;
+        req->cmd = cmd;
         req->flags = ntohl(request.type) & ~NBD_CMD_MASK_COMMAND;
         req->len = ntohl(request.len);
         memcpy(&(req->handle), &(request.handle), sizeof(request.handle));

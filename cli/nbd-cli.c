@@ -57,8 +57,8 @@ static void usage(void)
              "\t\tand the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)\n\n"
              "\tdelete <volname@host:/path> <host HOST>\n"
              "\t\tdelete path file on the volname volume\n\n"
-             "\tmap <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] <host HOST>\n"
-             "\t\tmap path file to the nbd device, as default the threads 4, timeout 0 and daemon on\n\n"
+             "\tmap <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] <host HOST> [readonly]\n"
+             "\t\tmap path file to the nbd device, as default the threads 4, timeout 0, none readonly\n\n"
              "\tumap <nbd-device>\n"
              "\t\tumap the nbd device\n\n"
              "\tlist <map|umap|all>\n"
@@ -161,6 +161,11 @@ static int nbd_create_file(int count, char **options)
     ind = 3;
     while (ind < count) {
         if (!strcmp("host", options[ind])) {
+            if (ind + 1 >= count) {
+                nbd_err("Invalid argument 'host <HOST>'!\n\n");
+                goto err;
+            }
+
             host = strdup(options[ind + 1]);
             if (!host) {
                 nbd_err("No memory for host!\n");
@@ -170,13 +175,19 @@ static int nbd_create_file(int count, char **options)
             ind += 2;
         } else if (!strcmp("prealloc", options[ind])) {
             /* prealloc yes --> prealloc=yes */
+            if (ind + 1 >= count) {
+                nbd_err("Invalid argument 'prealloc <yes|no>'!\n\n");
+                goto err;
+            }
+
             if (strcmp(options[ind + 1], "yes") && strcmp(options[ind + 1], "no")) {
                 nbd_err("Invalid value for prealloc!\n");
                 ret = -EINVAL;
                 goto err;
             }
 
-            len += snprintf(create->cfgstring + len, max_len - len, "%s", options[ind]);
+            len += snprintf(create->cfgstring + len, max_len - len, "%s",
+                            options[ind]);
             if (len < 0) {
                 nbd_err("strcpy error for prealloc, %s!\n", strerror(errno));
                 ret = -errno;
@@ -185,9 +196,11 @@ static int nbd_create_file(int count, char **options)
 
             create->cfgstring[len++] = '=';
 
-            len += snprintf(create->cfgstring + len, max_len - len, "%s", options[ind + 1]);
+            len += snprintf(create->cfgstring + len, max_len - len, "%s",
+                            options[ind + 1]);
             if (len < 0) {
-                nbd_err("strcpy error for prealloc value, %s!\n", strerror(errno));
+                nbd_err("strcpy error for prealloc value, %s!\n",
+                        strerror(errno));
                 ret = -errno;
                 goto err;
             }
@@ -195,13 +208,19 @@ static int nbd_create_file(int count, char **options)
             create->cfgstring[len++] = ';';
             ind += 2;
         } else if (!strcmp("size", options[ind])) {
+            if (ind + 1 >= count) {
+                nbd_err("Invalid argument 'size <SIZE>'!\n\n");
+                goto err;
+            }
+
             if (!nbd_valid_size(options[ind + 1])) {
                 nbd_err("Invalid size!\n");
                 ret = -EINVAL;
                 goto err;
             }
 
-            len += snprintf(create->cfgstring + len, max_len - len, "%s", options[ind]);
+            len += snprintf(create->cfgstring + len, max_len - len, "%s",
+                            options[ind]);
             if (len < 0) {
                 nbd_err("strcpy error for prealloc, %s!\n", strerror(errno));
                 ret = -errno;
@@ -210,9 +229,11 @@ static int nbd_create_file(int count, char **options)
 
             create->cfgstring[len++] = '=';
 
-            len += snprintf(create->cfgstring + len, max_len - len, "%s", options[ind + 1]);
+            len += snprintf(create->cfgstring + len, max_len - len,
+                            "%s", options[ind + 1]);
             if (len < 0) {
-                nbd_err("strcpy error for prealloc value, %s!\n", strerror(errno));
+                nbd_err("strcpy error for prealloc value, %s!\n",
+                        strerror(errno));
                 ret = -errno;
                 goto err;
             }
@@ -237,7 +258,8 @@ static int nbd_create_file(int count, char **options)
         goto err;
     }
 
-    clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD, RPC_NBD_VERS, &sock, 0, 0);
+    clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
+                          RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
         nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
         goto err;
@@ -256,7 +278,8 @@ static int nbd_create_file(int count, char **options)
 
 err:
     if (clnt) {
-        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response, (char *)&rep))
+        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+                                     (char *)&rep))
             nbd_err("clnt_freeres failed!\n");
         clnt_destroy(clnt);
     }
@@ -294,6 +317,11 @@ static int nbd_delete_file(int count, char **options)
     }
 
     if (!strcmp("host", options[3])) {
+        if (count < 4) {
+            nbd_err("Invalid argument 'host <HOST>'!\n\n");
+            goto err;
+        }
+
         host = strdup(options[4]);
         if (!host) {
             ret = -ENOMEM;
@@ -314,7 +342,8 @@ static int nbd_delete_file(int count, char **options)
         goto err;
     }
 
-    clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD, RPC_NBD_VERS, &sock, 0, 0);
+    clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
+                          RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
         ret = -errno;
         nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
@@ -335,7 +364,8 @@ static int nbd_delete_file(int count, char **options)
 
 err:
     if (clnt) {
-        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response, (char *)&rep))
+        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+                                     (char *)&rep))
             nbd_err("clnt_freeres failed!\n");
         clnt_destroy(clnt);
     }
@@ -490,15 +520,16 @@ err:
 
 static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
                               int driver_id, ssize_t size, ssize_t blk_size,
-                              int timeout, int dev_index)
+                              int timeout, int dev_index, bool readonly)
 {
     struct nlattr *sock_attr;
     struct nlattr *sock_opt;
     struct nl_msg *msg;
-    int flags = 0;
+    int flags = readonly ? NBD_FLAG_READ_ONLY : 0;
     struct nego_header hdr;
 
     hdr.len = strlen(cfg);
+    hdr.readonly = readonly;
     nbd_socket_write(sockfd, &hdr, sizeof(struct nego_header));
     nbd_socket_write(sockfd, cfg, hdr.len);
 
@@ -583,14 +614,14 @@ err:
     return -1;
 }
 
-static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index, int timeout)
+static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index,
+                           int timeout, bool readonly)
 {
     int ret = -1;
     int sockfd;
     struct nl_sock *netfd;
     int driver_id;
 
-    printf("lxb : host: %s, port: %s, size: %llu, blksize: %llu\n", rep->host, rep->port, rep->size, rep->blksize);
     /* Connect to server for IOs */
     sockfd = nbd_connect_to_server(rep->host, atoi(rep->port));
     if (sockfd < 0)
@@ -602,7 +633,8 @@ static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index, i
         return -1;
 
     /* Setup the IOs sock fd to nbd device to start IOs */
-    return nbd_device_connect(cfg, netfd, sockfd, driver_id, rep->size, rep->blksize, timeout, dev_index);
+    return nbd_device_connect(cfg, netfd, sockfd, driver_id, rep->size,
+                              rep->blksize, timeout, dev_index, readonly);
 
 err:
     nl_socket_free(netfd);
@@ -619,6 +651,7 @@ static int nbd_map_device(int count, char **options)
     int sock = RPC_ANYSOCK;
     int dev_index = -1;
     int timeout = 0;
+    bool readonly = false;
     int ret = 0;
     int len;
     int ind;
@@ -650,6 +683,11 @@ static int nbd_map_device(int count, char **options)
 
             ind += 1;
         } else if (!strcmp("host", options[ind])) {
+            if (ind + 1 >= count) {
+                nbd_err("Invalid argument 'host <HOST>'!\n\n");
+                goto err;
+            }
+
             host = strdup(options[ind + 1]);
             if (!host) {
                 ret = -ENOMEM;
@@ -658,26 +696,15 @@ static int nbd_map_device(int count, char **options)
             }
 
             ind += 2;
-#if 0
-        } else if (!strcmp("threads", options[ind])) {
-            threads = atoi(options[ind + 1]);
-            if (threads <= 0) {
-                fprintf(stderr,
-                        "Invalid threads, will set it as default %d!\n",
-                        NBD_MAX_THREAD_DEF);
-                threads = NBD_MAX_THREAD_DEF;
-            }
-
-            if (threads > NBD_MAX_THREAD_MAX) {
-                fprintf(stderr,
-                        "Currently the max threads is %d!\n",
-                        NBD_MAX_THREAD_MAX);
-                threads = NBD_MAX_THREAD_MAX;
-            }
-
-            ind += 2;
-#endif
+        } else if (!strcmp("readonly", options[ind])) {
+            readonly = true;
+            ind += 1;
         } else if (!strcmp("timeout", options[ind])) {
+            if (ind + 1 >= count) {
+                nbd_err("Invalid argument 'timeout <TIME>'!\n\n");
+                goto err;
+            }
+
             timeout = atoi(options[ind + 1]);
             if (timeout < 0) {
                 ret = -EINVAL;
@@ -705,7 +732,8 @@ static int nbd_map_device(int count, char **options)
         goto err;
     }
 
-    clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD, RPC_NBD_VERS, &sock, 0, 0);
+    clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
+                          RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
         ret = -errno;
         nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
@@ -725,7 +753,7 @@ static int nbd_map_device(int count, char **options)
     }
 
     /* create the /dev/nbdX device */
-    ret = _nbd_map_device(map->cfgstring, &rep, dev_index, timeout);
+    ret = _nbd_map_device(map->cfgstring, &rep, dev_index, timeout, readonly);
     if (ret < 0) {
         nbd_err("failed to init the /dev/nbd device!\n");
         goto err;
@@ -735,7 +763,8 @@ static int nbd_map_device(int count, char **options)
 
 err:
     if (clnt) {
-        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response, (char *)&rep))
+        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+                                     (char *)&rep))
             nbd_err("clnt_freeres failed!\n");
         clnt_destroy(clnt);
     }
@@ -889,7 +918,7 @@ static int load_our_module(void)
                 }
             }
         } else {
-            nbd_err("kmod_module_new_from_lookup() failed to lookup alias target_core_use %m\n");
+            nbd_err("kmod_module_new_from_lookup() failed to lookup alias nbd %m\n");
         }
 
         kmod_unref(ctx);
