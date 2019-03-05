@@ -568,7 +568,7 @@ _handle_request(gpointer data, gpointer user_data)
     }
 }
 
-int nbd_handle_request(int sock)
+int nbd_handle_request(int sock, int threads)
 {
     struct gluster_volinfo *info = NULL;
     struct pool_request *req;
@@ -580,7 +580,6 @@ int nbd_handle_request(int sock)
     glfs_t *glfs = NULL;
     struct nego_header hdr;
     char *cfg = NULL;
-    int threads = 16;
 
     nbd_thread_pool = g_thread_pool_new(_handle_request, NULL, threads,
             false, NULL);
