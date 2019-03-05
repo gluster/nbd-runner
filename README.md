@@ -83,4 +83,5 @@ Commands:
 3. add logger file support
 4. add sysconfig file support
 5. add read-only feature support
-6. ...
+6. add 'nbd-cli list <map|umap|create|all>'
+7. ...
