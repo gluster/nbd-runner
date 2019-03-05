@@ -44,7 +44,7 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 # nbd-runner
 ```
 
-<b>CLI</b>: you can choose to run nbd-cli from any node which has nbd-runnerd running
+<b>CLI</b>: you can choose to run nbd-cli from any node where the newer nbd.ko module is availible
 ```script
 # nbd-cli --help
 Usage:
