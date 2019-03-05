@@ -88,7 +88,8 @@ out:
     return NULL;
 }
 
-static bool nbd_check_available_space(struct glfs *glfs, char *volume, size_t size)
+static bool nbd_check_available_space(struct glfs *glfs, char *volume,
+                                      size_t size)
 {
     struct statvfs buf = {'\0', };
 
@@ -193,7 +194,8 @@ nbd_parse_cfgstring(const char *cfg, nbd_response *rep)
             if (*sep != '=') {
                 if (rep) {
                     rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid prealloc key/pair: %s!", ptr);
+                    snprintf(rep->out, 8192, "Invalid prealloc key/pair: %s!",
+                             ptr);
                 }
                 nbd_err("Invalid prealloc key/pair: %s!\n", ptr);
                 goto err;
@@ -207,7 +209,8 @@ nbd_parse_cfgstring(const char *cfg, nbd_response *rep)
             } else {
                 if (rep) {
                     rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid prealloc value: %s!", ptr);
+                    snprintf(rep->out, 8192, "Invalid prealloc value: %s!",
+                             ptr);
                 }
                 nbd_err("Invalid prealloc value: %s!\n", ptr);
                 goto err;
@@ -271,7 +274,8 @@ err:
     return NULL;
 }
 
-bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep, struct svc_req *req)
+bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
+                        struct svc_req *req)
 {
     struct gluster_volinfo *info = NULL;
     struct glfs *glfs = NULL;
@@ -312,7 +316,8 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep, struct svc_req *r
         rep->exit = -ENOSPC;
         snprintf(rep->out, 8192, "No enough space in volume %s, require %d!",
                  info->volume, info->size);
-        nbd_err("No enough space in volume %s, require %d!\n", info->volume, info->size);
+        nbd_err("No enough space in volume %s, require %d!\n", info->volume,
+                info->size);
         goto err;
     }
 
@@ -354,7 +359,8 @@ err:
     return true;
 }
 
-bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep, struct svc_req *req)
+bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
+                        struct svc_req *req)
 {
     struct gluster_volinfo *info = NULL;
     struct glfs *glfs = NULL;
@@ -549,7 +555,8 @@ _handle_request(gpointer data, gpointer user_data)
                           ALLOWED_BSOFLAGS, glfs_async_cbk, req);
         break;
     case NBD_CMD_READ:
-        nbd_dbg("NBD_CMD_READ: offset: %llu, len: %u\n", req->offset, req->len);
+        nbd_dbg("NBD_CMD_READ: offset: %llu, len: %u\n", req->offset,
+                req->len);
         glfs_pread_async(req->gfd, req->data, req->len, req->offset, SEEK_SET,
                          glfs_async_cbk, req);
         break;
@@ -558,7 +565,8 @@ _handle_request(gpointer data, gpointer user_data)
         glfs_fdatasync_async(req->gfd, glfs_async_cbk, req);
         break;
     case NBD_CMD_TRIM:
-        nbd_dbg("NBD_CMD_TRIM: offset: %llu, len: %u\n", req->offset, req->len);
+        nbd_dbg("NBD_CMD_TRIM: offset: %llu, len: %u\n", req->offset,
+                req->len);
         glfs_discard_async(req->gfd, req->offset, req->len,
                 glfs_async_cbk, req);
         break;
@@ -699,12 +707,6 @@ err:
     g_thread_pool_free(nbd_thread_pool, false, true);
     pthread_spin_destroy(&nbd_write_lock);
     return ret;
-}
-
-bool_t nbd_version_1_svc(void *data, nbd_response *rep, struct svc_req *req)
-{
-
-    return true;
 }
 
 int rpc_nbd_1_freeresult(SVCXPRT *transp, xdrproc_t xdr_result, caddr_t result)
