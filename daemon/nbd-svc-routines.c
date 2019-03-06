@@ -67,7 +67,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     rep->exit = 0;
 
-    rep->out = malloc(8192);
+    rep->out = malloc(NBD_EXIT_MAX);
     if (!rep->out) {
         rep->exit = -ENOMEM;
         nbd_err("No memory for rep->out!\n");
@@ -77,7 +77,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     handler = g_hash_table_lookup(nbd_handler_hash, &create->type);
     if (!handler) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192,
+        snprintf(rep->out, NBD_EXIT_MAX,
                  "Invalid handler or the handler is not loaded: %s!",
                  create->type);
         nbd_err("Invalid handler or the handler is not loaded: %s!", create->type);
@@ -87,7 +87,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     key = nbd_get_hash_key(create->cfgstring);
     if (!key) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192, "Invalid cfgstring %s!", create->cfgstring);
+        snprintf(rep->out, NBD_EXIT_MAX, "Invalid cfgstring %s!", create->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", create->cfgstring);
         goto err;
     }
@@ -95,7 +95,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (dev) {
         rep->exit = -EEXIST;
-        snprintf(rep->out, 8192, "%s is already exist!", create->cfgstring);
+        snprintf(rep->out, NBD_EXIT_MAX, "%s is already exist!", create->cfgstring);
         nbd_err("%s is already exist!\n", create->cfgstring);
         free(key);
         goto err;
@@ -138,7 +138,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
 
     rep->exit = 0;
 
-    rep->out = malloc(8192);
+    rep->out = malloc(NBD_EXIT_MAX);
     if (!rep->out) {
         rep->exit = -ENOMEM;
         nbd_err("No memory for rep->out!\n");
@@ -148,7 +148,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     handler = g_hash_table_lookup(nbd_handler_hash, &delete->type);
     if (!handler) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192,
+        snprintf(rep->out, NBD_EXIT_MAX,
                  "Invalid handler or the handler is not loaded: %s!",
                  delete->type);
         nbd_err("Invalid handler or the handler is not loaded: %s!", delete->type);
@@ -158,7 +158,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     key = nbd_get_hash_key(delete->cfgstring);
     if (!key) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192, "Invalid cfgstring %s!", delete->cfgstring);
+        snprintf(rep->out, NBD_EXIT_MAX, "Invalid cfgstring %s!", delete->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", delete->cfgstring);
         goto err;
     }
@@ -177,7 +177,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         dev = handler->cfg_parse(delete->cfgstring, rep);
         if (!dev) {
             rep->exit = -EAGAIN;
-            snprintf(rep->out, 8192, "failed to delete %s!", delete->cfgstring);
+            snprintf(rep->out, NBD_EXIT_MAX, "failed to delete %s!", delete->cfgstring);
             nbd_err("failed to delete %s\n", delete->cfgstring);
             goto err;
         }
@@ -203,7 +203,7 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
 
     rep->exit = 0;
 
-    rep->out = malloc(8192);
+    rep->out = malloc(NBD_EXIT_MAX);
     if (!rep->out) {
         rep->exit = -ENOMEM;
         nbd_err("No memory for rep->out!\n");
@@ -213,7 +213,7 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
     handler = g_hash_table_lookup(nbd_handler_hash, &map->type);
     if (!handler) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192,
+        snprintf(rep->out, NBD_EXIT_MAX,
                  "Invalid handler or the handler is not loaded: %s!",
                  map->type);
         nbd_err("Invalid handler or the handler is not loaded: %s!", map->type);
@@ -223,7 +223,7 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
     key = nbd_get_hash_key(map->cfgstring);
     if (!key) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192, "Invalid cfgstring %s!", map->cfgstring);
+        snprintf(rep->out, NBD_EXIT_MAX, "Invalid cfgstring %s!", map->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", map->cfgstring);
         goto err;
     }
@@ -242,7 +242,7 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
         dev = handler->cfg_parse(map->cfgstring, rep);
         if (!dev) {
             rep->exit = -EAGAIN;
-            snprintf(rep->out, 8192, "failed to map %s!", map->cfgstring);
+            snprintf(rep->out, NBD_EXIT_MAX, "failed to map %s!", map->cfgstring);
             nbd_err("failed to map %s\n", map->cfgstring);
             free(key);
             goto err;
@@ -261,12 +261,12 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
         g_hash_table_insert(nbd_devices_hash, key, dev);
 
     if (listen_host) {
-        snprintf(rep->host, 255, "%s", listen_host);
+        snprintf(rep->host, NBD_HOST_MAX, "%s", listen_host);
     } else {
         ips = nbd_get_local_ips();
         if (!ips) {
             rep->exit = -EINVAL;
-            snprintf(rep->out, 8192, "failed to parse the listen IP addr!");
+            snprintf(rep->out, NBD_EXIT_MAX, "failed to parse the listen IP addr!");
             nbd_err("failed to parse the listen IP addr!\n");
             goto err;
         }
@@ -281,13 +281,13 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
 
         if (!p) {
             rep->exit = -EINVAL;
-            snprintf(rep->out, 8192, "failed to check the listen IP addr!");
+            snprintf(rep->out, NBD_EXIT_MAX, "failed to check the listen IP addr!");
             nbd_err("failed to check the listen IP addr!\n");
             goto err;
         }
-        snprintf(rep->host, 255, "%s", p);
+        snprintf(rep->host, NBD_HOST_MAX, "%s", p);
     }
-    snprintf(rep->port, 32, "%d", NBD_IOS_SVC_PORT);
+    snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_IOS_SVC_PORT);
 
 err:
     for (q = ips; q; q = p) {
