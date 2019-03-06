@@ -43,7 +43,7 @@
 #include "nbd-log.h"
 #include "nbd-netlink.h"
 
-struct timeval TIMEOUT = {.tv_sec = 5};
+struct timeval TIMEOUT = {.tv_sec = 15};
 
 static void usage(void)
 {
@@ -52,8 +52,8 @@ static void usage(void)
              "Commands:\n"
              "\thelp\n"
              "\t\tdisplay help for nbd commands\n\n"
-             "\tcreate <volname@host:/path> [prealloc <yes|no>] <size SIZE> <host HOST>\n"
-             "\t\tcreate path file on the volname volume, prealloc is no as default,\n"
+             "\tcreate <volname@host:/path> [prealloc] <size SIZE> <host HOST>\n"
+             "\t\tcreate path file on the volname volume, prealloc is false as default,\n"
              "\t\tand the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)\n\n"
              "\tdelete <volname@host:/path> <host HOST>\n"
              "\t\tdelete path file on the volname volume\n\n"
@@ -150,7 +150,7 @@ static int nbd_create_file(int count, char **options)
 
     create->type = NBD_HANDLER_GLUSTER;
 
-    len = snprintf(create->cfgstring, max_len, "%s", options[2]);
+    len = snprintf(create->cfgstring, max_len, "key=%s", options[2]);
     if (len < 0) {
         nbd_err("snprintf error for volinfo, %s!\n", strerror(errno));
         ret = -errno;
@@ -174,22 +174,11 @@ static int nbd_create_file(int count, char **options)
 
             ind += 2;
         } else if (!strcmp("prealloc", options[ind])) {
-            /* prealloc yes --> prealloc=yes */
-            if (ind + 1 >= count) {
-                nbd_err("Invalid argument 'prealloc <yes|no>'!\n\n");
-                goto err;
-            }
-
-            if (strcmp(options[ind + 1], "yes") && strcmp(options[ind + 1], "no")) {
-                nbd_err("Invalid value for prealloc!\n");
-                ret = -EINVAL;
-                goto err;
-            }
-
+            /* prealloc --> prealloc=yes */
             len += snprintf(create->cfgstring + len, max_len - len, "%s",
                             options[ind]);
             if (len < 0) {
-                nbd_err("strcpy error for prealloc, %s!\n", strerror(errno));
+                nbd_err("snprintf error for prealloc, %s!\n", strerror(errno));
                 ret = -errno;
                 goto err;
             }
@@ -197,16 +186,16 @@ static int nbd_create_file(int count, char **options)
             create->cfgstring[len++] = '=';
 
             len += snprintf(create->cfgstring + len, max_len - len, "%s",
-                            options[ind + 1]);
+                            "yes");
             if (len < 0) {
-                nbd_err("strcpy error for prealloc value, %s!\n",
+                nbd_err("snprintf error for prealloc value, %s!\n",
                         strerror(errno));
                 ret = -errno;
                 goto err;
             }
 
             create->cfgstring[len++] = ';';
-            ind += 2;
+            ind += 1;
         } else if (!strcmp("size", options[ind])) {
             if (ind + 1 >= count) {
                 nbd_err("Invalid argument 'size <SIZE>'!\n\n");
@@ -222,7 +211,7 @@ static int nbd_create_file(int count, char **options)
             len += snprintf(create->cfgstring + len, max_len - len, "%s",
                             options[ind]);
             if (len < 0) {
-                nbd_err("strcpy error for prealloc, %s!\n", strerror(errno));
+                nbd_err("snprintf error for prealloc, %s!\n", strerror(errno));
                 ret = -errno;
                 goto err;
             }
@@ -232,7 +221,7 @@ static int nbd_create_file(int count, char **options)
             len += snprintf(create->cfgstring + len, max_len - len,
                             "%s", options[ind + 1]);
             if (len < 0) {
-                nbd_err("strcpy error for prealloc value, %s!\n",
+                nbd_err("snprintf error for prealloc value, %s!\n",
                         strerror(errno));
                 ret = -errno;
                 goto err;
@@ -309,7 +298,7 @@ static int nbd_delete_file(int count, char **options)
 
     delete->type = NBD_HANDLER_GLUSTER;
 
-    len = snprintf(delete->cfgstring, max_len, "%s", options[2]);
+    len = snprintf(delete->cfgstring, max_len, "key=%s", options[2]);
     if (len < 0) {
         ret = -errno;
         nbd_err("snprintf error for volinfo, %s!\n", strerror(errno));
@@ -352,7 +341,7 @@ static int nbd_delete_file(int count, char **options)
 
     if (nbd_delete_1(delete, &rep, clnt) != RPC_SUCCESS) {
         ret = -errno;
-        nbd_err("nbd_create_1 failed!\n");
+        nbd_err("nbd_delete_1 failed!\n");
         goto err;
     }
 
@@ -526,12 +515,27 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
     struct nlattr *sock_opt;
     struct nl_msg *msg;
     int flags = readonly ? NBD_FLAG_READ_ONLY : 0;
-    struct nego_header hdr;
+    struct nego_request nhdr;
+    struct nego_reply nrep;
+    char *buf;
 
-    hdr.len = strlen(cfg);
-    hdr.readonly = readonly;
-    nbd_socket_write(sockfd, &hdr, sizeof(struct nego_header));
-    nbd_socket_write(sockfd, cfg, hdr.len);
+    printf("lxb size: %llu, blk_size: %llu\n", size, blk_size);
+    nhdr.len = strlen(cfg);
+    nbd_socket_write(sockfd, &nhdr, sizeof(struct nego_request));
+    nbd_socket_write(sockfd, cfg, nhdr.len);
+
+    nbd_socket_read(sockfd, &nrep, sizeof(struct nego_reply));
+    if (nrep.exit) {
+        if (nrep.len) {
+            buf = malloc(nrep.len + 1);
+            nbd_socket_read(sockfd, &buf, nrep.len);
+            nbd_err("nego failed: %s, %d\n", buf, nrep.exit);
+            free(buf);
+        } else {
+            nbd_err("nego failed: %d\n", buf, nrep.exit);
+        }
+        goto nla_put_failure;
+    }
 
     msg = nlmsg_alloc();
     if (!msg) {
@@ -617,7 +621,7 @@ err:
 static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index,
                            int timeout, bool readonly)
 {
-    int ret = -1;
+    int ret;
     int sockfd;
     struct nl_sock *netfd;
     int driver_id;
@@ -633,10 +637,14 @@ static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index,
         return -1;
 
     /* Setup the IOs sock fd to nbd device to start IOs */
-    return nbd_device_connect(cfg, netfd, sockfd, driver_id, rep->size,
-                              rep->blksize, timeout, dev_index, readonly);
+    ret = nbd_device_connect(cfg, netfd, sockfd, driver_id, rep->size,
+                             rep->blksize, timeout, dev_index, readonly);
+
+    if (!ret)
+        return 0;
 
 err:
+    close(sockfd);
     nl_socket_free(netfd);
     return -1;
 }
@@ -665,12 +673,14 @@ static int nbd_map_device(int count, char **options)
 
     map->type = NBD_HANDLER_GLUSTER;
 
-    len = snprintf(map->cfgstring, max_len, "%s", options[2]);
+    len = snprintf(map->cfgstring, max_len, "key=%s", options[2]);
     if (len < 0) {
         ret = -errno;
         nbd_err("snprintf error for volinfo, %s!\n", strerror(errno));
         goto err;
     }
+
+    map->cfgstring[len++] = ';';
 
     ind = 3;
     while (ind < count) {
@@ -698,6 +708,28 @@ static int nbd_map_device(int count, char **options)
             ind += 2;
         } else if (!strcmp("readonly", options[ind])) {
             readonly = true;
+
+            /* prealloc yes --> prealloc=yes */
+            len += snprintf(map->cfgstring + len, max_len - len, "%s",
+                            options[ind]);
+            if (len < 0) {
+                nbd_err("snprintf error for readonly, %s!\n", strerror(errno));
+                ret = -errno;
+                goto err;
+            }
+
+            map->cfgstring[len++] = '=';
+
+            len += snprintf(map->cfgstring + len, max_len - len, "%s",
+                            "yes");
+            if (len < 0) {
+                nbd_err("snprintf error for readonly value, %s!\n",
+                        strerror(errno));
+                ret = -errno;
+                goto err;
+            }
+
+            map->cfgstring[len++] = ';';
             ind += 1;
         } else if (!strcmp("timeout", options[ind])) {
             if (ind + 1 >= count) {
@@ -742,7 +774,7 @@ static int nbd_map_device(int count, char **options)
 
     if (nbd_map_1(map, &rep, clnt) != RPC_SUCCESS) {
         ret = -errno;
-        nbd_err("nbd_create_1 failed!\n");
+        nbd_err("nbd_map_1 failed!\n");
         goto err;
     }
 
@@ -780,7 +812,6 @@ umap_device(struct nl_sock *netfd, int driver_id, int index)
     struct nl_msg *msg;
     int ret = 0;
 
-    printf("index : %d\n", index);
     msg = nlmsg_alloc();
     if (!msg) {
         nbd_err("Couldn't allocate netlink message!\n");
@@ -795,6 +826,8 @@ umap_device(struct nl_sock *netfd, int driver_id, int index)
         nbd_err("Failed to disconnect device, check dmsg\n");
         ret = -1;
     }
+
+    nbd_out("Unmap succeeded!\n");
 
 nla_put_failure:
     return ret;

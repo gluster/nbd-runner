@@ -25,6 +25,7 @@
 #include "nbd-log.h"
 #include "rpc_nbd.h"
 #include "rpc_nbd_svc.h"
+#include "nbd-common.h"
 
 #define NBD_LOCK_FILE "/run/nbd-runner.lock"
 #define NBD_MIN_THREADS  1
@@ -222,6 +223,9 @@ int main (int argc, char **argv)
     int ret;
     int ind;
 
+    nbd_service_init();
+    handler_init();
+
     ret = nbd_log_init();
     if (ret < 0) {
         nbd_err("nbd_log_init failed!\n");
@@ -310,5 +314,6 @@ out:
         close(lockfd);
     free(listen_host);
     nbd_log_destroy();
+    nbd_service_fini();
     exit (EXIT_FAILURE);
 }

@@ -1,6 +1,6 @@
 sbin_PROGRAMS = nbd-runner
 
-nbd_runner_SOURCES = nbd-runner.c nbd-svc-routines.c
+nbd_runner_SOURCES = nbd-runner.c nbd-svc-routines.c gluster.c
 
 nbd_runner_CFLAGS = $(GFAPI_CFLAGS) $(EVENT_CFLAGS) $(GLIB2_CFLAGS) 	\
                     $(TIRPC_CFLAGS) -DDATADIR=\"$(localstatedir)\"      \

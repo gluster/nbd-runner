@@ -56,10 +56,15 @@
         __typeof__ (b) _b = (b);       \
         (_a - (_a % _b)); })
 
-struct nego_header {
+struct nego_request {
     __u32 len;
-    __u32 readonly;
     __u8  cfg[0];
+};
+
+struct nego_reply {
+    __u32 exit;
+    __u32 len;
+    __u8  error[0];
 };
 
 struct nbd_ip {
