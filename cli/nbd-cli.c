@@ -842,7 +842,10 @@ static int nbd_devices_query(struct nl_sock *netfd, int driver_id)
 
     genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, driver_id, 0, 0,
             NBD_CMD_STATUS, 0);
-    /* -1 means list all the devices allocated(mapped and umapped) in kernel space */
+    /*
+     * -1 means list all the devices mapped and
+     *  umapped in kernel space
+     */
     NLA_PUT_U32(msg, NBD_ATTR_INDEX, -1);
 
     if (nl_send_sync(netfd, msg) < 0)
@@ -908,13 +911,13 @@ static int load_our_module(void)
             if (uname(&u) < 0) {
                 nbd_err("uname() failed: %m\n");
             } else {
-                nbd_out("no modules directory '/lib/modules/%s', checking module nbd entry in '/sys/modules/'\n",
+                nbd_out("no modules dir '/lib/modules/%s', checking in '/sys/modules/'\n",
                         u.release);
                 ret = stat(CFGFS_NBD_MOD, &sb);
                 if (ret) {
                     nbd_err("stat() on '%s' failed: %m\n", CFGFS_NBD_MOD);
                 } else {
-                  //  nbd_out("Module nbd already loaded\n");
+                    nbd_out("Module nbd already loaded\n");
                 }
             }
         } else {
@@ -942,7 +945,7 @@ static int load_our_module(void)
             break;
 
         case KMOD_MODULE_LIVE:
-//            nbd_out("Module '%s' is already loaded\n", kmod_module_get_name(mod));
+            nbd_out("Module '%s' is already loaded\n", kmod_module_get_name(mod));
             break;
 
         default:
