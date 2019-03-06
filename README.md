@@ -73,8 +73,8 @@ Commands:
 	help
 		display help for nbd commands
 
-	create <volname@host:/path> [prealloc <yes|no>] <size SIZE> <host HOST>
-		create path file on the volname volume, prealloc is no as default,
+	create <volname@host:/path> [prealloc] <size SIZE> <host HOST>
+		create path file on the volname volume, prealloc is false as default,
 		and the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)
 
 	delete <volname@host:/path> <host HOST>
