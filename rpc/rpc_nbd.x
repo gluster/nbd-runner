@@ -9,22 +9,26 @@ enum handler_t {
     NBD_HANDLER_MAX
 };
 
+#define HOST_MAX  255
+#define CFGS_MAX  1024
+#define PORT_MAX  32
+
 struct nbd_create {
   handler_t     type;
-  char          host[255];
-  char          cfgstring[1024];
+  char          host[HOST_MAX];
+  char          cfgstring[CFGS_MAX];
 };
 
 struct nbd_delete {
   handler_t     type;
-  char          host[255];
-  char          cfgstring[1024];
+  char          host[HOST_MAX];
+  char          cfgstring[CFGS_MAX];
 };
 
 struct nbd_map {
   handler_t     type;
-  char          host[255];
-  char          cfgstring[1024];
+  char          host[HOST_MAX];
+  char          cfgstring[CFGS_MAX];
   int           threads;
 };
 
@@ -41,8 +45,8 @@ struct nbd_response {
    * size : the backend file/block size
    * blksize: the backend file/block sector size
    */
-  char          host[255];
-  char          port[32];
+  char          host[HOST_MAX];
+  char          port[PORT_MAX];
   u_quad_t      size;
   u_quad_t      blksize;
 
