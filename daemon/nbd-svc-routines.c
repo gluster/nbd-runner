@@ -27,441 +27,238 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
-#include <glusterfs/api/glfs.h>
 #include <glib.h>
+#include <gmodule.h>
 
 #include "rpc_nbd.h"
 #include "nbd-log.h"
 #include "utils.h"
+#include "nbd-common.h"
 
 extern char *listen_host;
+GHashTable *nbd_handler_hash;
+GHashTable *nbd_devices_hash;
 
-#define NBD_GFAPI_LOG_FILE "/var/log/nbd-runner.log"
-#define NBD_GFAPI_LOG_LEVEL 7
 #define NBD_NL_VERSION 1
 
-static struct glfs *nbd_volume_init(char *volume, char *host)
+static char *nbd_get_hash_key(const char *cfgstring)
 {
-    struct glfs *glfs;
-    int ret;
-
-    glfs = glfs_new(volume);
-    if (!glfs) {
-        nbd_err("Not able to Initialize volume %s, %s\n",
-                volume, strerror(errno));
-        return NULL;
-    }
-
-    ret = glfs_set_volfile_server(glfs, "tcp", host, 24007);
-    if (ret) {
-        nbd_err("Not able to add Volfile server for volume %s, %s\n",
-                volume, strerror(errno));
-        goto out;
-    }
-
-    ret = glfs_set_logging(glfs, NBD_GFAPI_LOG_FILE, NBD_GFAPI_LOG_LEVEL);
-    if (ret) {
-        nbd_err("Not able to add logging for volume %s, %s\n",
-                volume, strerror(errno));
-        goto out;
-    }
-
-    ret = glfs_init(glfs);
-    if (ret) {
-        if (errno == ENOENT) {
-            nbd_err("Volume %s does not exist\n", volume);
-        } else if (errno == EIO) {
-            nbd_err("Check if volume %s is operational\n",
-                    volume);
-        } else {
-            nbd_err("Not able to initialize volume %s, %s\n",
-                    volume, strerror(errno));
-        }
-        goto out;
-    }
-
-    return glfs;
-
-out:
-    glfs_fini(glfs);
-
-    return NULL;
-}
-
-static bool nbd_check_available_space(struct glfs *glfs, char *volume,
-                                      size_t size)
-{
-    struct statvfs buf = {'\0', };
-
-    if (!glfs_statvfs(glfs, "/", &buf)) {
-        if ((buf.f_bfree * buf.f_bsize) >= size)
-            return true;
-
-        nbd_err("Low space on volume %s\n", volume);
-        return false;
-    }
-
-    nbd_err("couldn't get file-system statistics on volume %s\n", volume);
-
-    return false;
-}
-
-struct gluster_volinfo {
-    char volume[255];
-    char host[255];
-    char path[255];
-    bool prealloc;
-    ssize_t size;
-};
-
-static struct gluster_volinfo *
-nbd_parse_cfgstring(const char *cfg, nbd_response *rep)
-{
-    struct gluster_volinfo *info = NULL;
-    char *tmp = NULL;
-    char *sem;
     char *sep;
-    char *ptr;
-    int ret = 0;
+    int len;
 
-    if (!cfg)
+    if (strncmp(cfgstring, "key=", 4))
         return NULL;
 
-    if (rep)
-        rep->exit = 0;
+    sep = strchr(cfgstring, ';');
+    if (!sep)
+        return strdup(cfgstring + 4);
 
-    info = calloc(1, sizeof(struct gluster_volinfo));
-    if (!info) {
-        if (rep) {
-            rep->exit = -ENOMEM;
-            snprintf(rep->out, 8192, "No memory for info!");
-        }
-        nbd_err("No memory for info\n");
-        return NULL;
-    }
+    len = sep - cfgstring - 4;
 
-    tmp = strdup(cfg);
-    if (!tmp) {
-        if (rep) {
-            rep->exit = -ENOMEM;
-            snprintf(rep->out, 8192, "No memory for tmp!");
-        }
-        nbd_err("No memory for tmp\n");
-        goto err;
-    }
-
-    ptr = tmp;
-
-    /*
-     * The valid cfgstring is like:
-     *    "volname@host:/path;prealloc=yes"
-     * or
-     *    "volname@host:/path;prealloc=yes;"
-     */
-    do {
-        sem = strchr(ptr, ';');
-        if (sem)
-            *sem = '\0';
-
-        if (*ptr == '\0') {
-            /* in case the last valid char is ';' */
-            break;
-        } else if (!strncmp("size", ptr, strlen("size"))) {
-            /* size=1G */
-            sep = ptr + strlen("size");
-            if (*sep != '=') {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid size key/pair: %s!", ptr);
-                }
-                nbd_err("Invalid size key/pair: %s!\n", ptr);
-                goto err;
-            }
-
-            ptr = sep + 1;
-            info->size = nbd_parse_size(ptr, NBD_DEFAULT_SECTOR_SIZE);
-            if (info->size < 0) {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid size value: %s!", ptr);
-                }
-                nbd_err("Invalid size value: %s!\n", ptr);
-                goto err;
-            }
-        } else if (!strncmp("prealloc", ptr, strlen("prealloc"))) {
-            /* prealloc=yes|no */
-            sep = ptr + strlen("prealloc");
-            if (*sep != '=') {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid prealloc key/pair: %s!",
-                             ptr);
-                }
-                nbd_err("Invalid prealloc key/pair: %s!\n", ptr);
-                goto err;
-            }
-
-            ptr = sep + 1;
-            if (!strcmp("yes", ptr)) {
-                info->prealloc = true;
-            } else if (!strcmp("no", ptr)) {
-                info->prealloc = false;
-            } else {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid prealloc value: %s!",
-                             ptr);
-                }
-                nbd_err("Invalid prealloc value: %s!\n", ptr);
-                goto err;
-            }
-        } else if (strchr(ptr, '@') && strchr(ptr, ':')) {
-            /* volname@host:/path */
-            sep = strchr(ptr, '@');
-            if (!sep) {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid volinfo value: %s!", ptr);
-                }
-                nbd_err("Invalid volinfo value: %s!\n", ptr);
-                goto err;
-            }
-
-            *sep = '\0';
-
-            strncpy(info->volume, ptr, 255);
-
-            ptr = sep + 1;
-            sep = strchr(ptr, ':');
-            if (!sep) {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid host value: %s!", ptr);
-                }
-                nbd_err("Invalid host value: %s!\n", ptr);
-                goto err;
-            }
-
-            *sep = '\0';
-
-            strncpy(info->host, ptr, 255);
-
-            ptr = sep + 1;
-            if (*ptr != '/') {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->out, 8192, "Invalid path value: %s!", ptr);
-                }
-                nbd_err("Invalid path value: %s!\n", ptr);
-                goto err;
-            }
-
-            ptr++;
-
-            strncpy(info->path, ptr, 255);
-        }
-
-        if (sem)
-            ptr = sem + 1;
-    } while (sem);
-
-    free(tmp);
-    return info;
-
-err:
-    free(tmp);
-    free(info);
-    return NULL;
+    return strndup(cfgstring + 4, len);
 }
 
 bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
                         struct svc_req *req)
 {
-    struct gluster_volinfo *info = NULL;
-    struct glfs *glfs = NULL;
-    struct glfs_fd *fd = NULL;
+    struct nbd_device *dev = NULL;
+    struct nbd_handler *handler;
+    char *key = NULL;
 
     rep->exit = 0;
 
     rep->out = malloc(8192);
     if (!rep->out) {
         rep->exit = -ENOMEM;
-        snprintf(rep->out, 8192, "No memory for rep->out!");
         nbd_err("No memory for rep->out!\n");
         return false;
     }
 
-    info = nbd_parse_cfgstring(create->cfgstring, rep);
-    if (!info)
-        goto err;
-
-    glfs = nbd_volume_init(info->volume, info->host);
-    if (!glfs) {
+    handler = g_hash_table_lookup(nbd_handler_hash, &create->type);
+    if (!handler) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192, "Init volume %s failed!", info->volume);
-        nbd_err("Init volume %s failed!\n", info->volume);
+        snprintf(rep->out, 8192,
+                 "Invalid handler or the handler is not loaded: %s!",
+                 create->type);
+        nbd_err("Invalid handler or the handler is not loaded: %s!", create->type);
         goto err;
     }
 
-    if (!glfs_access(glfs, info->path, F_OK)) {
+    key = nbd_get_hash_key(create->cfgstring);
+    if (!key) {
+        rep->exit = -EINVAL;
+        snprintf(rep->out, 8192, "Invalid cfgstring %s!", create->cfgstring);
+        nbd_err("Invalid cfgstring %s!\n", create->cfgstring);
+        goto err;
+    }
+
+    dev = g_hash_table_lookup(nbd_devices_hash, key);
+    if (dev) {
         rep->exit = -EEXIST;
-        snprintf(rep->out, 8192, "file %s is already exist in volume %s!",
-                 info->path, info->volume);
-        nbd_err("file %s is already exist in volume %s!\n",
-                 info->path, info->volume);
+        snprintf(rep->out, 8192, "%s is already exist!", create->cfgstring);
+        nbd_err("%s is already exist!\n", create->cfgstring);
+        free(key);
         goto err;
     }
 
-    if (!nbd_check_available_space(glfs, info->volume, info->size)) {
-        rep->exit = -ENOSPC;
-        snprintf(rep->out, 8192, "No enough space in volume %s, require %d!",
-                 info->volume, info->size);
-        nbd_err("No enough space in volume %s, require %d!\n", info->volume,
-                info->size);
+    dev = handler->cfg_parse(create->cfgstring, rep);
+    if (!dev) {
+        nbd_err("failed to parse cfgstring: %s\n", create->cfgstring);
+        free(key);
         goto err;
     }
 
-    fd = glfs_creat(glfs, info->path, O_WRONLY | O_CREAT | O_EXCL | O_SYNC,
-                    S_IRUSR | S_IWUSR);
-    if (!fd) {
-        rep->exit = -errno;
-        snprintf(rep->out, 8192, "Failed to create file %s on volume %s!",
-                 info->path, info->volume);
-        nbd_err("Failed to create file %s on volume %s!\n",
-                info->path, info->volume);
+    dev->handler = handler;
+
+    /*
+     * Since we allow to create the backstore directly
+     * by using the backstore cli instead of the nbd-cli.
+     * If so the device won't be insert to the hash table,
+     * then we need to insert it here anyway.
+     */
+    if (!handler->create(dev, rep) && rep->exit != -EEXIST) {
+        nbd_err("failed to create backstore: %s\n", create->cfgstring);
+        handler->delete(dev, rep);
+        free(key);
         goto err;
     }
 
-    if (glfs_ftruncate(fd, info->size, NULL, NULL) < 0) {
-        rep->exit = -errno;
-        snprintf(rep->out, 8192, "Failed to truncate file %s on volume %s!",
-                 info->path, info->volume);
-        nbd_err("Failed to truncate file %s on volume %s!\n",
-                info->path, info->volume);
-        goto err;
-    }
-
-    if (info->prealloc && glfs_zerofill(fd, 0, info->size) < 0) {
-        rep->exit = -errno;
-        snprintf(rep->out, 8192, "Failed to prealloc file %s on volume %s!",
-                 info->path, info->volume);
-        nbd_err("Failed to prealloc file %s on volume %s!\n",
-                info->path, info->volume);
-        goto err;
-    }
+    g_hash_table_insert(nbd_devices_hash, key, dev);
 
 err:
-    if (fd)
-        glfs_close(fd);
-
-    free(info);
-
     return true;
 }
 
 bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
                         struct svc_req *req)
 {
-    struct gluster_volinfo *info = NULL;
-    struct glfs *glfs = NULL;
-    struct glfs_fd *fd = NULL;
+    struct nbd_device *dev = NULL;
+    struct nbd_handler *handler;
+    char *key = NULL;
 
     rep->exit = 0;
 
     rep->out = malloc(8192);
     if (!rep->out) {
         rep->exit = -ENOMEM;
-        snprintf(rep->out, 8192, "No memory for rep->out!");
         nbd_err("No memory for rep->out!\n");
         return false;
     }
 
-    info = nbd_parse_cfgstring(delete->cfgstring, rep);
-    if (!info)
-        goto err;
-
-    glfs = nbd_volume_init(info->volume, info->host);
-    if (!glfs) {
+    handler = g_hash_table_lookup(nbd_handler_hash, &delete->type);
+    if (!handler) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192, "Init volume %s failed!", info->volume);
-        nbd_err("Init volume %s failed!\n", info->volume);
+        snprintf(rep->out, 8192,
+                 "Invalid handler or the handler is not loaded: %s!",
+                 delete->type);
+        nbd_err("Invalid handler or the handler is not loaded: %s!", delete->type);
         goto err;
     }
 
-    if (glfs_access(glfs, info->path, F_OK)) {
-        rep->exit = -ENOENT;
-        snprintf(rep->out, 8192, "file %s is not exist in volume %s!",
-                 info->path, info->volume);
-        nbd_err("file %s is not exist in volume %s!\n",
-                 info->path, info->volume);
+    key = nbd_get_hash_key(delete->cfgstring);
+    if (!key) {
+        rep->exit = -EINVAL;
+        snprintf(rep->out, 8192, "Invalid cfgstring %s!", delete->cfgstring);
+        nbd_err("Invalid cfgstring %s!\n", delete->cfgstring);
         goto err;
     }
 
-    if (glfs_unlink(glfs, info->path) < 0) {
-        rep->exit = -errno;
-        snprintf(rep->out, 8192, "failed to delete file %s in volume %s!",
-                 info->path, info->volume);
-        nbd_err("failed to delete file %s in volume %s!",
-                 info->path, info->volume);
-        goto err;
+    dev = g_hash_table_lookup(nbd_devices_hash, key);
+    if (!dev) {
+        /*
+         * Since we allow to create the backstore directly
+         * by using the backstore cli instead of the nbd-cli.
+         * If so the device won't be insert to the hash table,
+         * then we need to delete the backstore to alloc one
+         * tmp new dev.
+         */
+        nbd_out("%s is not in the hash table, will try to delete enforce!\n",
+                delete->cfgstring);
+        dev = handler->cfg_parse(delete->cfgstring, rep);
+        if (!dev) {
+            rep->exit = -EAGAIN;
+            snprintf(rep->out, 8192, "failed to delete %s!", delete->cfgstring);
+            nbd_err("failed to delete %s\n", delete->cfgstring);
+            goto err;
+        }
+        dev->handler = handler;
+    } else {
+        g_hash_table_remove(nbd_devices_hash, key);
     }
+
+    handler->delete(dev, rep);
 
 err:
-    free(info);
+    free(key);
     return true;
 }
 
 bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
 {
-    struct gluster_volinfo *info = NULL;
-    struct stat st;
-    struct glfs *glfs;
-    struct addrinfo hints, *res;
     struct nbd_ip *ips = NULL, *p, *q;
+    struct nbd_device *dev = NULL;
+    struct nbd_handler *handler;
+    char *key = NULL;
+    bool need_to_insert = false;
 
     rep->exit = 0;
 
     rep->out = malloc(8192);
     if (!rep->out) {
         rep->exit = -ENOMEM;
-        snprintf(rep->out, 8192, "No memory for rep->out!");
         nbd_err("No memory for rep->out!\n");
         return false;
     }
 
-    info = nbd_parse_cfgstring(map->cfgstring, rep);
-    if (!info)
-        goto err;
-
-    /* To check whether the file is exist */
-    glfs = nbd_volume_init(info->volume, info->host);
-    if (!glfs) {
+    handler = g_hash_table_lookup(nbd_handler_hash, &map->type);
+    if (!handler) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, 8192, "Init volume %s failed!", info->volume);
-        nbd_err("Init volume %s failed!\n", info->volume);
+        snprintf(rep->out, 8192,
+                 "Invalid handler or the handler is not loaded: %s!",
+                 map->type);
+        nbd_err("Invalid handler or the handler is not loaded: %s!", map->type);
         goto err;
     }
 
-    if (glfs_access(glfs, info->path, F_OK)) {
-        rep->exit = -ENOENT;
-        snprintf(rep->out, 8192, "file %s is not exist in volume %s!",
-                 info->path, info->volume);
-        nbd_err("file %s is not exist in volume %s!\n",
-                 info->path, info->volume);
+    key = nbd_get_hash_key(map->cfgstring);
+    if (!key) {
+        rep->exit = -EINVAL;
+        snprintf(rep->out, 8192, "Invalid cfgstring %s!", map->cfgstring);
+        nbd_err("Invalid cfgstring %s!\n", map->cfgstring);
         goto err;
     }
 
-    if (glfs_lstat(glfs, info->path, &st) < 0) {
-        rep->exit = -errno;
-        snprintf(rep->out, 8192, "failed to lstat file %s in volume: %s!",
-                 info->path, info->volume);
-        nbd_err("failed to lstat file %s in volume: %s!\n",
-                 info->path, info->volume);
+    dev = g_hash_table_lookup(nbd_devices_hash, key);
+    if (!dev) {
+        /*
+        * Since we allow to create the backstore directly
+        * by using the backstore cli instead of the nbd-cli.
+        * If so the device won't be insert to the hash table,
+        * then we need to insert it here anyway.
+        */
+        need_to_insert = true;
+        nbd_out("%s is not in the hash table, will try to map enforce!\n",
+                map->cfgstring);
+        dev = handler->cfg_parse(map->cfgstring, rep);
+        if (!dev) {
+            rep->exit = -EAGAIN;
+            snprintf(rep->out, 8192, "failed to map %s!", map->cfgstring);
+            nbd_err("failed to map %s\n", map->cfgstring);
+            free(key);
+            goto err;
+        }
+        dev->handler = handler;
+    }
+
+    if (!handler->map(dev, rep)) {
+        free(key);
         goto err;
     }
 
-    rep->size = st.st_size;
-    rep->blksize = st.st_blksize;
+    rep->size = dev->size;
+    rep->blksize = dev->blksize;
+    if (need_to_insert)
+        g_hash_table_insert(nbd_devices_hash, key, dev);
 
     if (listen_host) {
         snprintf(rep->host, 255, "%s", listen_host);
@@ -497,141 +294,94 @@ err:
         p = q->next;
         free(q);
     }
-    free(info);
     return true;
 }
 
-struct pool_request {
-    __u32 magic;
-    __u32 cmd;
-    __u32 flags;
-    __u64 offset;
-    __u32 len;
-    char handle[8];
-
-    glfs_t *glfs;
-    glfs_fd_t *gfd;
-    int sock;
-    void *data;
-};
-
-static pthread_spinlock_t nbd_write_lock;
-static void
-glfs_async_cbk(glfs_fd_t *gfd, ssize_t ret, struct glfs_stat *prestat,
-        struct glfs_stat *poststat, void *data)
+void nbd_handle_request_done(struct nbd_handler_request *req, int ret)
 {
-    struct pool_request *req = data;
     struct nbd_reply reply;
+    struct nbd_device *dev = req->dev;
 
     reply.magic = htonl(NBD_REPLY_MAGIC);
     reply.error = htonl(ret < 0 ? ret : 0);
     memcpy(&(reply.handle), &(req->handle), sizeof(req->handle));
 
-    pthread_spin_lock(&nbd_write_lock);
-    nbd_socket_write(req->sock, &reply, sizeof(struct nbd_reply));
+    pthread_mutex_lock(&dev->handler->lock);
+    nbd_socket_write(dev->sockfd, &reply, sizeof(struct nbd_reply));
     if(req->cmd == NBD_CMD_READ && !reply.error)
-        nbd_socket_write(req->sock, req->data, req->len);
-    pthread_spin_unlock(&nbd_write_lock);
-
-    free(req->data);
-    free(req);
-}
-
-static void
-_handle_request(gpointer data, gpointer user_data)
-{
-    struct pool_request *req;
-
-    if (!data)
-        return;
-
-    req = (struct pool_request*)data;
-
-    switch (req->cmd) {
-    case NBD_CMD_WRITE:
-        nbd_dbg("NBD_CMD_WRITE: offset: %llu, len: %u\n", req->offset,
-                req->len);
-        glfs_pwrite_async(req->gfd, req->data, req->len, req->offset,
-                          ALLOWED_BSOFLAGS, glfs_async_cbk, req);
-        break;
-    case NBD_CMD_READ:
-        nbd_dbg("NBD_CMD_READ: offset: %llu, len: %u\n", req->offset,
-                req->len);
-        glfs_pread_async(req->gfd, req->data, req->len, req->offset, SEEK_SET,
-                         glfs_async_cbk, req);
-        break;
-    case NBD_CMD_FLUSH:
-        nbd_dbg("NBD_CMD_FLUSH");
-        glfs_fdatasync_async(req->gfd, glfs_async_cbk, req);
-        break;
-    case NBD_CMD_TRIM:
-        nbd_dbg("NBD_CMD_TRIM: offset: %llu, len: %u\n", req->offset,
-                req->len);
-        glfs_discard_async(req->gfd, req->offset, req->len,
-                glfs_async_cbk, req);
-        break;
-    default:
-        fprintf(stderr,"Invalid request command\n");
-        return;
-    }
+        nbd_socket_write(dev->sockfd, req->rwbuf, req->len);
+    pthread_mutex_unlock(&dev->handler->lock);
 }
 
 int nbd_handle_request(int sock, int threads)
 {
-    struct gluster_volinfo *info = NULL;
-    struct pool_request *req;
+    struct nbd_device *dev = NULL;
+    struct nbd_handler_request *req;
     struct nbd_request request;
     struct nbd_reply reply;
-    GThreadPool *nbd_thread_pool;
+    GThreadPool *thread_pool;
     int ret = -1;
     struct sigaction sa;
-    glfs_fd_t *gfd = NULL;
-    glfs_t *glfs = NULL;
-    struct nego_header hdr;
+    struct nego_request nhdr;
+    struct nego_reply nrep = {0, };
     bool readonly = false;
     char *cfg = NULL;
+    char *buf = NULL;
+    char *key = NULL;
     int cmd;
 
-    nbd_thread_pool = g_thread_pool_new(_handle_request, NULL, threads,
-            false, NULL);
-    if (!nbd_thread_pool) {
+    /* nego start */
+    bzero(&nhdr, sizeof(struct nego_request));
+    ret = nbd_socket_read(sock, &nhdr, sizeof(struct nego_request));
+    if (ret != sizeof(struct nego_request)) {
+        ret = -1;
+        goto err;
+    }
+
+    cfg = calloc(1, 4096);
+    ret = nbd_socket_read(sock, cfg, nhdr.len);
+    if (ret != nhdr.len) {
+        ret = -1;
+        goto err;
+    }
+
+    key = nbd_get_hash_key(cfg);
+    if (!key) {
+        nrep.exit = -EINVAL;
+        buf = calloc(1, 4096);
+        nrep.len = snprintf(buf, 4096, "Invalid cfg %s for nego!", cfg);
+        nbd_err("Invalid cfg %s for nego!\n", cfg);
+    }
+    dev = g_hash_table_lookup(nbd_devices_hash, key);
+    if (!dev) {
+        nrep.exit = -EINVAL;
+        buf = calloc(1, 4096);
+        nrep.len = snprintf(buf, 4096, "No such device found: %s", cfg);
+        if (nrep.len < 0)
+            nrep.len = 0;
+    }
+    free(cfg);
+    free(buf);
+    free(key);
+
+    pthread_mutex_lock(&dev->handler->lock);
+    nbd_socket_write(sock, &nrep, sizeof(struct nego_reply));
+    if (nrep.len && buf)
+        nbd_socket_write(sock, buf, nrep.len);
+    pthread_mutex_unlock(&dev->handler->lock);
+    /* nego end */
+
+    if (nrep.exit)
+        goto err;
+
+    dev->sockfd = sock;
+
+    thread_pool = g_thread_pool_new(dev->handler->handle_request, NULL, threads,
+                                    false, NULL);
+
+    if (!thread_pool) {
         nbd_err("Creating new thread pool failed!\n");
         return -1;
-    }
-
-    pthread_spin_init(&nbd_write_lock, 0);
-
-    bzero(&hdr, sizeof(struct nego_header));
-    ret = nbd_socket_read(sock, &hdr, sizeof(struct nego_header));
-    if (ret != sizeof(struct nego_header)) {
-        ret = -1;
-        goto err;
-    }
-
-    readonly = !!hdr.readonly;
-
-    cfg = calloc(1, 1024);
-    ret = nbd_socket_read(sock, cfg, hdr.len);
-    if (ret != hdr.len) {
-        ret = -1;
-        goto err;
-    }
-
-    info = nbd_parse_cfgstring(cfg, NULL);
-    if (!info)
-        goto err;
-
-    glfs = nbd_volume_init(info->volume, info->host);
-    if (!glfs) {
-        ret = -1;
-        goto err;
-    }
-
-    gfd = glfs_open(glfs, info->path, ALLOWED_BSOFLAGS);
-    if (!gfd) {
-        nbd_err("Failed to open file %s, %s\n", info->path, strerror(errno));
-        ret = -1;
-        goto err;
     }
 
     while (1) {
@@ -650,44 +400,44 @@ int nbd_handle_request(int sock, int threads)
 
         if(request.type == htonl(NBD_CMD_DISC)) {
             nbd_dbg("Unmap request received!\n");
+            dev->handler->unmap(dev);
             ret = 0;
             goto err;
         }
 
         cmd = ntohl(request.type) & NBD_CMD_MASK_COMMAND;
-        if (readonly && cmd != NBD_CMD_READ && cmd != NBD_CMD_FLUSH) {
+        if (dev->readonly && cmd != NBD_CMD_READ && cmd != NBD_CMD_FLUSH) {
             reply.magic = htonl(NBD_REPLY_MAGIC);
             reply.error = htonl(EROFS);
             memcpy(&(reply.handle), &(request.handle), sizeof(request.handle));
 
-            pthread_spin_lock(&nbd_write_lock);
+            pthread_mutex_lock(&dev->handler->lock);
             nbd_socket_write(sock, &reply, sizeof(struct nbd_reply));
-            pthread_spin_unlock(&nbd_write_lock);
+            pthread_mutex_unlock(&dev->handler->lock);
 
             printf("cmd : %d\n", cmd);
             continue;
         }
 
-        req = calloc(1, sizeof(struct pool_request));
+        req = calloc(1, sizeof(struct nbd_handler_request));
         if (!req) {
             nbd_err("Failed to alloc memory for pool request!\n");
             ret = -1;
             goto err;
         }
 
-        req->glfs = glfs;
-        req->gfd = gfd;
-        req->sock = sock;
-        req->offset = be64toh(request.from);
+        req->dev = dev;
         req->cmd = cmd;
+        req->done = nbd_handle_request_done;
+        req->offset = be64toh(request.from);
         req->flags = ntohl(request.type) & ~NBD_CMD_MASK_COMMAND;
         req->len = ntohl(request.len);
         memcpy(&(req->handle), &(request.handle), sizeof(request.handle));
-        req->data = NULL;
+        req->rwbuf = NULL;
 
         if(req->cmd == NBD_CMD_READ || req->cmd == NBD_CMD_WRITE) {
-            req->data = malloc(req->len);
-            if (!req->data) {
+            req->rwbuf = malloc(req->len);
+            if (!req->rwbuf) {
                 nbd_err("Failed to alloc memory for data!\n");
                 free(req);
                 ret = -1;
@@ -696,16 +446,14 @@ int nbd_handle_request(int sock, int threads)
         }
 
         if(req->cmd == NBD_CMD_WRITE)
-            nbd_socket_read(sock, req->data, req->len);
+            nbd_socket_read(sock, req->rwbuf, req->len);
 
-        g_thread_pool_push(nbd_thread_pool, req, NULL);
+        g_thread_pool_push(thread_pool, req, NULL);
     }
 
 err:
-    glfs_close(gfd);
-    glfs_fini(glfs);
-    g_thread_pool_free(nbd_thread_pool, false, true);
-    pthread_spin_destroy(&nbd_write_lock);
+    g_thread_pool_free(thread_pool, false, true);
+    close(sock);
     return ret;
 }
 
@@ -714,4 +462,48 @@ int rpc_nbd_1_freeresult(SVCXPRT *transp, xdrproc_t xdr_result, caddr_t result)
     xdr_free(xdr_result, result);
 
     return 1;
+}
+
+void free_key(gpointer key)
+{
+    free(key);
+}
+
+bool nbd_service_init(void)
+{
+    nbd_handler_hash = g_hash_table_new(g_int_hash, g_int_equal);
+    if (!nbd_handler_hash) {
+        nbd_err("failed to create nbd_handler_hash hash table!\n");
+        return false;
+    }
+
+    nbd_devices_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
+                                             NULL);
+    if (!nbd_devices_hash) {
+        nbd_err("failed to create nbd_devices_hash hash table!\n");
+        return false;
+    }
+}
+
+void nbd_service_fini(void)
+{
+    g_hash_table_destroy(nbd_handler_hash);
+    g_hash_table_destroy(nbd_devices_hash);
+}
+
+int nbd_register_handler(struct nbd_handler *handler)
+{
+    if (!handler) {
+        nbd_err("handler is NULL!\n");
+        return -1;
+    }
+
+    if (g_hash_table_lookup(nbd_handler_hash, &handler->subtype)) {
+        nbd_err("handler %s is already registered!\n", handler->name);
+        return -1;
+    }
+
+    g_hash_table_insert(nbd_handler_hash, &handler->subtype, handler);
+
+    return 0;
 }
