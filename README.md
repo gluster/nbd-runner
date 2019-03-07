@@ -24,9 +24,9 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 <pre>
 # git clone https://github.com/gluster/nbd-runner.git
 # cd nbd-runner/
-# dnf install autoconf automake libtool glusterfs-api-devel kmod-devel libnl3-devel libevent-devel glib2-devel
+# dnf install autoconf automake libtool glusterfs-api-devel kmod-devel libnl3-devel libevent-devel glib2-devel libtirpc-devel
 # ./autogen.sh
-# ./configure [--with-tirpc=yes] # glibc >= 2.26
+# ./configure # '--with-tirpc=no' means try to use legacy glibc, otherwise use libtirpc by default
 # make -j
 # make install
 #
