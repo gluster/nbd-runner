@@ -78,9 +78,10 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     if (!handler) {
         rep->exit = -EINVAL;
         snprintf(rep->out, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %s!",
+                 "Invalid handler or the handler is not loaded: %d!",
                  create->type);
-        nbd_err("Invalid handler or the handler is not loaded: %s!", create->type);
+        nbd_err("Invalid handler or the handler is not loaded: %d!",
+                create->type);
         goto err;
     }
 
@@ -149,9 +150,10 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     if (!handler) {
         rep->exit = -EINVAL;
         snprintf(rep->out, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %s!",
+                 "Invalid handler or the handler is not loaded: %d!",
                  delete->type);
-        nbd_err("Invalid handler or the handler is not loaded: %s!", delete->type);
+        nbd_err("Invalid handler or the handler is not loaded: %d!",
+                delete->type);
         goto err;
     }
 
@@ -214,9 +216,10 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
     if (!handler) {
         rep->exit = -EINVAL;
         snprintf(rep->out, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %s!",
+                 "Invalid handler or the handler is not loaded: %d!",
                  map->type);
-        nbd_err("Invalid handler or the handler is not loaded: %s!", map->type);
+        nbd_err("Invalid handler or the handler is not loaded: %d!",
+                map->type);
         goto err;
     }
 

@@ -48,7 +48,11 @@ struct timeval TIMEOUT = {.tv_sec = 15};
 static void usage(void)
 {
     _nbd_out("Usage:\n"
-             "\tnbd <command> [<args>]\n\n"
+             "\tnbd <backstore_type> <command> [<args>]\n\n"
+             "Backstore types:\n"
+             "\tgluster: for Glusterfs project\n"
+             "\tceph: for Ceph project\n"
+             "\n"
              "Commands:\n"
              "\thelp\n"
              "\t\tdisplay help for nbd commands\n\n"
@@ -67,6 +71,28 @@ static void usage(void)
              "\t\tshow version info and exit.\n\n"
              "\t<host HOST> means the RPC server IP.\n"
             );
+}
+
+static const char *const nbd_handler_types[] = {
+    [NBD_BACKSTORE_GLUSTER]      = "gluster",
+    [NBD_BACKSTORE_CEPH]         = "ceph",
+
+    [NBD_BACKSTORE_MAX]          = NULL,
+};
+
+static int nbd_backstore_lookup(const char *typestring)
+{
+    int i;
+
+    if (!typestring)
+        return -1;
+
+    for (i = 0; i < NBD_BACKSTORE_MAX; i++) {
+        if (!strcmp(nbd_handler_types[i], typestring))
+            return i;
+    }
+
+    return -1;
 }
 
 typedef enum {
@@ -129,7 +155,7 @@ static struct addrinfo *nbd_get_sock_addr(const char *host)
   return res;
 }
 
-static int nbd_create_file(int count, char **options)
+static int nbd_create_file(int count, char **options, int type)
 {
     CLIENT *clnt = NULL;
     struct nbd_create *create;
@@ -148,7 +174,7 @@ static int nbd_create_file(int count, char **options)
         return -ENOMEM;
     }
 
-    create->type = NBD_HANDLER_GLUSTER;
+    create->type = type;
 
     len = snprintf(create->cfgstring, max_len, "key=%s", options[2]);
     if (len < 0) {
@@ -158,7 +184,7 @@ static int nbd_create_file(int count, char **options)
     }
     create->cfgstring[len++] = ';';
 
-    ind = 3;
+    ind = 4;
     while (ind < count) {
         if (!strcmp("host", options[ind])) {
             if (ind + 1 >= count) {
@@ -278,7 +304,7 @@ err:
     return ret;
 }
 
-static int nbd_delete_file(int count, char **options)
+static int nbd_delete_file(int count, char **options, int type)
 {
     CLIENT *clnt = NULL;
     struct nbd_delete *delete;
@@ -296,22 +322,22 @@ static int nbd_delete_file(int count, char **options)
         return -ENOMEM;
     }
 
-    delete->type = NBD_HANDLER_GLUSTER;
+    delete->type = type;
 
-    len = snprintf(delete->cfgstring, max_len, "key=%s", options[2]);
+    len = snprintf(delete->cfgstring, max_len, "key=%s", options[3]);
     if (len < 0) {
         ret = -errno;
         nbd_err("snprintf error for volinfo, %s!\n", strerror(errno));
         goto err;
     }
 
-    if (!strcmp("host", options[3])) {
-        if (count < 4) {
+    if (!strcmp("host", options[4])) {
+        if (count < 5) {
             nbd_err("Invalid argument 'host <HOST>'!\n\n");
             goto err;
         }
 
-        host = strdup(options[4]);
+        host = strdup(options[5]);
         if (!host) {
             ret = -ENOMEM;
             nbd_err("No memory for host!\n");
@@ -649,7 +675,7 @@ err:
     return -1;
 }
 
-static int nbd_map_device(int count, char **options)
+static int nbd_map_device(int count, char **options, int type)
 {
     CLIENT *clnt = NULL;
     struct nbd_map *map;
@@ -671,9 +697,9 @@ static int nbd_map_device(int count, char **options)
         return -ENOMEM;
     }
 
-    map->type = NBD_HANDLER_GLUSTER;
+    map->type = type;
 
-    len = snprintf(map->cfgstring, max_len, "key=%s", options[2]);
+    len = snprintf(map->cfgstring, max_len, "key=%s", options[3]);
     if (len < 0) {
         ret = -errno;
         nbd_err("snprintf error for volinfo, %s!\n", strerror(errno));
@@ -682,7 +708,7 @@ static int nbd_map_device(int count, char **options)
 
     map->cfgstring[len++] = ';';
 
-    ind = 3;
+    ind = 4;
     while (ind < count) {
         if (!strncmp("/dev/nbd", options[ind], strlen("/dev/nbd"))) {
             if (sscanf(options[ind], "/dev/nbd%d", &dev_index) != 1) {
@@ -834,18 +860,18 @@ nla_put_failure:
 }
 
 static int
-nbd_umap_device(int count, char **options)
+nbd_umap_device(int count, char **options, int type)
 {
     struct nl_sock *netfd;
     int driver_id;
     int index = -1;
 
-    if (count != 3) {
+    if (count != 4) {
         nbd_err("Invalid arguments for umap command!\n");
         return -1;
     }
 
-    if (sscanf(options[2], "/dev/nbd%d", &index) != 1) {
+    if (sscanf(options[3], "/dev/nbd%d", &index) != 1) {
         nbd_err("Invalid nbd device target!\n");
         return -1;
     }
@@ -892,21 +918,21 @@ nla_put_failure:
 }
 
 static int
-nbd_list_devices(int count, char **options)
+nbd_list_devices(int count, char **options, int type)
 {
     struct nl_sock *netfd;
     int driver_id;
 
-    if (count != 3) {
+    if (count != 4) {
         nbd_err("Invalid arguments for list command!\n");
         return -1;
     }
 
-    if (!strcmp(options[2], "map")) {
+    if (!strcmp(options[3], "map")) {
         nbd_list_type = NBD_LIST_MAPPED;
-    } else if (!strcmp(options[2], "umap")) {
+    } else if (!strcmp(options[3], "umap")) {
         nbd_list_type = NBD_LIST_UNMAPPED;
-    } else if (!strcmp(options[2], "all")) {
+    } else if (!strcmp(options[3], "all")) {
         nbd_list_type = NBD_LIST_ALL;
     } else {
         nbd_err("Invalid argument for list!\n");
@@ -1019,6 +1045,7 @@ int main(int argc, char *argv[])
 {
     int ex = EXIT_SUCCESS;
     nbd_opt_command cmd;
+    int type;
     int ret;
 
     nbd_log_init();
@@ -1027,7 +1054,6 @@ int main(int argc, char *argv[])
         goto out;
 
     if (argc <= 1) {
-        nbd_err("Too few options!\n\n" );
         usage();
         ex = EXIT_FAILURE;
         goto out;
@@ -1036,7 +1062,17 @@ int main(int argc, char *argv[])
     if (load_our_module() < 0)
         goto out;
 
-    cmd = nbd_command_lookup(argv[1]);
+    type = nbd_backstore_lookup(argv[1]);
+    if (type < 0) {
+        if (strcmp(argv[1], "version") && strcmp(argv[1], "help")) {
+            nbd_err("Invalid backstore type: %s\n", argv[1]);
+            goto out;
+        }
+        cmd = nbd_command_lookup(argv[1]);
+    } else {
+
+        cmd = nbd_command_lookup(argv[2]);
+    }
     if (cmd < 0) {
         nbd_err("Invalid command!\n\n" );
         usage();
@@ -1049,27 +1085,27 @@ int main(int argc, char *argv[])
         usage();
         goto out;
     case NBD_OPT_CREATE:
-        ret = nbd_create_file(argc, argv);
+        ret = nbd_create_file(argc, argv, type);
         if (ret < 0)
                 ex = EXIT_FAILURE;
         break;
     case NBD_OPT_DELETE:
-        ret = nbd_delete_file(argc, argv);
+        ret = nbd_delete_file(argc, argv, type);
         if (ret < 0)
                 ex = EXIT_FAILURE;
         break;
     case NBD_OPT_MAP:
-        ret = nbd_map_device(argc, argv);
+        ret = nbd_map_device(argc, argv, type);
         if (ret < 0)
                 ex = EXIT_FAILURE;
         break;
     case NBD_OPT_UNMAP:
-        ret = nbd_umap_device(argc, argv);
+        ret = nbd_umap_device(argc, argv, type);
         if (ret < 0)
                 ex = EXIT_FAILURE;
         break;
     case NBD_OPT_LIST:
-        ret = nbd_list_devices(argc, argv);
+        ret = nbd_list_devices(argc, argv, type);
         if (ret < 0)
                 ex = EXIT_FAILURE;
         break;

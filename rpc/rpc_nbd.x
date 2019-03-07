@@ -4,9 +4,10 @@
 #endif
 
 enum handler_t {
-    NBD_HANDLER_GLUSTER     = 0,
+    NBD_BACKSTORE_GLUSTER,
+    NBD_BACKSTORE_CEPH,
 
-    NBD_HANDLER_MAX
+    NBD_BACKSTORE_MAX
 };
 
 #define HOST_MAX  255

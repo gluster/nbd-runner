@@ -544,7 +544,7 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
 
 struct nbd_handler glfs_handler = {
     .name           = "Gluster gfapi handler",
-    .subtype        = NBD_HANDLER_GLUSTER,
+    .subtype        = NBD_BACKSTORE_GLUSTER,
 
     .lock           = PTHREAD_MUTEX_INITIALIZER,
 
