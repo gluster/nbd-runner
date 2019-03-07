@@ -57,20 +57,20 @@ AC_SUBST(LIBNL3_CFLAGS)
 AC_SUBST(LIBNL3_LIBS)
 
 AC_ARG_WITH([tirpc],
-    [AS_HELP_STRING([--with-tirpc],
-    [do use tirpc])], [], 
-    [with_tirpc=check])
-if test "x$with_tirpc" == "xyes"; then
-    PKG_CHECK_MODULES(TIRPC, [libtirpc >= 1.1.4],
-        [HAVE_TIRPC=1 AC_DEFINE(HAVE_TIRPC, 1, [Define to 1 if we have tirpc support])],
-     
-        [AC_MSG_ERROR([--with-tirpc given but cannot find libtirpc])
-        HAVE_TIRPC=0 AC_DEFINE(HAVE_TIRPC, 0)])   
+    [AS_HELP_STRING([--with-tirpc], [do use tirpc])],
+    [with_tirpc=$withval],
+    [with_tirpc=missing])
+
+if test "x$with_tirpc" == "xyes" || test "x$with_tirpc" == "xmissing"; then
+    PKG_CHECK_MODULES(TIRPC, [libtirpc >= 1.0.0],
+        [with_tirpc="yes" AC_DEFINE(HAVE_TIRPC, 1, [Define to 1 if we have tirpc support])],
+        [with_tirpc="no" AC_DEFINE(HAVE_TIRPC, 0)
+	 AC_MSG_ERROR([Missing libtirpc or libtirpc is too old, please try to use glibc])])
 
     AC_SUBST(TIRPC_CFLAGS)
     AC_SUBST(TIRPC_LIBS)
 else
-    HAVE_TIRPC=0
+    with_tirpc="no"
     AC_DEFINE(HAVE_TIRPC, 0, [Define to 1 if we have tirpc support])
 fi
 
@@ -154,8 +154,9 @@ AC_OUTPUT
 cat <<EOF
 
 ------------------ Summary ------------------
- $PACKAGE_NAME version $PACKAGE_VERSION
+  $PACKAGE_NAME version $PACKAGE_VERSION
   Prefix.........: $prefix
+  Use TIRPC......: $with_tirpc
   C Compiler.....: $CC $CFLAGS $CPPFLAGS
   Linker.........: $LD $LDFLAGS $LIBS
 ---------------------------------------------
