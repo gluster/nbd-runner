@@ -113,29 +113,20 @@ static bool nbd_check_available_space(struct glfs *glfs, char *volume,
     return false;
 }
 
-static struct nbd_device *glfs_cfg_parse(const char *cfg, nbd_response *rep)
+static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
+                           nbd_response *rep)
 {
-    struct nbd_device *dev = NULL;
     struct glfs_info *info = NULL;
     char *tmp = NULL;
     char *sem;
     char *sep;
     char *ptr;
-    int ret = 0;
 
-    if (!cfg) {
+    if (!cfg || !dev || !rep) {
         rep->exit = -EINVAL;
         snprintf(rep->out, NBD_EXIT_MAX, "The cfg param is NULL, will do nothing!");
         nbd_err("The cfg param is NULL, will do nothing!\n");
-        return NULL;
-    }
-
-    dev = calloc(1, sizeof(struct nbd_device));
-    if (!dev) {
-        rep->exit = -ENOMEM;
-        snprintf(rep->out, NBD_EXIT_MAX, "No memory for dev!");
-        nbd_err("No memory for dev!\n");
-        return NULL;
+        return false;
     }
 
     info = calloc(1, sizeof(struct glfs_info));
@@ -159,9 +150,9 @@ static struct nbd_device *glfs_cfg_parse(const char *cfg, nbd_response *rep)
 
     /*
      * The valid cfgstring is like:
-     *    "volname@host:/path;prealloc=yes"
+     *    "volname@host:/path;"
      * or
-     *    "volname@host:/path;prealloc=yes;"
+     *    "volname@host:/path"
      */
     do {
         sem = strchr(ptr, ';');
@@ -171,66 +162,6 @@ static struct nbd_device *glfs_cfg_parse(const char *cfg, nbd_response *rep)
         if (*ptr == '\0') {
             /* in case the last valid char is ';' */
             break;
-        } else if (!strncmp("size", ptr, strlen("size"))) {
-            /* size=1G */
-            sep = ptr + strlen("size");
-            if (*sep != '=') {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid size key/pair: %s!", ptr);
-                nbd_err("Invalid size key/pair: %s!\n", ptr);
-                goto err;
-            }
-
-            ptr = sep + 1;
-            dev->size = nbd_parse_size(ptr, NBD_DEFAULT_SECTOR_SIZE);
-            if (dev->size < 0) {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid size value: %s!", ptr);
-                nbd_err("Invalid size value: %s!\n", ptr);
-                goto err;
-            }
-        } else if (!strncmp("readonly", ptr, strlen("readonly"))) {
-            /* prealloc=yes|no */
-            sep = ptr + strlen("readonly");
-            if (*sep != '=') {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid readonly key/pair: %s!", ptr);
-                nbd_err("Invalid readonly key/pair: %s!\n", ptr);
-                goto err;
-            }
-
-            ptr = sep + 1;
-            if (!strcmp("yes", ptr)) {
-                dev->readonly = true;
-            } else if (!strcmp("no", ptr)) {
-                dev->readonly = false;
-            } else {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid readonly value: %s!", ptr);
-                nbd_err("Invalid readonly value: %s!\n", ptr);
-                goto err;
-            }
-        } else if (!strncmp("prealloc", ptr, strlen("prealloc"))) {
-            /* prealloc=yes|no */
-            sep = ptr + strlen("prealloc");
-            if (*sep != '=') {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid prealloc key/pair: %s!", ptr);
-                nbd_err("Invalid prealloc key/pair: %s!\n", ptr);
-                goto err;
-            }
-
-            ptr = sep + 1;
-            if (!strcmp("yes", ptr)) {
-                dev->prealloc = true;
-            } else if (!strcmp("no", ptr)) {
-                dev->prealloc = false;
-            } else {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid prealloc value: %s!", ptr);
-                nbd_err("Invalid prealloc value: %s!\n", ptr);
-                goto err;
-            }
         } else if (strchr(ptr, '@') && strchr(ptr, ':')) {
             /* volname@host:/path */
             sep = strchr(ptr, '@');
@@ -277,13 +208,12 @@ static struct nbd_device *glfs_cfg_parse(const char *cfg, nbd_response *rep)
 
     dev->priv = info;
     free(tmp);
-    return dev;
+    return true;
 
 err:
-    free(dev);
     free(tmp);
     free(info);
-    return NULL;
+    return false;
 }
 
 static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
@@ -411,7 +341,6 @@ err:
     glfs_fini(glfs);
     free(info);
     dev->priv = NULL;
-    free(dev);
     return ret;
 }
 
@@ -488,6 +417,97 @@ static bool glfs_unmap(struct nbd_device *dev)
     return true;
 }
 
+static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
+{
+    struct glfs_info *info = dev->priv;
+    struct glfs *glfs = NULL;
+    struct stat st;
+
+    rep->exit = 0;
+
+    if (info->glfs) {
+        if (glfs_lstat(glfs, info->path, &st) < 0) {
+            rep->exit = -errno;
+            snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
+                    info->path, info->volume);
+            nbd_err("failed to lstat file %s in volume: %s!\n",
+                    info->path, info->volume);
+            return -1;
+        }
+
+        return st.st_size;
+    }
+
+    glfs = nbd_volume_init(info->volume, info->host);
+    if (!glfs) {
+        rep->exit = -EINVAL;
+        snprintf(rep->out, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
+        nbd_err("Init volume %s failed!\n", info->volume);
+        return -1;
+    }
+
+    if (glfs_lstat(glfs, info->path, &st) < 0) {
+        rep->exit = -errno;
+        snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
+                info->path, info->volume);
+        nbd_err("failed to lstat file %s in volume: %s!\n",
+                info->path, info->volume);
+        return -1;
+    }
+
+    glfs_fini(glfs);
+    return st.st_size;
+}
+
+static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
+{
+    struct glfs_info *info = dev->priv;
+    struct glfs *glfs = NULL;
+    struct stat st;
+
+    if (rep)
+        rep->exit = 0;
+
+    if (info->glfs) {
+        if (glfs_lstat(glfs, info->path, &st) < 0) {
+            if (rep) {
+                rep->exit = -errno;
+                snprintf(rep->out, NBD_EXIT_MAX, "1failed to lstat file %s in volume: %s!",
+                         info->path, info->volume);
+            }
+            nbd_err("1failed to lstat file %s in volume: %s!\n",
+                    info->path, info->volume);
+            return -1;
+        }
+
+        return st.st_blksize;
+    }
+
+    glfs = nbd_volume_init(info->volume, info->host);
+    if (!glfs) {
+        if (rep) {
+            rep->exit = -EINVAL;
+            snprintf(rep->out, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
+        }
+        nbd_err("Init volume %s failed!\n", info->volume);
+        return -1;
+    }
+
+    if (glfs_lstat(glfs, info->path, &st) < 0) {
+        if (rep) {
+            rep->exit = -errno;
+            snprintf(rep->out, NBD_EXIT_MAX, "2failed to lstat file %s in volume: %s!",
+                    info->path, info->volume);
+        }
+        nbd_err("2failed to lstat file %s in volume: %s, %s!\n",
+                info->path, info->volume, strerror(errno));
+        return -1;
+    }
+
+    glfs_fini(glfs);
+    return st.st_blksize;
+}
+
 static void glfs_async_cbk(glfs_fd_t *gfd, ssize_t ret,
                            struct glfs_stat *prestat,
                            struct glfs_stat *poststat,
@@ -553,6 +573,8 @@ struct nbd_handler glfs_handler = {
     .delete         = glfs_delete,
     .map            = glfs_map,
     .unmap          = glfs_unmap,
+    .get_size       = glfs_get_size,
+    .get_blksize    = glfs_get_blksize,
     .handle_request = glfs_handle_request,
 };
 

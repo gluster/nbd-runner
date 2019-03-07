@@ -22,6 +22,7 @@ stamp-h1
 .deps
 *.spec
 *.tar.gz
+*.swp
 VERSION
 
 cli/nbd-cli
