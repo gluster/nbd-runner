@@ -88,7 +88,7 @@ struct cli_cmd gluster_cmds[] = {
      .call    = gluster_unmap_routine,
      .desc    = "unmap the nbd device",
     },
-    {.pattern = "gluster list <map|unmap|all>",
+    {.pattern = "gluster list [map|unmap|all]",
      .call    = gluster_list_routine,
      .desc    = "list the mapped|unmapped|all nbd devices, all as default",
     },
