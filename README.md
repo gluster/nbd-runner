@@ -67,39 +67,24 @@ Commands:
 
 # nbd-cli help
 Usage:
-	nbd <command> [<args>]
+ gluster help		-display help for gluster commands
+ ceph help		-display help for ceph commands, TODO
+ global help		-display help for global commands, TODO
+ version		-display the version of nbd-cli
 
-Commands:
-	help
-		display help for nbd commands
+# nbd-cli gluster help
+Usage: 
 
-	create <volname@host:/path> [prealloc] <size SIZE> <host HOST>
-		create path file on the volname volume, prealloc is false as default,
-		and the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)
-
-	delete <volname@host:/path> <host HOST>
+	gluster help
+		display help for gluster commands
+	gluster create <volname@host:/path> [prealloc] <size SIZE> <host HOST>
+		create path file on the volname volume, prealloc is false as default, and the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)
+	gluster delete <volname@host:/path> <host HOST>
 		delete path file on the volname volume
-
-	map <volname@host:/path> [nbd-device] [threads NUM] [timeout TIME] <host HOST> [readonly]
-		map path file to the nbd device, as default the threads 4, timeout 0, none readonly
-
-	umap <nbd-device>
-		umap the nbd device
-
-	list <map|umap|all>
-		list the mapped|umapped|all nbd devices, all as default
-
-	version
-		show version info and exit.
-
-	<host HOST> means the RPC server IP.
+	gluster map <volname@host:/path> [nbd-device] [timeout TIME] <host HOST> [readonly]
+		map path file to the nbd device, as default the timeout 0, none readonly
+	gluster unmap <nbd-device>
+		unmap the nbd device
+	gluster list <map|unmap|all>
+		list the mapped|unmapped|all nbd devices, all as default
 ```
-
-# TODO:
-
-1. add systemd service support
-2. split the gluster code as one separate handler
-3. add logger file support
-4. add sysconfig file support
-5. add 'nbd-cli list <map|umap|create|all>'
-6. ...

@@ -78,9 +78,10 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     if (!handler) {
         rep->exit = -EINVAL;
         snprintf(rep->out, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %s!",
+                 "Invalid handler or the handler is not loaded: %d!",
                  create->type);
-        nbd_err("Invalid handler or the handler is not loaded: %s!", create->type);
+        nbd_err("Invalid handler or the handler is not loaded: %d!",
+                create->type);
         goto err;
     }
 
@@ -101,14 +102,23 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
         goto err;
     }
 
-    dev = handler->cfg_parse(create->cfgstring, rep);
+    dev = calloc(1, sizeof(struct nbd_device));
     if (!dev) {
+        rep->exit = -ENOMEM;
+        snprintf(rep->out, NBD_EXIT_MAX, "No memory for nbd_device!");
+        nbd_err("No memory for nbd_device!\n");
+        goto err;
+    }
+
+    if (!handler->cfg_parse(dev, create->cfgstring, rep)) {
         nbd_err("failed to parse cfgstring: %s\n", create->cfgstring);
-        free(key);
         goto err;
     }
 
     dev->handler = handler;
+    dev->size = create->size;
+    dev->prealloc = create->prealloc;
+
 
     /*
      * Since we allow to create the backstore directly
@@ -118,14 +128,20 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
      */
     if (!handler->create(dev, rep) && rep->exit != -EEXIST) {
         nbd_err("failed to create backstore: %s\n", create->cfgstring);
-        handler->delete(dev, rep);
-        free(key);
         goto err;
     }
 
+    dev->blksize = handler->get_blksize(dev, NULL);
+    if (dev->blksize < 0)
+        goto err;
     g_hash_table_insert(nbd_devices_hash, key, dev);
 
 err:
+    if (rep->exit && rep->exit != -EEXIST) {
+        free(key);
+        handler->delete(dev, rep);
+        free(dev);
+    }
     return true;
 }
 
@@ -149,9 +165,10 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     if (!handler) {
         rep->exit = -EINVAL;
         snprintf(rep->out, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %s!",
+                 "Invalid handler or the handler is not loaded: %d!",
                  delete->type);
-        nbd_err("Invalid handler or the handler is not loaded: %s!", delete->type);
+        nbd_err("Invalid handler or the handler is not loaded: %d!",
+                delete->type);
         goto err;
     }
 
@@ -174,19 +191,25 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
          */
         nbd_out("%s is not in the hash table, will try to delete enforce!\n",
                 delete->cfgstring);
-        dev = handler->cfg_parse(delete->cfgstring, rep);
+        dev = calloc(1, sizeof(struct nbd_device));
         if (!dev) {
+            rep->exit = -ENOMEM;
+            snprintf(rep->out, NBD_EXIT_MAX, "No memory for nbd_device!");
+            nbd_err("No memory for nbd_device!\n");
+            goto err;
+        }
+
+        if (!handler->cfg_parse(dev, delete->cfgstring, rep)) {
             rep->exit = -EAGAIN;
             snprintf(rep->out, NBD_EXIT_MAX, "failed to delete %s!", delete->cfgstring);
             nbd_err("failed to delete %s\n", delete->cfgstring);
             goto err;
         }
         dev->handler = handler;
-    } else {
-        g_hash_table_remove(nbd_devices_hash, key);
     }
 
     handler->delete(dev, rep);
+    g_hash_table_remove(nbd_devices_hash, key);
 
 err:
     free(key);
@@ -214,9 +237,10 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
     if (!handler) {
         rep->exit = -EINVAL;
         snprintf(rep->out, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %s!",
+                 "Invalid handler or the handler is not loaded: %d!",
                  map->type);
-        nbd_err("Invalid handler or the handler is not loaded: %s!", map->type);
+        nbd_err("Invalid handler or the handler is not loaded: %d!",
+                map->type);
         goto err;
     }
 
@@ -239,15 +263,30 @@ bool_t nbd_map_1_svc(nbd_map *map, nbd_response *rep, struct svc_req *req)
         need_to_insert = true;
         nbd_out("%s is not in the hash table, will try to map enforce!\n",
                 map->cfgstring);
-        dev = handler->cfg_parse(map->cfgstring, rep);
+        dev = calloc(1, sizeof(struct nbd_device));
         if (!dev) {
+            rep->exit = -ENOMEM;
+            snprintf(rep->out, NBD_EXIT_MAX, "No memory for nbd_device!");
+            nbd_err("No memory for nbd_device!\n");
+            goto err;
+        }
+
+        if (!handler->cfg_parse(dev, map->cfgstring, rep)) {
             rep->exit = -EAGAIN;
             snprintf(rep->out, NBD_EXIT_MAX, "failed to map %s!", map->cfgstring);
             nbd_err("failed to map %s\n", map->cfgstring);
             free(key);
             goto err;
         }
+
         dev->handler = handler;
+        dev->readonly = map->readonly;
+        dev->size = handler->get_size(dev, rep);
+        if (dev->size < 0)
+            goto err;
+        dev->blksize = handler->get_blksize(dev, rep);
+        if (dev->blksize < 0)
+            goto err;
     }
 
     if (!handler->map(dev, rep)) {
@@ -469,6 +508,11 @@ void free_key(gpointer key)
     free(key);
 }
 
+void free_value(gpointer value)
+{
+    free(value);
+}
+
 bool nbd_service_init(void)
 {
     nbd_handler_hash = g_hash_table_new(g_int_hash, g_int_equal);
@@ -478,7 +522,7 @@ bool nbd_service_init(void)
     }
 
     nbd_devices_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
-                                             NULL);
+                                             free_value);
     if (!nbd_devices_hash) {
         nbd_err("failed to create nbd_devices_hash hash table!\n");
         return false;

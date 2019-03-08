@@ -47,11 +47,13 @@ struct nbd_handler {
 
     void *data;		/* Handler private data. */
 
-    struct nbd_device *(*cfg_parse)(const char *, nbd_response *);
+    bool (*cfg_parse)(struct nbd_device *, const char *, nbd_response *);
     bool (*create)(struct nbd_device *, nbd_response *);
     bool (*delete)(struct nbd_device *, nbd_response *);
     bool (*map)(struct nbd_device *, nbd_response *);
     bool (*unmap)(struct nbd_device *);
+    ssize_t (*get_size)(struct nbd_device *, nbd_response *);
+    ssize_t (*get_blksize)(struct nbd_device *, nbd_response *);
     void (*handle_request)(gpointer, gpointer);
 };
 
