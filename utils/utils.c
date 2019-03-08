@@ -163,49 +163,25 @@ int nbd_socket_write(int fd, void *buf, size_t count)
     return 0;
 }
 
-#define VERNUM_BUFLEN  8
 #define MIN_KERNEL_VERSION "4.12.0"  /* Minimum recommended kernel version */
 
 bool nbd_minimal_kernel_version_check(void)
 {
     struct utsname ver = {'\0', };
-    size_t num[VERNUM_BUFLEN] = {0, };
-    int i = 0;
-    char *rel;
-    size_t len;
 
     if (uname(&ver) != 0) {
         nbd_err("uname() failed: %s\n", strerror(errno));
-        goto err;
-    }
-
-    rel = ver.release;
-    while (i < VERNUM_BUFLEN && *rel) {
-        if (isdigit(*rel)) {
-            num[i] = strtol(rel, &rel, 10);
-            i++;
-        } else if (isalpha(*rel)) {
-            break;
-        } else {
-            rel++;
-        }
+        return false;
     }
 
     /* The minimal kernel version is MIN_KERNEL_VERSION */
-    if (KERNEL_VERSION(num[0], num[1], num[2]) < KERNEL_VERSION(4, 12, 0)) {
-        goto err;
-    } else if (KERNEL_VERSION(num[0], num[1], num[2]) == KERNEL_VERSION(4, 12, 0)) {
-        if (KERNEL_VERSION(num[3], num[4], num[5]) < KERNEL_VERSION(1, 0, 0)) {
-            goto err;
-        }
-    }
+    if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)) {
+        nbd_err("Minimum recommended kernel version: '%s' and current kernel version: '%s'.\n",
+                MIN_KERNEL_VERSION, ver.release);
+        return false;
+     }
 
     return true;
-err:
-    nbd_err("Minimum recommended kernel version: '%s' and current kernel version: '%s'.\n",
-            MIN_KERNEL_VERSION, ver.release);
-
-    return false;
 }
 
 struct nbd_ip *nbd_get_local_ips(void)
