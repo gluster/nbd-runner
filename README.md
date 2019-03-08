@@ -110,6 +110,6 @@ Usage:
 		map FILEPATH to the nbd device, as default the timeout 0, none readonly
 	gluster unmap <nbd-device>
 		unmap the nbd device
-	gluster list [map|unmap|all]
-		list the mapped|unmapped|all nbd devices, all as default
+	gluster list [map|unmap|all] [host RPC_HOST]
+		list the mapped|unmapped|all nbd devices, all as default, if the host is omit, it will only list the local nbd device info.
 ```

@@ -13,6 +13,8 @@ enum handler_t {
 #define HOST_MAX  255
 #define CFGS_MAX  1024
 #define PORT_MAX  32
+#define TLEN_MAX  32
+#define DLEN_MAX  16
 
 struct nbd_create {
     handler_t     type;
@@ -26,14 +28,34 @@ struct nbd_delete {
     char          cfgstring[CFGS_MAX];
 };
 
-struct nbd_map {
+struct nbd_premap {
     handler_t     type;
     bool          readonly;
     char          cfgstring[CFGS_MAX];
 };
 
+struct nbd_postmap {
+    handler_t     type;
+    char          nbd[DLEN_MAX];
+    char          time[TLEN_MAX];
+    char          cfgstring[CFGS_MAX];
+};
+
+struct nbd_list {
+    handler_t     type;
+};
+
 struct nbd_response {
     int           exit;
+    /*
+     * The following are used for the error info
+     * if exit is none zero or it will used for
+     * the list command to get the mapping
+     * backstore <--> /dev/nbdXX infomation.
+     *
+     * For the mapping info, for each map it should
+     * be "{[/dev/nbdXX][backstore]}" string.
+     */
     string        out<>;
 
     /*
@@ -58,6 +80,8 @@ program RPC_NBD {
     version RPC_NBD_VERS {
         nbd_response NBD_CREATE(nbd_create) = 1;
         nbd_response NBD_DELETE(nbd_delete) = 2;
-        nbd_response NBD_MAP(nbd_map) = 3;
+        nbd_response NBD_PREMAP(nbd_premap) = 3;
+        nbd_response NBD_POSTMAP(nbd_postmap) = 4;
+        nbd_response NBD_LIST(nbd_list) = 5;
     } = 1;
 } = RPC1_RPC_PROG_NUM;
