@@ -726,16 +726,23 @@ int nbd_list_devices(int count, char **options, int type)
     struct nl_sock *netfd;
     struct nl_msg *msg;
     int driver_id;
+    char *opt;
 
-    if (!strcmp(options[0], "map")) {
-        nbd_list_type = NBD_LIST_MAPPED;
-    } else if (!strcmp(options[0], "unmap")) {
-        nbd_list_type = NBD_LIST_UNMAPPED;
-    } else if (!strcmp(options[0], "all")) {
+    if (!count) {
         nbd_list_type = NBD_LIST_ALL;
     } else {
-        nbd_err("Invalid argument for list!\n");
-        return -1;
+        opt = options[0];
+
+        if (!strcmp(opt, "map")) {
+            nbd_list_type = NBD_LIST_MAPPED;
+        } else if (!strcmp(opt, "unmap")) {
+            nbd_list_type = NBD_LIST_UNMAPPED;
+        } else if (!strcmp(opt, "all")) {
+            nbd_list_type = NBD_LIST_ALL;
+        } else {
+            nbd_err("Invalid argument for list: %s!\n", opt);
+            return -1;
+        }
     }
 
     netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST);
