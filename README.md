@@ -4,7 +4,7 @@ A daemon that handles the userspace side of the NBD(Network Block Device) backst
 
 # nbd-cli
 
-A cli utility, which aims at making Gluster backed file creation/deletion/mapping/unmaping/listing.
+A cli utility, which aims at making backstore creation/deletion/mapping/unmaping/listing.
 
 ## License
 nbd-runner is licensed to you under your choice of the GNU Lesser General Public License, version 3 or any later version ([LGPLv3](https://opensource.org/licenses/lgpl-3.0.html) or later), or the GNU General Public License, version 2 ([GPLv2](https://opensource.org/licenses/GPL-2.0)), in all cases as published by the Free Software Foundation.
