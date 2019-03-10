@@ -81,6 +81,12 @@ int nbd_create_backstore(int count, char **options, int type)
     int len;
     int max_len = 1024;
 
+    /* strict check */
+    if (count != 5 && count != 6 ) {
+         nbd_err("Invalid argument counts\n");
+         return -EINVAL;
+    }
+
     create = calloc(1, sizeof(struct nbd_create));
     if (!create) {
         nbd_err("No memory for nbd_create!\n");
@@ -195,6 +201,12 @@ int nbd_delete_backstore(int count, char **options, int type)
     int ret = 0;
     int len;
     int max_len = 1024;
+
+    /* strict check */
+    if (count != 3) {
+         nbd_err("Invalid argument counts\n");
+         return -EINVAL;
+    }
 
     delete = calloc(1, sizeof(struct nbd_delete));
     if (!delete) {
@@ -621,6 +633,12 @@ int nbd_map_device(int count, char **options, int type)
     int ind;
     int max_len = 1024;
 
+    /* strict check */
+    if (count < 3 || count > 7 ) {
+         nbd_err("Invalid argument counts\n");
+         return -EINVAL;
+    }
+
     map = calloc(1, sizeof(struct nbd_premap));
     if (!map) {
         nbd_err("No memory for nbd_map!\n");
@@ -773,6 +791,12 @@ int nbd_unmap_device(int count, char **options, int type)
     int driver_id;
     int index = -1;
 
+    /* strict check */
+    if (count != 1) {
+         nbd_err("Invalid argument counts\n");
+         return -EINVAL;
+    }
+
     if (sscanf(options[0], "/dev/nbd%d", &index) != 1) {
         nbd_err("Invalid nbd device target!\n");
         return -1;
@@ -896,6 +920,12 @@ int nbd_list_devices(int count, char **options, int type)
     int driver_id;
     int ind;
     int ret = -1;
+
+    /* strict check */
+    if (count != 0 && count !=1) {
+         nbd_err("Invalid argument counts\n");
+         return -EINVAL;
+    }
 
     list_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
                                       free_value);
