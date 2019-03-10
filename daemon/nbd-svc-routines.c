@@ -218,11 +218,12 @@ err:
 
 bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 {
-    struct nbd_ip *ips = NULL, *p, *q;
+    GPtrArray *ips = NULL;
     struct nbd_device *dev = NULL;
     struct nbd_handler *handler;
     char *key = NULL;
     bool inserted = false;
+    int i;
 
     rep->exit = 0;
 
@@ -312,7 +313,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     if (listen_host) {
         snprintf(rep->host, NBD_HOST_MAX, "%s", listen_host);
     } else {
-        ips = nbd_get_local_ips();
+        ips = nbd_get_local_ips(AF_INET);
         if (!ips) {
             rep->exit = -EINVAL;
             snprintf(rep->out, NBD_EXIT_MAX, "failed to parse the listen IP addr!");
@@ -320,29 +321,24 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
             goto err;
         }
 
-        p = ips;
-        while (p) {
-            if (strcmp(p->ip, "127.0.0.1"))
-                break;
-
-            p = p->next;
+        for (i = 0; i < ips->len; i++) {
+            if (strcmp(g_ptr_array_index (ips, i), "127.0.0.1"))
+                continue;
+            break;
         }
 
-        if (!p) {
+        if (i >= ips->len) {
             rep->exit = -EINVAL;
             snprintf(rep->out, NBD_EXIT_MAX, "failed to check the listen IP addr!");
             nbd_err("failed to check the listen IP addr!\n");
             goto err;
         }
-        snprintf(rep->host, NBD_HOST_MAX, "%s", p);
+        snprintf(rep->host, NBD_HOST_MAX, "%s", g_ptr_array_index (ips, i));
     }
     snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_IOS_SVC_PORT);
 
 err:
-    for (q = ips; q; q = p) {
-        p = q->next;
-        free(q);
-    }
+    g_ptr_array_free(ips, true);
     if (!inserted)
         free(key);
     return true;
