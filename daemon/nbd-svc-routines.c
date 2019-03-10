@@ -222,7 +222,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     struct nbd_device *dev = NULL;
     struct nbd_handler *handler;
     char *key = NULL;
-    bool need_to_insert = false;
+    bool inserted = false;
 
     rep->exit = 0;
 
@@ -253,6 +253,13 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     }
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
+    if (dev && dev->nbd[0]) {
+        rep->exit = -EINVAL;
+        snprintf(rep->out, NBD_EXIT_MAX, "%s already map to %s!", key, dev->nbd);
+        nbd_err("%s already map to %s!\n", key, dev->nbd);
+        goto err;
+    }
+
     if (!dev) {
         /*
         * Since we allow to create the backstore directly
@@ -272,8 +279,9 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
         if (!handler->cfg_parse(dev, map->cfgstring, rep)) {
             rep->exit = -EAGAIN;
-            snprintf(rep->out, NBD_EXIT_MAX, "failed to map %s!", map->cfgstring);
-            nbd_err("failed to map %s\n", map->cfgstring);
+            snprintf(rep->out, NBD_EXIT_MAX, "failed to parse %s!", map->cfgstring);
+            nbd_err("failed to parse %s\n", map->cfgstring);
+            free(dev);
             goto err;
         }
 
@@ -281,29 +289,25 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         dev->handler = handler;
         dev->readonly = map->readonly;
         dev->size = handler->get_size(dev, rep);
-        if (dev->size < 0)
+        if (dev->size < 0) {
+            free(dev);
             goto err;
+        }
         dev->blksize = handler->get_blksize(dev, rep);
-        if (dev->blksize < 0)
+        if (dev->blksize < 0) {
+            free(dev);
             goto err;
+        }
 
-        need_to_insert = true;
-    } else if (dev->nbd[0]) {
-        rep->exit = -EINVAL;
-        snprintf(rep->out, NBD_EXIT_MAX, "%s already map to %s!", key, dev->nbd);
-        nbd_err("%s already map to %s!\n", key, dev->nbd);
-        goto err;
+        g_hash_table_insert(nbd_devices_hash, key, dev);
+        inserted = true;
     }
 
-    if (!handler->map(dev, rep)) {
-        need_to_insert = false;
+    if (!handler->map(dev, rep))
         goto err;
-    }
 
     rep->size = dev->size;
     rep->blksize = dev->blksize;
-    if (need_to_insert)
-        g_hash_table_insert(nbd_devices_hash, key, dev);
 
     if (listen_host) {
         snprintf(rep->host, NBD_HOST_MAX, "%s", listen_host);
@@ -339,7 +343,7 @@ err:
         p = q->next;
         free(q);
     }
-    if (!need_to_insert)
+    if (!inserted)
         free(key);
     return true;
 }

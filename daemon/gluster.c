@@ -422,6 +422,7 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
     struct glfs_info *info = dev->priv;
     struct glfs *glfs = NULL;
     struct stat st;
+    ssize_t ret = -1;
 
     rep->exit = 0;
 
@@ -452,11 +453,14 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
                 info->path, info->volume);
         nbd_err("failed to lstat file %s in volume: %s!\n",
                 info->path, info->volume);
-        return -1;
+        ret = -1;
+        goto err;
     }
 
+    ret = st.st_size;
+err:
     glfs_fini(glfs);
-    return st.st_size;
+    return ret;
 }
 
 static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
@@ -464,6 +468,7 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
     struct glfs_info *info = dev->priv;
     struct glfs *glfs = NULL;
     struct stat st;
+    ssize_t ret = -1;
 
     if (rep)
         rep->exit = 0;
@@ -472,10 +477,10 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
         if (glfs_lstat(glfs, info->path, &st) < 0) {
             if (rep) {
                 rep->exit = -errno;
-                snprintf(rep->out, NBD_EXIT_MAX, "1failed to lstat file %s in volume: %s!",
+                snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
                          info->path, info->volume);
             }
-            nbd_err("1failed to lstat file %s in volume: %s!\n",
+            nbd_err("failed to lstat file %s in volume: %s!\n",
                     info->path, info->volume);
             return -1;
         }
@@ -496,16 +501,19 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
     if (glfs_lstat(glfs, info->path, &st) < 0) {
         if (rep) {
             rep->exit = -errno;
-            snprintf(rep->out, NBD_EXIT_MAX, "2failed to lstat file %s in volume: %s!",
+            snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
                     info->path, info->volume);
         }
-        nbd_err("2failed to lstat file %s in volume: %s, %s!\n",
+        nbd_err("failed to lstat file %s in volume: %s, %s!\n",
                 info->path, info->volume, strerror(errno));
-        return -1;
+        ret = -1;
+        goto err;
     }
 
+    ret = st.st_blksize;
+err:
     glfs_fini(glfs);
-    return st.st_blksize;
+    return ret;
 }
 
 static void glfs_async_cbk(glfs_fd_t *gfd, ssize_t ret,
