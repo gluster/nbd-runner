@@ -1,6 +1,6 @@
 noinst_LTLIBRARIES = libutils.la
 
-libutils_la_SOURCES = utils.c
+libutils_la_SOURCES = utils.c time.c
 
 noinst_HEADERS = utils.h nbd-log.h
 

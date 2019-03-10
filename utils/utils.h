@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <linux/types.h>
 #include <sys/types.h>
+#include <netinet/in.h>
 #include "config.h"
 
 #define nbd_version_info ""                                       \
@@ -49,6 +50,8 @@
 #define NBD_CFGS_MAX  1024
 #define NBD_PORT_MAX  32
 #define NBD_EXIT_MAX  1024
+#define NBD_TLEN_MAX  32    /* "2019-02-13 12:20:45" */
+#define NBD_DLEN_MAX  16    /* "/dev/nbdXX" */
 
 #define ALLOWED_BSOFLAGS (O_DIRECT | O_RDWR | O_LARGEFILE)
 #define NBD_CMD_MASK_COMMAND 0x0000ffff
@@ -85,4 +88,5 @@ int nbd_socket_read(int fd, void *buf, size_t count);
 int nbd_handle_request(int sock, int threads);
 bool nbd_minimal_kernel_version_check(void);
 
+int time_string_now(char* buf);
 #endif /* __UTILS_H */

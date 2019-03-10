@@ -23,12 +23,29 @@
 #include <libnl3/netlink/genl/ctrl.h>
 
 #include "rpc_nbd.h"
-#include "utils/utils.h"
+#include "utils.h"
 #include "nbd-log.h"
 #include "nbd-netlink.h"
 #include "nbd-cli-cmd.h"
 
 struct timeval TIMEOUT = {.tv_sec = 15};
+
+static GHashTable *list_hash = NULL;
+
+struct list_info {
+    char time[NBD_TLEN_MAX];
+    char cfg[NBD_CFGS_MAX];
+};
+
+static void free_key(gpointer key)
+{
+    free(key);
+}
+
+static void free_value(gpointer value)
+{
+    free(value);
+}
 
 static struct addrinfo *nbd_get_sock_addr(const char *host)
 {
@@ -260,16 +277,26 @@ typedef enum {
 } list_type;
 
 static int nbd_list_type = NBD_LIST_ALL;
+static char *list_detail;
 
 static struct nla_policy nbd_device_policy[NBD_DEVICE_ATTR_MAX + 1] = {
     [NBD_DEVICE_INDEX]              =       { .type = NLA_U32 },
     [NBD_DEVICE_CONNECTED]          =       { .type = NLA_U8 },
 };
 
+struct map_args {
+    int type;
+    char *cfg;
+    CLIENT *clnt;
+};
+
 static int map_nl_callback(struct nl_msg *msg, void *arg)
 {
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *msg_attr[NBD_ATTR_MAX + 1];
+    struct nbd_postmap map;
+    struct nbd_response rep = {0,};
+    struct map_args *args = arg;
     uint32_t index;
     int ret;
 
@@ -287,6 +314,17 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
     index = nla_get_u32(msg_attr[NBD_ATTR_INDEX]);
     nbd_out("Connected /dev/nbd%d\n", (int)index);
 
+    map.type = args->type;
+    snprintf(map.nbd, NBD_DLEN_MAX, "/dev/nbd%d", index);
+    time_string_now(map.time);
+    strcpy(map.cfgstring, args->cfg);
+    if (nbd_postmap_1(&map, &rep, args->clnt) != RPC_SUCCESS) {
+        if (rep.exit && rep.out) {
+            nbd_err("nbd_postmap_1 failed: %s!\n", rep.out);
+            return NL_STOP;
+        }
+    }
+
     return NL_OK;
 }
 
@@ -294,8 +332,10 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
 {
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *msg_attr[NBD_ATTR_MAX + 1];
+    struct list_info *value;
     uint32_t index;
     struct nlattr *attr;
+    char key[NBD_DLEN_MAX];
     int rem;
     int status;
 
@@ -310,6 +350,8 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
         return NL_STOP;
     }
 
+    nbd_out("DEVICES \tSTATUS \t\tTIME \t\t\tBACKSTORE\n");
+    nbd_out("------- \t------ \t\t---- \t\t\t---------\n");
     nla_for_each_nested(attr, msg_attr[NBD_ATTR_DEVICE_LIST], rem) {
         struct nlattr *devices[NBD_DEVICE_ATTR_MAX + 1];
 
@@ -329,16 +371,30 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
 
         switch (nbd_list_type) {
         case NBD_LIST_MAPPED:
-            if (status)
-                nbd_out("/dev/nbd%d \t%s\n", index, "Mapped");
+            if (status) {
+                snprintf(key, NBD_DLEN_MAX, "/dev/nbd%d", index);
+                value = g_hash_table_lookup(list_hash, key);
+                if (!value)
+                    nbd_out("%s\t%s \t\t%s \t\t\t%s\n", key, "Mapped", "Unkown", "Unkown");
+                else
+                    nbd_out("%s\t%s \t\t%s \t%s\n", key, "Mapped", value->time, value->cfg);
+            }
             break;
         case NBD_LIST_UNMAPPED:
             if (!status)
-                nbd_out("/dev/nbd%d \t%s\n", index, "Unmapped");
+                nbd_out("/dev/nbd%d\t%s\n", index, "Unmapped");
             break;
         case NBD_LIST_ALL:
-            nbd_out("/dev/nbd%d \t%s\n", index,
-                    status ? "Mapped" : "Unmapped");
+            if (status) {
+                snprintf(key, NBD_DLEN_MAX, "/dev/nbd%d", index);
+                value = g_hash_table_lookup(list_hash, key);
+                if (!value)
+                    nbd_out("%s\t%s \t\t%s \t\t\t%s\n", key, "Mapped", "Unkown", "Unkown");
+                else
+                    nbd_out("%s\t%s \t\t%s \t%s\n", key, "Mapped", value->time, value->cfg);
+            } else {
+                nbd_out("/dev/nbd%d\t%s\n", index, "Unmapped");
+            }
             break;
         default:
             nbd_err("Invalid list type: %d!\n", nbd_list_type);
@@ -346,21 +402,34 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
         }
     }
 
+    g_hash_table_destroy(list_hash);
+
     return NL_OK;
 }
 
-static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd)
+static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd, int type,
+                                         char *cfg, CLIENT *clnt)
 {
+    struct map_args *args;
     int (*nl_callback_fn)(struct nl_msg *, void *);
     struct nl_sock *netfd;
 
     if (!driver_id)
         return NULL;
 
+    args = malloc(sizeof(struct map_args));
+    if (!args) {
+        nbd_err("Couldn't alloc args, %s!\n", strerror(errno));
+        return NULL;
+    }
+
+    args->type = type;
+    args->cfg = cfg;
+    args->clnt = clnt;
     netfd = nl_socket_alloc();
     if (!netfd) {
         nbd_err("Couldn't alloc socket, %s!\n", strerror(errno));
-        return NULL;
+        goto err;
     }
 
     switch (cmd) {
@@ -375,7 +444,7 @@ static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd)
         nl_callback_fn = genl_handle_msg;
     }
 
-    nl_socket_modify_cb(netfd, NL_CB_VALID, NL_CB_CUSTOM, nl_callback_fn, NULL);
+    nl_socket_modify_cb(netfd, NL_CB_VALID, NL_CB_CUSTOM, nl_callback_fn, args);
 
     if (genl_connect(netfd)) {
         nbd_err("Couldn't connect to the nbd netlink socket, %s!\n",
@@ -392,6 +461,7 @@ static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd)
 
     return netfd;
 err:
+    free(args);
     nl_socket_free(netfd);
     return NULL;
 }
@@ -507,7 +577,7 @@ err:
 }
 
 static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index,
-                           int timeout, bool readonly)
+                           int timeout, bool readonly, int type, CLIENT *clnt)
 {
     int ret;
     int sockfd;
@@ -520,7 +590,7 @@ static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index,
         return -1;
 
     /* Setup netlink to configure the nbd device */
-    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_MAP);
+    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_MAP, type, cfg, clnt);
     if (!netfd)
         return -1;
 
@@ -540,7 +610,7 @@ err:
 int nbd_map_device(int count, char **options, int type)
 {
     CLIENT *clnt = NULL;
-    struct nbd_map *map;
+    struct nbd_premap *map;
     struct nbd_response rep = {0,};
     struct addrinfo *res;
     char *host = NULL;
@@ -553,7 +623,7 @@ int nbd_map_device(int count, char **options, int type)
     int ind;
     int max_len = 1024;
 
-    map = calloc(1, sizeof(struct nbd_map));
+    map = calloc(1, sizeof(struct nbd_premap));
     if (!map) {
         nbd_err("No memory for nbd_map!\n");
         return -ENOMEM;
@@ -638,9 +708,9 @@ int nbd_map_device(int count, char **options, int type)
         goto err;
     }
 
-    if (nbd_map_1(map, &rep, clnt) != RPC_SUCCESS) {
+    if (nbd_premap_1(map, &rep, clnt) != RPC_SUCCESS) {
         ret = -errno;
-        nbd_err("nbd_map_1 failed!\n");
+        nbd_err("nbd_premap_1 failed!\n");
         goto err;
     }
 
@@ -651,7 +721,8 @@ int nbd_map_device(int count, char **options, int type)
     }
 
     /* create the /dev/nbdX device */
-    ret = _nbd_map_device(map->cfgstring, &rep, dev_index, timeout, readonly);
+    ret = _nbd_map_device(map->cfgstring, &rep, dev_index, timeout, readonly,
+                          type, clnt);
     if (ret < 0) {
         nbd_err("failed to init the /dev/nbd device!\n");
         goto err;
@@ -714,50 +785,196 @@ int nbd_unmap_device(int count, char **options, int type)
         return -1;
     }
 
-    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_UNMAP);
+    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_UNMAP, type, NULL, NULL);
     if (!netfd)
         return -1;
 
     return unmap_device(netfd, driver_id, index);
 }
 
+static void nbd_build_list_hash(const char *info)
+{
+    struct list_info *value;
+    const char *pos;
+    const char *end;
+    char *sep;
+    char *key;
+
+    if (!info)
+        return;
+
+    pos = info;
+    end = info + strlen(info);
+
+    list_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
+                                      free_value);
+    if (!list_hash) {
+        nbd_err("failed to create list_hash table!\n");
+        return;
+    }
+
+    while (*pos == ' ')
+        pos++;
+
+    while (pos < end) {
+        key = NULL;
+        value = NULL;
+
+        if (*pos != '{' && *(pos + 1) != '[') {
+            nbd_err("invalid key string!\n");
+            goto err;
+        }
+
+        pos += 2;
+
+        key = calloc(1, NBD_DLEN_MAX);
+        if (!key) {
+            nbd_err("failed to alloc memory for key!\n");
+            goto err;
+        }
+
+        value = calloc(1, sizeof(struct list_info));
+        if (!value) {
+            nbd_err("failed to alloc memory for value!\n");
+            free(key);
+            goto err;
+        }
+
+        sep = strchr(pos, ']');
+        if (!sep) {
+            nbd_err("invalid key string!\n");
+            goto err;
+        }
+        strncpy(key, pos, sep - pos);
+        pos = sep + 1;
+
+        if (*pos != '[') {
+            nbd_err("invalid cfg string!\n");
+            goto err;
+        }
+        pos++;
+
+        sep = strchr(pos, ']');
+        if (!sep) {
+            nbd_err("invalid key string!\n");
+            goto err;
+        }
+        strncpy(value->cfg, pos, sep - pos);
+        pos = sep + 1;
+
+        if (*pos != '[') {
+            nbd_err("invalid cfg string!\n");
+            goto err;
+        }
+        pos++;
+
+        sep = strchr(pos, ']');
+        if (!sep) {
+            nbd_err("invalid key string!\n");
+            goto err;
+        }
+        strncpy(value->time, pos, sep - pos);
+        pos = sep + 1;
+
+        if (*pos != '}') {
+            nbd_err("invalid key string!\n");
+            goto err;
+        }
+
+        pos++;
+
+        g_hash_table_insert(list_hash, key, value);
+    }
+
+    return;
+err:
+    free(key);
+    free(value);
+    g_hash_table_destroy(list_hash);
+}
+
 int nbd_list_devices(int count, char **options, int type)
 {
+    CLIENT *clnt = NULL;
+    struct nbd_response rep = {0,};
+    struct addrinfo *res;
+    char *host = NULL;
+    int sock = RPC_ANYSOCK;
+    struct nbd_list list = {.type = type};
     struct nl_sock *netfd;
     struct nl_msg *msg;
     int driver_id;
-    char *opt;
+    int ind;
 
-    if (!count) {
-        nbd_list_type = NBD_LIST_ALL;
-    } else {
-        opt = options[0];
+    ind = 0;
+    while (ind < count) {
+        if (!strcmp(options[ind], "host")) {
+            if (ind + 1 >= count) {
+                nbd_err("Invalid argument 'host <HOST>'!\n\n");
+                goto nla_put_failure;
+            }
 
-        if (!strcmp(opt, "map")) {
+            host = strdup(options[ind + 1]);
+            if (!host) {
+                nbd_err("No memory for host!\n");
+                goto nla_put_failure;
+            }
+
+            ind += 2;
+        } else if (!strcmp(options[ind], "map")) {
             nbd_list_type = NBD_LIST_MAPPED;
-        } else if (!strcmp(opt, "unmap")) {
+            ind++;
+        } else if (!strcmp(options[ind], "unmap")) {
             nbd_list_type = NBD_LIST_UNMAPPED;
-        } else if (!strcmp(opt, "all")) {
+            ind++;
+        } else if (!strcmp(options[ind], "all")) {
             nbd_list_type = NBD_LIST_ALL;
+            ind++;
         } else {
-            nbd_err("Invalid argument for list: %s!\n", opt);
-            return -1;
+            nbd_err("Invalid argument for list: %s!\n", options[ind]);
+            goto nla_put_failure;
         }
     }
 
-    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST);
+    if (host) {
+        res = nbd_get_sock_addr(host);
+        if (!res) {
+            nbd_err("failed to get sock addr!\n");
+            goto nla_put_failure;
+        }
+
+        clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
+                              RPC_NBD_VERS, &sock, 0, 0);
+        if (!clnt) {
+            nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
+            goto nla_put_failure;
+        }
+
+        if (nbd_list_1(&list, &rep, clnt) != RPC_SUCCESS) {
+            nbd_err("nbd_list_1 failed!\n");
+            goto nla_put_failure;
+        }
+
+        if (rep.exit && rep.out) {
+            nbd_err("List failed: %s\n", rep.out);
+            goto nla_put_failure;
+        }
+
+        nbd_build_list_hash(rep.out);
+    }
+
+    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST, type, NULL, NULL);
     if (!netfd)
-        return -1;
+            goto nla_put_failure;
 
     msg = nlmsg_alloc();
     if (!msg) {
-        nbd_err("Couldn't allocate netlink message, %s!\n",
-                strerror(errno));
+        nbd_err("Couldn't allocate netlink message, %s!\n", strerror(errno));
         goto nla_put_failure;
     }
 
     genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, driver_id, 0, 0,
-            NBD_CMD_STATUS, 0);
+                NBD_CMD_STATUS, 0);
     /*
      * -1 means list all the devices mapped and
      *  unmapped in kernel space
@@ -771,6 +988,14 @@ int nbd_list_devices(int count, char **options, int type)
 
 nla_put_failure:
     nl_socket_free(netfd);
+    if (clnt) {
+        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+                    (char *)&rep))
+            nbd_err("clnt_freeres failed!\n");
+        clnt_destroy(clnt);
+    }
+
+    free(host);
     return -1;
 }
 
@@ -828,11 +1053,6 @@ insert:
     }
 
     return 0;
-}
-
-static void free_key(gpointer key)
-{
-    free(key);
 }
 
 GHashTable *nbd_register_backstores(void)

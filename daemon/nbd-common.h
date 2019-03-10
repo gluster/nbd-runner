@@ -20,6 +20,7 @@
 #include <linux/limits.h>
 
 #include "rpc_nbd.h"
+#include "utils.h"
 
 struct nbd_device {
     handler_t type;
@@ -32,8 +33,8 @@ struct nbd_device {
     ssize_t size;
     ssize_t blksize;
 
-    char dev_name[16]; /* e.g. "nbd14" */
-    char backstore_name[NAME_MAX]; /* e.g. "file.qcow2" */
+    char nbd[NBD_DLEN_MAX]; /* e.g. "/dev/nbd14" */
+    char time[NBD_TLEN_MAX]; /* e.g. "2019-02-12 12:00:37" */
 
     void *priv; /* private ptr for handler module */
 };
