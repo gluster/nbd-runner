@@ -24,6 +24,12 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <gmodule.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <ifaddrs.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include "utils.h"
 #include "nbd-log.h"
@@ -208,58 +214,64 @@ err:
     return false;
 }
 
-struct nbd_ip *nbd_get_local_ips(void)
+static void nbd_gfree_data(gpointer data)
 {
-    struct ifreq buf[INET_ADDRSTRLEN];
-    struct ifconf ifc;
-    struct nbd_ip *ips;
-    struct nbd_ip *p, *q;
-    int fd, interface, retn = 0;
-    char *tmp;
+    free(data);
+}
 
-    ips = calloc(1, sizeof(struct nbd_ip));
-    if (!ips) {
-        nbd_err("failed to alloc memory for ips!\n");
+GPtrArray *nbd_get_local_ips(unsigned int family)
+{
+    GPtrArray *ips;
+    gpointer ip;
+    struct ifaddrs *ifaddr = NULL;
+    struct ifaddrs *ifa;
+    int s;
+    char host[NI_MAXHOST];
+
+    if (family != AF_INET && family != AF_INET6) {
+        nbd_err("invalid family type and only AF_INET/AF_INET6 are allowed!\n");
         return NULL;
     }
 
-    p = ips;
+    ips = g_ptr_array_new_full(16, nbd_gfree_data);
+    if (!ips) {
+        nbd_err("failed to init g_ptr array for ips, %s!\n", strerror(errno));
+        return NULL;
+    }
 
-    fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd >= 0) {
-        ifc.ifc_len = sizeof(buf);
-        ifc.ifc_buf = (caddr_t)buf;
-        if (!ioctl(fd, SIOCGIFCONF, (char *)&ifc)) {
-            interface = ifc.ifc_len / sizeof(struct ifreq);
-            if (!interface)
+    if (getifaddrs(&ifaddr) == -1) {
+        nbd_err("getifaddrs failed, %s!\n", strerror(errno));
+        goto err;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        if (family == ifa->ifa_addr->sa_family) {
+            s = getnameinfo(ifa->ifa_addr,
+                    (family == AF_INET) ? sizeof(struct sockaddr_in) :
+                    sizeof(struct sockaddr_in6),
+                    host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            if (s) {
+                nbd_err("getnameinfo() failed, %s\n", gai_strerror(s));
                 goto err;
+            }
 
-            do {
-                if (!(ioctl(fd, SIOCGIFADDR, (char *)&buf[interface]))) {
-                    tmp = inet_ntoa(((struct sockaddr_in*)(&buf[interface].ifr_addr))->sin_addr);
-                    snprintf(p->ip, INET_ADDRSTRLEN, "%s", tmp);
-                    printf("IP:%s\n", tmp);
-                }
-                if (--interface) {
-                    p->next = calloc(1, sizeof(struct nbd_ip));
-                    if (!p) {
-                        nbd_err("failed to alloc memory for ips!\n");
-                        goto err;
-                    }
-                }
-            } while (interface);
+            ip = strdup(host);
+            if (!ip) {
+                nbd_err("no memory for ip!\n");
+                goto err;
+            }
+            g_ptr_array_add(ips, ip);
         }
     }
-    close(fd);
+
+    freeifaddrs(ifaddr);
     return ips;
 
 err:
-    for (q = ips; q; q = p) {
-        p = q->next;
-        free(q);
-    }
-
-    close(fd);
+    g_ptr_array_free(ips, true);
+    freeifaddrs(ifaddr);
     return NULL;
 }
-
