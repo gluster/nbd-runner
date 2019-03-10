@@ -29,6 +29,7 @@
 #include <linux/types.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <gmodule.h>
 #include "config.h"
 
 #define nbd_version_info ""                                       \
@@ -75,12 +76,7 @@ struct nego_reply {
     __u8  error[0];
 };
 
-struct nbd_ip {
-    char ip[INET_ADDRSTRLEN];
-    struct nbd_ip *next;
-};
-
-struct nbd_ip *nbd_get_local_ips(void);
+GPtrArray *nbd_get_local_ips(unsigned int family);
 bool nbd_valid_size(const char *value);
 ssize_t nbd_parse_size(const char *value, int sector_size);
 int nbd_socket_write(int fd, void *buf, size_t count);
