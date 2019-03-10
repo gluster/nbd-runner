@@ -402,8 +402,6 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
         }
     }
 
-    g_hash_table_destroy(list_hash);
-
     return NL_OK;
 }
 
@@ -806,13 +804,6 @@ static void nbd_build_list_hash(const char *info)
     pos = info;
     end = info + strlen(info);
 
-    list_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
-                                      free_value);
-    if (!list_hash) {
-        nbd_err("failed to create list_hash table!\n");
-        return;
-    }
-
     while (*pos == ' ')
         pos++;
 
@@ -890,7 +881,6 @@ static void nbd_build_list_hash(const char *info)
 err:
     free(key);
     free(value);
-    g_hash_table_destroy(list_hash);
 }
 
 int nbd_list_devices(int count, char **options, int type)
@@ -905,6 +895,14 @@ int nbd_list_devices(int count, char **options, int type)
     struct nl_msg *msg;
     int driver_id;
     int ind;
+    int ret = -1;
+
+    list_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
+                                      free_value);
+    if (!list_hash) {
+        nbd_err("failed to create list_hash table!\n");
+        return -1;
+    }
 
     ind = 0;
     while (ind < count) {
@@ -984,7 +982,7 @@ int nbd_list_devices(int count, char **options, int type)
     if (nl_send_sync(netfd, msg) < 0)
         nbd_err("Failed to setup device, check dmesg\n");
 
-    return 0;
+    ret = 0;
 
 nla_put_failure:
     nl_socket_free(netfd);
@@ -996,7 +994,8 @@ nla_put_failure:
     }
 
     free(host);
-    return -1;
+    g_hash_table_destroy(list_hash);
+    return ret;
 }
 
 int nbd_register_cmds(GHashTable *cmds_hash, struct cli_cmd *cmds)
