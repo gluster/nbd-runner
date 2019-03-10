@@ -279,8 +279,8 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
         if (!handler->cfg_parse(dev, map->cfgstring, rep)) {
             rep->exit = -EAGAIN;
-            snprintf(rep->out, NBD_EXIT_MAX, "failed to map %s!", map->cfgstring);
-            nbd_err("failed to map %s\n", map->cfgstring);
+            snprintf(rep->out, NBD_EXIT_MAX, "failed to parse %s!", map->cfgstring);
+            nbd_err("failed to parse %s\n", map->cfgstring);
             free(dev);
             goto err;
         }
