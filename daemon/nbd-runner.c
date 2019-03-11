@@ -239,7 +239,6 @@ int main (int argc, char **argv)
     int ind;
 
     nbd_service_init();
-    handler_init();
 
     ret = nbd_log_init();
     if (ret < 0) {

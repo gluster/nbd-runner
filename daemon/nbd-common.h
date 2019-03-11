@@ -22,6 +22,13 @@
 #include "rpc_nbd.h"
 #include "utils.h"
 
+typedef enum {
+    NBD_DEV_CONN_ST_CREATED,
+    NBD_DEV_CONN_ST_MAPPED,
+    NBD_DEV_CONN_ST_UNMAPPED,
+    NBD_DEV_CONN_ST_DEAD,
+} dev_status_t;
+
 struct nbd_device {
     handler_t type;
     struct nbd_handler *handler;
@@ -32,6 +39,8 @@ struct nbd_device {
     bool prealloc;
     ssize_t size;
     ssize_t blksize;
+
+    dev_status_t status;
 
     char nbd[NBD_DLEN_MAX]; /* e.g. "/dev/nbd14" */
     char time[NBD_TLEN_MAX]; /* e.g. "2019-02-12 12:00:37" */
