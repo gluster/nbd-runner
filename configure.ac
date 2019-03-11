@@ -36,6 +36,11 @@ AC_ARG_WITH(sysconfigdir,
             [sysconfigdir='/etc/sysconfig'])
 AC_SUBST(sysconfigdir)
 
+PKG_CHECK_MODULES([JSONC], [json-c],,
+                  [AC_MSG_ERROR([json-c library is required to build nbd-runner])])
+AC_SUBST(JSONC_CFLAGS)
+AC_SUBST(JSONC_LIBS)  
+
 PKG_CHECK_MODULES(KMOD, [libkmod],,
                   [AC_MSG_ERROR([kmod library is required to build nbd-runner])])
 AC_SUBST(KMOD_CFLAGS)

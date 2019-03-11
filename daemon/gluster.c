@@ -122,17 +122,21 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
     char *sep;
     char *ptr;
 
-    if (!cfg || !dev || !rep) {
-        rep->exit = -EINVAL;
-        snprintf(rep->out, NBD_EXIT_MAX, "The cfg param is NULL, will do nothing!");
+    if (!cfg || !dev) {
+        if (rep) {
+            rep->exit = -EINVAL;
+            snprintf(rep->out, NBD_EXIT_MAX, "The cfg param is NULL, will do nothing!");
+        }
         nbd_err("The cfg param is NULL, will do nothing!\n");
         return false;
     }
 
     info = calloc(1, sizeof(struct glfs_info));
     if (!info) {
-        rep->exit = -ENOMEM;
-        snprintf(rep->out, NBD_EXIT_MAX, "No memory for info!");
+        if (rep) {
+            rep->exit = -ENOMEM;
+            snprintf(rep->out, NBD_EXIT_MAX, "No memory for info!");
+        }
         nbd_err("No memory for info\n");
         goto err;
     }
@@ -140,8 +144,10 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
     /* skip the "key=" */
     tmp = strdup(cfg + 4);
     if (!tmp) {
-        rep->exit = -ENOMEM;
-        snprintf(rep->out, NBD_EXIT_MAX, "No memory for tmp!");
+        if (rep) {
+            rep->exit = -ENOMEM;
+            snprintf(rep->out, NBD_EXIT_MAX, "No memory for tmp!");
+        }
         nbd_err("No memory for tmp\n");
         goto err;
     }
@@ -166,8 +172,10 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
             /* volname@host:/path */
             sep = strchr(ptr, '@');
             if (!sep) {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo key/pair: %s!", ptr);
+                if (rep) {
+                    rep->exit = -EINVAL;
+                    snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo key/pair: %s!", ptr);
+                }
                 nbd_err("Invalid volinfo value: %s!\n", ptr);
                 goto err;
             }
@@ -179,8 +187,10 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
             ptr = sep + 1;
             sep = strchr(ptr, ':');
             if (!sep) {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo host value: %s!", ptr);
+                if (rep) {
+                    rep->exit = -EINVAL;
+                    snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo host value: %s!", ptr);
+                }
                 nbd_err("Invalid volinfo host value: %s!\n", ptr);
                 goto err;
             }
@@ -191,8 +201,10 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
 
             ptr = sep + 1;
             if (*ptr != '/') {
-                rep->exit = -EINVAL;
-                snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo path value: %s!", ptr);
+                if (rep) {
+                    rep->exit = -EINVAL;
+                    snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo path value: %s!", ptr);
+                }
                 nbd_err("Invalid path path value: %s!\n", ptr);
                 goto err;
             }
