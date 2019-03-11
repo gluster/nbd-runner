@@ -922,7 +922,7 @@ int nbd_list_devices(int count, char **options, int type)
     int ret = -1;
 
     /* strict check */
-    if (count != 0 && count !=1) {
+    if (count < 0 || count > 3) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
     }
