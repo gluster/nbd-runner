@@ -22,16 +22,19 @@
 #include <inttypes.h>
 #include <linux/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <linux/nbd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
+#include <sys/stat.h>
 #include <glib.h>
 #include <gmodule.h>
 #include <sys/socket.h>
 #include <ifaddrs.h>
 #include <unistd.h>
+#include <json-c/json.h>
 
 #include "rpc_nbd.h"
 #include "nbd-log.h"
@@ -145,6 +148,140 @@ static char *nbd_get_hash_key(const char *cfgstring)
     return strndup(cfgstring + 4, len);
 }
 
+static int nbd_parse_from_json_config_file(void)
+{
+    json_object *globalobj = NULL;
+    json_object *obj = NULL;
+    struct nbd_handler *handler;
+    struct nbd_device *dev;
+    const char *tmp;
+    char *ktmp;
+
+    globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
+    if (!globalobj)
+        return 0;
+
+     json_object_object_foreach(globalobj, key, devobj) {
+         dev = calloc(1, sizeof(struct nbd_device));
+         if (!dev) {
+             nbd_err("No memory for nbd device!\n");
+             free(key);
+             json_object_put(devobj);
+             return -1;
+         }
+
+         json_object_object_get_ex(globalobj, "type", &obj);
+         dev->type = json_object_get_int(obj);
+         json_object_put(obj);
+
+         json_object_object_get_ex(globalobj, "nbd", &obj);
+         tmp = json_object_get_string(obj);
+         if (tmp)
+             strncpy(dev->nbd, tmp, NBD_DLEN_MAX);
+         json_object_put(obj);
+
+         json_object_object_get_ex(globalobj, "maptime", &obj);
+         tmp = json_object_get_string(obj);
+         if (tmp)
+             strncpy(dev->time, tmp, NBD_TLEN_MAX);
+         json_object_put(obj);
+
+         json_object_object_get_ex(globalobj, "size", &obj);
+         dev->size = json_object_get_int(obj);
+         json_object_put(obj);
+
+         json_object_object_get_ex(globalobj, "blksize", &obj);
+         dev->blksize = json_object_get_int(obj);
+         json_object_put(obj);
+
+         json_object_object_get_ex(globalobj, "prealloc", &obj);
+         dev->prealloc = json_object_get_boolean(obj);
+         json_object_put(obj);
+
+         json_object_object_get_ex(globalobj, "readonly", &obj);
+         dev->readonly = json_object_get_boolean(obj);
+         json_object_put(obj);
+
+         /* The connection is dead, needed to remap from the client */
+         dev->status = NBD_DEV_CONN_ST_DEAD;
+
+         handler = g_hash_table_lookup(nbd_handler_hash, &dev->type);
+         if (!handler) {
+             nbd_err("handler type %d is not registered!\n", dev->type);
+             free(dev);
+         } else {
+             dev->handler = handler;
+             ktmp = malloc(NBD_CFGS_MAX);
+             snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
+             handler->cfg_parse(dev, ktmp, NULL);
+             free(ktmp);
+             g_hash_table_insert(nbd_devices_hash, key, dev);
+         }
+     }
+
+     return 0;
+}
+
+static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
+                                       bool postmap)
+{
+    json_object *globalobj = NULL;
+    json_object *devobj = NULL;
+    json_object *obj = NULL;
+    int ret = 0;
+    bool need_free = false;
+
+    if (!dev || !key) {
+        nbd_err("Invalid dev or key parameter!\n");
+        return -EINVAL;
+    }
+
+    globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
+    if (globalobj) {
+        if (json_object_object_get_ex(globalobj, key, &devobj)) {
+            if (postmap) {
+                json_object_object_del(globalobj, key);
+            } else {
+                json_object_put(devobj);
+                nbd_out("%s is already in the json conig file!\n", key);
+                return 0;
+            }
+        }
+    } else {
+        /* The config file is empty */
+        globalobj = json_object_new_object();
+        if (!globalobj) {
+            nbd_err("No memory for globalobj!\n");
+            return -ENOMEM;
+        }
+        need_free = true;
+    }
+
+    devobj = json_object_new_object();
+    if (!devobj) {
+        nbd_err("No memory for devobj!\n");
+        ret = -ENOMEM;
+        goto err;
+    }
+
+    json_object_object_add(devobj, "type", json_object_new_int(dev->type));
+    json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
+    json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
+    json_object_object_add(devobj, "size", json_object_new_int(dev->size));
+    json_object_object_add(devobj, "blksize", json_object_new_int(dev->blksize));
+    json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
+    json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
+
+    json_object_object_add(globalobj, key, devobj);
+    json_object_to_file_ext(NBD_SAVE_CONFIG_FILE, globalobj, JSON_C_TO_STRING_PRETTY);
+
+    ret = 0;
+err:
+    json_object_put(devobj);
+
+    return ret;
+}
+
 bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
                         struct svc_req *req)
 {
@@ -206,6 +343,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     dev->handler = handler;
     dev->size = create->size;
     dev->prealloc = create->prealloc;
+    dev->status = NBD_DEV_CONN_ST_CREATED;
 
     /*
      * Since we allow to create the backstore directly
@@ -222,6 +360,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     if (dev->blksize < 0)
         goto err;
     g_hash_table_insert(nbd_devices_hash, key, dev);
+    nbd_update_json_config_file(dev, key, false);
 
 err:
     if (rep->exit && rep->exit != -EEXIST) {
@@ -387,6 +526,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         }
 
         g_hash_table_insert(nbd_devices_hash, key, dev);
+        nbd_update_json_config_file(dev, key, false);
         inserted = true;
     }
 
@@ -447,8 +587,10 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
         return true;
     }
 
+    dev->status = NBD_DEV_CONN_ST_MAPPED;
     strcpy(dev->time, map->time);
     strcpy(dev->nbd, map->nbd);
+    nbd_update_json_config_file(dev, key, true);
 
     return true;
 }
@@ -686,11 +828,16 @@ void free_value(gpointer value)
 
 bool nbd_service_init(void)
 {
+    mkdir(NBD_SAVE_CONFIG_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    open(NBD_SAVE_CONFIG_FILE, O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
     nbd_handler_hash = g_hash_table_new(g_int_hash, g_int_equal);
     if (!nbd_handler_hash) {
         nbd_err("failed to create nbd_handler_hash hash table!\n");
         return false;
     }
+
+    handler_init();
 
     nbd_devices_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
                                              free_value);
@@ -698,6 +845,8 @@ bool nbd_service_init(void)
         nbd_err("failed to create nbd_devices_hash hash table!\n");
         return false;
     }
+
+    return !!nbd_parse_from_json_config_file();
 }
 
 void nbd_service_fini(void)

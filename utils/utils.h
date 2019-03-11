@@ -45,7 +45,10 @@
 #define NBD_RPC_SVC_PORT     24110
 #define NBD_MAP_SVC_PORT     24111
 
-#define  NBD_DEFAULT_SECTOR_SIZE  512
+#define NBD_DEFAULT_SECTOR_SIZE  512
+
+#define NBD_SAVE_CONFIG_DIR "/etc/nbd-runner"
+#define NBD_SAVE_CONFIG_FILE NBD_SAVE_CONFIG_DIR"/saveconfig.json"
 
 #define NBD_HOST_MAX  255
 #define NBD_CFGS_MAX  1024
