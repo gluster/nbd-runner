@@ -479,7 +479,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     }
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
-    if (dev && dev->nbd[0]) {
+    if (dev && dev->status == NBD_DEV_CONN_ST_MAPPED) {
         rep->exit = -EINVAL;
         snprintf(rep->out, NBD_EXIT_MAX, "%s already map to %s!", key, dev->nbd);
         nbd_err("%s already map to %s!\n", key, dev->nbd);
@@ -752,6 +752,9 @@ int nbd_handle_request(int sock, int threads)
 
         if(request.type == htonl(NBD_CMD_DISC)) {
             nbd_dbg("Unmap request received!\n");
+            dev->status = NBD_DEV_CONN_ST_UNMAPPED;
+            dev->nbd[0] = '\0';
+            dev->time[0] = '\0';
             dev->handler->unmap(dev);
             ret = 0;
             goto err;
