@@ -40,6 +40,12 @@ struct nbd_device {
     ssize_t size;
     ssize_t blksize;
 
+    /* To protect the nbd_device members */
+    pthread_mutex_t lock;
+
+    /* To make sure the socket is writen sequentially */
+    pthread_mutex_t sock_lock;
+
     dev_status_t status;
 
     char nbd[NBD_DLEN_MAX]; /* e.g. "/dev/nbd14" */
@@ -52,8 +58,6 @@ struct nbd_handler {
     const char *name;	/* Human-friendly name */
     handler_t subtype;     /* Type for matching */
     const char *cfgstring;	/* Handler specified cfgstring to setup the backstore */
-
-    pthread_mutex_t lock;
 
     void *data;		/* Handler private data. */
 

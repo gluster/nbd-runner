@@ -272,6 +272,7 @@ static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
     json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
     json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
 
+    json_object_object_add(devobj, "type", json_object_new_int(dev->type));
     json_object_object_add(globalobj, key, devobj);
     json_object_to_file_ext(NBD_SAVE_CONFIG_FILE, globalobj, JSON_C_TO_STRING_PRETTY);
 
@@ -339,6 +340,8 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
         goto err;
     }
 
+    pthread_mutex_init(&dev->sock_lock, NULL);
+    pthread_mutex_init(&dev->lock, NULL);
     dev->type = create->type;
     dev->handler = handler;
     dev->size = create->size;
@@ -359,13 +362,15 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     dev->blksize = handler->get_blksize(dev, NULL);
     if (dev->blksize < 0)
         goto err;
-    g_hash_table_insert(nbd_devices_hash, key, dev);
     nbd_update_json_config_file(dev, key, false);
+    g_hash_table_insert(nbd_devices_hash, key, dev);
 
 err:
     if (rep->exit && rep->exit != -EEXIST) {
         free(key);
         handler->delete(dev, rep);
+        pthread_mutex_destroy(&dev->sock_lock);
+        pthread_mutex_destroy(&dev->lock);
         free(dev);
     }
     return true;
@@ -434,7 +439,10 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         dev->handler = handler;
     }
 
+    pthread_mutex_lock(&dev->lock);
     handler->delete(dev, rep);
+    pthread_mutex_unlock(&dev->lock);
+
     g_hash_table_remove(nbd_devices_hash, key);
 
 err:
@@ -525,16 +533,22 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
             goto err;
         }
 
-        g_hash_table_insert(nbd_devices_hash, key, dev);
+        pthread_mutex_init(&dev->sock_lock, NULL);
+        pthread_mutex_init(&dev->lock, NULL);
         nbd_update_json_config_file(dev, key, false);
+        g_hash_table_insert(nbd_devices_hash, key, dev);
         inserted = true;
     }
 
-    if (!handler->map(dev, rep))
+    pthread_mutex_lock(&dev->lock);
+    if (!handler->map(dev, rep)) {
+        pthread_mutex_unlock(&dev->lock);
         goto err;
+    }
 
     rep->size = dev->size;
     rep->blksize = dev->blksize;
+    pthread_mutex_unlock(&dev->lock);
 
     if (!maphost) {
         maphost = nbd_init_maphost(NULL, AF_INET);
@@ -587,10 +601,12 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
         return true;
     }
 
+    pthread_mutex_lock(&dev->lock);
     dev->status = NBD_DEV_CONN_ST_MAPPED;
     strcpy(dev->time, map->time);
     strcpy(dev->nbd, map->nbd);
     nbd_update_json_config_file(dev, key, true);
+    pthread_mutex_unlock(&dev->lock);
 
     return true;
 }
@@ -618,8 +634,11 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     while (g_hash_table_iter_next(&iter, &key, &value))
     {
         dev = value;
-        if (list->type != dev->type)
+        pthread_mutex_lock(&dev->lock);
+        if (list->type != dev->type) {
+            pthread_mutex_unlock(&dev->lock);
             continue;
+        }
 
         bstore = key;
         /*
@@ -635,6 +654,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
                 snprintf(rep->out, NBD_EXIT_MAX,
                          "No memory for the list buffer!");
                 nbd_err("No memory for the list buffer!\n");
+                pthread_mutex_unlock(&dev->lock);
                 return true;
             }
             rep->out = out;
@@ -642,6 +662,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
 
         pos += sprintf(rep->out + pos, "{[%s][%s][%s]}", dev->nbd, bstore,
                        dev->time);
+        pthread_mutex_unlock(&dev->lock);
     }
 
     rep->out[pos] = '\0';
@@ -658,11 +679,11 @@ void nbd_handle_request_done(struct nbd_handler_request *req, int ret)
     reply.error = htonl(ret < 0 ? ret : 0);
     memcpy(&(reply.handle), &(req->handle), sizeof(req->handle));
 
-    pthread_mutex_lock(&dev->handler->lock);
+    pthread_mutex_lock(&dev->sock_lock);
     nbd_socket_write(dev->sockfd, &reply, sizeof(struct nbd_reply));
     if(req->cmd == NBD_CMD_READ && !reply.error)
         nbd_socket_write(dev->sockfd, req->rwbuf, req->len);
-    pthread_mutex_unlock(&dev->handler->lock);
+    pthread_mutex_unlock(&dev->sock_lock);
 }
 
 int nbd_handle_request(int sock, int threads)
@@ -716,11 +737,11 @@ int nbd_handle_request(int sock, int threads)
     free(buf);
     free(key);
 
-    pthread_mutex_lock(&dev->handler->lock);
+    pthread_mutex_lock(&dev->sock_lock);
     nbd_socket_write(sock, &nrep, sizeof(struct nego_reply));
     if (nrep.len && buf)
         nbd_socket_write(sock, buf, nrep.len);
-    pthread_mutex_unlock(&dev->handler->lock);
+    pthread_mutex_unlock(&dev->sock_lock);
     /* nego end */
 
     if (nrep.exit)
@@ -752,10 +773,12 @@ int nbd_handle_request(int sock, int threads)
 
         if(request.type == htonl(NBD_CMD_DISC)) {
             nbd_dbg("Unmap request received!\n");
+            pthread_mutex_lock(&dev->lock);
             dev->status = NBD_DEV_CONN_ST_UNMAPPED;
             dev->nbd[0] = '\0';
             dev->time[0] = '\0';
             dev->handler->unmap(dev);
+            pthread_mutex_unlock(&dev->lock);
             ret = 0;
             goto err;
         }
@@ -766,9 +789,9 @@ int nbd_handle_request(int sock, int threads)
             reply.error = htonl(EROFS);
             memcpy(&(reply.handle), &(request.handle), sizeof(request.handle));
 
-            pthread_mutex_lock(&dev->handler->lock);
+            pthread_mutex_lock(&dev->sock_lock);
             nbd_socket_write(sock, &reply, sizeof(struct nbd_reply));
-            pthread_mutex_unlock(&dev->handler->lock);
+            pthread_mutex_unlock(&dev->sock_lock);
 
             printf("cmd : %d\n", cmd);
             continue;
@@ -826,7 +849,11 @@ void free_key(gpointer key)
 
 void free_value(gpointer value)
 {
-    free(value);
+    struct nbd_device *dev = value;
+
+    pthread_mutex_destroy(&dev->sock_lock);
+    pthread_mutex_destroy(&dev->lock);
+    free(dev);
 }
 
 bool nbd_service_init(void)
