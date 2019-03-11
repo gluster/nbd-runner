@@ -62,7 +62,7 @@ AC_SUBST(LIBNL3_CFLAGS)
 AC_SUBST(LIBNL3_LIBS)
 
 AC_ARG_WITH([tirpc],
-    [AS_HELP_STRING([--with-tirpc], [do use tirpc])],
+    [AS_HELP_STRING([--with-tirpc], [do use tirpc, default yes])],
     [with_tirpc=$withval],
     [with_tirpc=missing])
 
@@ -80,11 +80,24 @@ else
 fi
 
 # Checks for libraries.
-# glusterfs-api versions have a prefix of "7."
-PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.4.1],,
-                  [AC_MSG_ERROR([gfapi library >= 4.1 is required to build nbd-runner])])
-AC_SUBST(GFAPI_CFLAGS)
-AC_SUBST(GFAPI_LIBS)
+AC_ARG_WITH([gfapi6],
+    [AS_HELP_STRING([--with-gfapi6], [do use new glfs APIs, default yes])],
+    [with_gfapi6=$withval],
+    [with_gfapi6=missing])
+
+if test "x$with_gfapi6" == "xyes" || test "x$with_gfapi6" == "xmissing"; then
+    # glusterfs-api versions have a prefix of "7."
+    PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.6],
+        [with_gfapi6="yes" AC_DEFINE(GFAPI_VER6, 1, [Define to 1 if we have gfapi library >= 6.0 support])],
+        [with_gfapi6="no" AC_DEFINE(GFAPI_VER6, 0) AC_MSG_ERROR([gfapi library >= 6.0 is required to build nbd-runner])])
+    AC_SUBST(GFAPI_CFLAGS)
+    AC_SUBST(GFAPI_LIBS)
+else
+    PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.4.1],,
+                      [AC_MSG_ERROR([gfapi library >= 4.1 is required to build nbd-runner])])
+    AC_SUBST(GFAPI_CFLAGS)
+    AC_SUBST(GFAPI_LIBS)
+fi
 
 AC_CHECK_LIB([pthread], [pthread_mutex_init],[PTHREAD="-lpthread"],
              AC_MSG_ERROR([Posix threads library is required to build nbd-runner]))
@@ -162,6 +175,7 @@ cat <<EOF
   $PACKAGE_NAME version $PACKAGE_VERSION
   Prefix.........: $prefix
   Use TIRPC......: $with_tirpc
+  Use GFAPI6.....: $with_gfapi6
   C Compiler.....: $CC $CFLAGS $CPPFLAGS
   Linker.........: $LD $LDFLAGS $LIBS
 ---------------------------------------------
