@@ -43,7 +43,7 @@
 "in all cases as published by the Free Software Foundation."
 
 #define NBD_RPC_SVC_PORT     24110
-#define NBD_IOS_SVC_PORT     24111
+#define NBD_MAP_SVC_PORT     24111
 
 #define  NBD_DEFAULT_SECTOR_SIZE  512
 
@@ -76,7 +76,7 @@ struct nego_reply {
     __u8  error[0];
 };
 
-GPtrArray *nbd_get_local_ips(unsigned int family);
+GPtrArray *nbd_get_local_maphost(unsigned int family);
 bool nbd_valid_size(const char *value);
 ssize_t nbd_parse_size(const char *value, int sector_size);
 int nbd_socket_write(int fd, void *buf, size_t count);

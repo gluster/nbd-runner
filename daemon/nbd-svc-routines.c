@@ -29,17 +29,104 @@
 #include <netinet/in.h>
 #include <glib.h>
 #include <gmodule.h>
+#include <sys/socket.h>
+#include <ifaddrs.h>
+#include <unistd.h>
 
 #include "rpc_nbd.h"
 #include "nbd-log.h"
 #include "utils.h"
 #include "nbd-common.h"
 
-extern char *listen_host;
-GHashTable *nbd_handler_hash;
-GHashTable *nbd_devices_hash;
+static GHashTable *nbd_handler_hash;
+static GHashTable *nbd_devices_hash;
+static GPtrArray *maphost;
 
 #define NBD_NL_VERSION 1
+
+static void nbd_gfree_data(gpointer data)
+{
+    free(data);
+}
+
+GPtrArray *nbd_init_maphost(char *host, unsigned int family)
+{
+    gpointer ip;
+    struct ifaddrs *ifaddr = NULL;
+    struct ifaddrs *ifa;
+    int s;
+    char tmp[NI_MAXHOST];
+
+    if (family != AF_INET && family != AF_INET6) {
+        nbd_err("invalid family type and only AF_INET/AF_INET6 are allowed!\n");
+        return NULL;
+    }
+
+    if (maphost) {
+        nbd_out("maphost already initialized!\n");
+        return maphost;
+    }
+
+    maphost = g_ptr_array_new_full(16, nbd_gfree_data);
+    if (!maphost) {
+        nbd_err("failed to init g_ptr array for maphost, %s!\n", strerror(errno));
+        return NULL;
+    }
+
+    if (host) {
+        g_ptr_array_add(maphost, host);
+        return maphost;
+    }
+
+    if (getifaddrs(&ifaddr) == -1) {
+        nbd_err("getifaddrs failed, %s!\n", strerror(errno));
+        goto err;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        if (family == ifa->ifa_addr->sa_family) {
+            s = getnameinfo(ifa->ifa_addr,
+                    (family == AF_INET) ? sizeof(struct sockaddr_in) :
+                    sizeof(struct sockaddr_in6),
+                    tmp, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            if (s) {
+                nbd_err("getnameinfo() failed, %s\n", gai_strerror(s));
+                goto err;
+            }
+
+            if (!strcmp(tmp, "127.0.0.1"))
+                continue;
+
+            ip = strdup(tmp);
+            if (!ip) {
+                nbd_err("no memory for ip!\n");
+                goto err;
+            }
+            g_ptr_array_add(maphost, ip);
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    return maphost;
+
+err:
+    g_ptr_array_free(maphost, true);
+    maphost = NULL;
+    freeifaddrs(ifaddr);
+    return NULL;
+}
+
+void nbd_fini_maphost(void)
+{
+    if (!maphost)
+        return;
+
+    g_ptr_array_free(maphost, true);
+    maphost = NULL;
+}
 
 static char *nbd_get_hash_key(const char *cfgstring)
 {
@@ -218,7 +305,6 @@ err:
 
 bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 {
-    GPtrArray *ips = NULL;
     struct nbd_device *dev = NULL;
     struct nbd_handler *handler;
     char *key = NULL;
@@ -310,35 +396,21 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     rep->size = dev->size;
     rep->blksize = dev->blksize;
 
-    if (listen_host) {
-        snprintf(rep->host, NBD_HOST_MAX, "%s", listen_host);
-    } else {
-        ips = nbd_get_local_ips(AF_INET);
-        if (!ips) {
+    if (!maphost) {
+        maphost = nbd_init_maphost(NULL, AF_INET);
+        if (!maphost) {
             rep->exit = -EINVAL;
             snprintf(rep->out, NBD_EXIT_MAX, "failed to parse the listen IP addr!");
             nbd_err("failed to parse the listen IP addr!\n");
             goto err;
         }
-
-        for (i = 0; i < ips->len; i++) {
-            if (strcmp(g_ptr_array_index (ips, i), "127.0.0.1"))
-                continue;
-            break;
-        }
-
-        if (i >= ips->len) {
-            rep->exit = -EINVAL;
-            snprintf(rep->out, NBD_EXIT_MAX, "failed to check the listen IP addr!");
-            nbd_err("failed to check the listen IP addr!\n");
-            goto err;
-        }
-        snprintf(rep->host, NBD_HOST_MAX, "%s", g_ptr_array_index (ips, i));
     }
-    snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_IOS_SVC_PORT);
+
+    /* Currently we will use the first host */
+    snprintf(rep->host, NBD_HOST_MAX, "%s", g_ptr_array_index (maphost, 0));
+    snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_MAP_SVC_PORT);
 
 err:
-    g_ptr_array_free(ips, true);
     if (!inserted)
         free(key);
     return true;
