@@ -595,8 +595,6 @@ struct nbd_handler glfs_handler = {
     .name           = "Gluster gfapi handler",
     .subtype        = NBD_BACKSTORE_GLUSTER,
 
-    .lock           = PTHREAD_MUTEX_INITIALIZER,
-
     .cfg_parse      = glfs_cfg_parse,
     .create         = glfs_create,
     .delete         = glfs_delete,
