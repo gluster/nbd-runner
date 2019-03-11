@@ -29,9 +29,10 @@
 
 #define NBD_LOCK_FILE "/run/nbd-runner.lock"
 #define NBD_MIN_THREADS  1
+#define NBD_DEF_THREADS  1
 #define NBD_MAX_THREADS  16
 
-char *listen_host = NULL;
+static char *maphost;
 
 struct io_thread_data {
     int threads;
@@ -45,10 +46,12 @@ static void usage(void)
              "Commands:\n"
              "\thelp\n"
              "\t\tdisplay help for nbd-runner command\n\n"
-             "\tthreads <NUM>\n"
-             "\t\tspecify the IOs threads number\n\n"
-             "\thost <LISTEN_HOST>\n"
-             "\t\tspecify the listenning IP for new comming map opt\n\n"
+             "\tthreads <NUMBER>\n"
+             "\t\tspecify the IO thread number for each mapped backstore, 1 as default\n\n"
+             "\trpchost <RPC_HOST>\n"
+             "\t\tspecify the listenning IP for the RPC server, INADDR_ANY as default\n\n"
+             "\tmaphost <MAP_HOST>\n"
+             "\t\tspecify the listenning IP for the MAP server, INADDR_ANY as default\n\n"
              "\tversion\n"
              "\t\tshow version info and exit.\n\n"
             );
@@ -88,10 +91,9 @@ static void event_handler(int listenfd, short event, void *arg)
         nbd_err("failed to detach thread: %s!\n", strerror(errno));
 }
 
-static void *nbd_ios_svc_thread_start(void *arg)
+static void *nbd_map_svc_thread_start(void *arg)
 {
-    char *host = NULL;
-    struct sockaddr_in addr;
+    struct sockaddr_in sin = {0,};
     struct event_base *base;
     struct event listen_ev;
     int listenfd;
@@ -103,25 +105,25 @@ static void *nbd_ios_svc_thread_start(void *arg)
         return NULL;
     }
 
-    bzero(&addr, sizeof(addr));
-    addr.sin_family = AF_INET;
-    if (host) {
-        if (inet_pton(AF_INET, host, (void *)&addr.sin_addr.s_addr) < 0)
+    sin.sin_family = AF_INET;
+    if (maphost) {
+        if (inet_pton(AF_INET, maphost, (void *)&sin.sin_addr.s_addr) < 0)
         {
-            nbd_err("failed to convert %s to binary form!\n", host);
+            nbd_err("failed to convert %s to binary form!\n", maphost);
             goto err;
         }
     } else {
-        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        sin.sin_addr.s_addr = htonl(INADDR_ANY);
     }
-    addr.sin_port = htons(NBD_IOS_SVC_PORT);
+    sin.sin_port = htons(NBD_MAP_SVC_PORT);
 
-    if (bind(listenfd, (struct sockaddr*)&addr, sizeof(struct sockaddr)) < 0) {
-        nbd_err("failed to bind an address to a socket: %s\n", strerror(errno));
+    if (bind(listenfd, (struct sockaddr*)&sin, sizeof(struct sockaddr)) < 0) {
+        nbd_err("bind on port %d failed, %s\n", NBD_MAP_SVC_PORT,
+                strerror(errno));
         goto err;
     }
 
-    if (listen(listenfd, 10) < 0) {
+    if (listen(listenfd, 16) < 0) {
         nbd_err("failed to start listening on a socket: %s\n", strerror(errno));
         goto err;
     }
@@ -154,6 +156,7 @@ static void *nbd_rpc_svc_thread_start(void *arg)
     register SVCXPRT *transp = NULL;
     struct sockaddr_in sin = {0, };
     int listenfd = RPC_ANYSOCK;
+    char *rpchost = arg;
     int opt = 1;
     int ret;
 
@@ -171,7 +174,15 @@ static void *nbd_rpc_svc_thread_start(void *arg)
     }
 
     sin.sin_family = AF_INET;
-    sin.sin_addr.s_addr = INADDR_ANY;
+    if (rpchost) {
+        if (inet_pton(AF_INET, rpchost, (void *)&sin.sin_addr.s_addr) < 0)
+        {
+            nbd_err("failed to convert %s to binary form!\n", rpchost);
+            goto out;
+        }
+    } else {
+        sin.sin_addr.s_addr = htonl(INADDR_ANY);
+    }
     sin.sin_port = htons(NBD_RPC_SVC_PORT);
 
     ret = bind(listenfd, (struct sockaddr *) &sin, sizeof (sin));
@@ -216,10 +227,10 @@ int main (int argc, char **argv)
 {
     int lockfd = -1;
     pthread_t rpc_svc_threadid;
-    pthread_t ios_svc_threadid;
+    pthread_t map_svc_threadid;
     struct flock lock = {0, };
-    char *host = NULL;
-    int threads = NBD_MIN_THREADS;
+    char *rpchost = NULL;
+    int threads = NBD_DEF_THREADS;
     int ret;
     int ind;
 
@@ -234,14 +245,30 @@ int main (int argc, char **argv)
 
     ind = 1;
     while (ind < argc) {
-        if (!strcmp("host", argv[ind])) {
+        if (!strcmp("maphost", argv[ind])) {
             if (ind + 1 >= argc) {
-                nbd_err("Invalid argument 'host <LISTEN_HOST>'!\n\n");
+                nbd_err("Invalid argument 'host <MAP_HOST>'!\n\n");
                 goto out;
             }
 
-            listen_host = strdup(argv[ind + 1]);
-            if (!listen_host) {
+            maphost = strdup(argv[ind + 1]);
+            if (!maphost) {
+                nbd_err("No memory for host!\n");
+                goto out;
+            }
+
+            if (!nbd_init_maphost(maphost, AF_INET))
+                goto out;
+
+            ind += 2;
+        } else if (!strcmp("rpchost", argv[ind])) {
+            if (ind + 1 >= argc) {
+                nbd_err("Invalid argument 'host <RPC_HOST>'!\n\n");
+                goto out;
+            }
+
+            rpchost = strdup(argv[ind + 1]);
+            if (!rpchost) {
                 nbd_err("No memory for host!\n");
                 goto out;
             }
@@ -254,14 +281,14 @@ int main (int argc, char **argv)
             }
 
             threads = atoi(argv[ind + 1]);
-            if (threads <= 0) {
-                nbd_err("Invalid threads, will set it as default %d!\n",
+            if (threads < NBD_MIN_THREADS) {
+                nbd_err("Currently the min threads are %d, will set it to %d!\n",
                         NBD_MIN_THREADS);
                 threads = NBD_MIN_THREADS;
             }
 
             if (threads > NBD_MAX_THREADS) {
-                nbd_err("Currently the max threads is %d, will set it to %d!\n",
+                nbd_err("Currently the max threads are %d, will set it to %d!\n",
                         NBD_MAX_THREADS, NBD_MAX_THREADS);
                 threads = NBD_MAX_THREADS;
             }
@@ -296,9 +323,9 @@ int main (int argc, char **argv)
 
     pmap_unset(RPC_NBD, RPC_NBD_VERS);
 
-    pthread_create(&rpc_svc_threadid, NULL, nbd_rpc_svc_thread_start, NULL);
-    pthread_create(&ios_svc_threadid, NULL, nbd_ios_svc_thread_start, &threads);
-    pthread_join(ios_svc_threadid, NULL);
+    pthread_create(&rpc_svc_threadid, NULL, nbd_rpc_svc_thread_start, rpchost);
+    pthread_create(&map_svc_threadid, NULL, nbd_map_svc_thread_start, &threads);
+    pthread_join(map_svc_threadid, NULL);
     pthread_join(rpc_svc_threadid, NULL);
 
     nbd_err("svc_run returned %s\n", strerror (errno));
@@ -310,9 +337,10 @@ int main (int argc, char **argv)
     }
 
 out:
+    free(rpchost);
+    nbd_fini_maphost();
     if (lockfd != -1)
         close(lockfd);
-    free(listen_host);
     nbd_log_destroy();
     nbd_service_fini();
     exit (EXIT_FAILURE);

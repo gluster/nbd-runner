@@ -44,11 +44,14 @@ Commands:
 	help
 		display help for nbd-runner command
 
-	threads <NUM>
-		specify the IOs threads number
+	threads <NUMBER>
+		specify the IO thread number for each mapped backstore, 1 as default
 
-	host <LISTEN_HOST>
-		specify the listenning IP for new comming map opt
+	rpchost <RPC_HOST>
+		specify the listenning IP for the RPC server, INADDR_ANY as default
+
+	maphost <MAP_HOST>
+		specify the listenning IP for the MAP server, INADDR_ANY as default
 
 	version
 		show version info and exit.
