@@ -54,6 +54,10 @@ static void usage(void)
              "\t\tspecify the listenning IP for the MAP server, INADDR_ANY as default\n\n"
              "\tversion\n"
              "\t\tshow version info and exit.\n\n"
+             "\tNOTE:\n"
+             "\t\tThe RPC_HOST is used for the control commands from nbd-cli, such as the create/delete/map/list, etc.\n"
+             "\t\tAnd the MAP_HOST is used by the map command which will establish the IO connection with NBD devices.\n"
+             "\t\tThis will be useful if you'd like the control commands and the IOs through different NICs\n"
             );
 }
 

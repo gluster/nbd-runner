@@ -31,11 +31,6 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 
 <b>Daemon</b>: run nbd-runner on the node where you can access the gluster through gfapi
 ```script
-# nbd-runner
-```
-
-<b>CLI</b>: you can choose to run nbd-cli from any node where the newer nbd.ko module is availible
-```script
 # nbd-runner help
 Usage:
 	nbd-runner [<args>]
@@ -56,6 +51,14 @@ Commands:
 	version
 		show version info and exit.
 
+	NOTE:
+		The RPC_HOST is used for the control commands from nbd-cli, such as the create/delete/map/list, etc.
+		And the MAP_HOST is used by the map command which will establish the IO connection with NBD devices.
+		This will be useful if you'd like the control commands and the IOs through different NICs
+```
+
+<b>CLI</b>: you can choose to run nbd-cli from any node where the newer nbd.ko module is availible
+```script
 # nbd-cli help
 Usage:
  gluster help		-display help for gluster commands
