@@ -148,6 +148,69 @@ static char *nbd_get_hash_key(const char *cfgstring)
     return strndup(cfgstring + 4, len);
 }
 
+static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
+                                       bool replace)
+{
+    json_object *globalobj = NULL;
+    json_object *devobj = NULL;
+    json_object *obj = NULL;
+    bool need_free = false;
+    const char *st;
+    int ret = 0;
+
+    if (!dev || !key) {
+        nbd_err("Invalid dev or key parameter!\n");
+        return -EINVAL;
+    }
+
+    globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
+    if (globalobj) {
+        if (json_object_object_get_ex(globalobj, key, &devobj)) {
+            if (replace) {
+                json_object_object_del(globalobj, key);
+            } else {
+                json_object_put(devobj);
+                nbd_out("%s is already in the json conig file!\n", key);
+                return 0;
+            }
+        }
+    } else {
+        /* The config file is empty */
+        globalobj = json_object_new_object();
+        if (!globalobj) {
+            nbd_err("No memory for globalobj!\n");
+            return -ENOMEM;
+        }
+        need_free = true;
+    }
+
+    devobj = json_object_new_object();
+    if (!devobj) {
+        nbd_err("No memory for devobj!\n");
+        ret = -ENOMEM;
+        goto err;
+    }
+
+    json_object_object_add(devobj, "type", json_object_new_int(dev->type));
+    json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
+    json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
+    json_object_object_add(devobj, "size", json_object_new_int(dev->size));
+    json_object_object_add(devobj, "blksize", json_object_new_int(dev->blksize));
+    json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
+    json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
+    st = nbd_dev_status_lookup_str(dev->status);
+    json_object_object_add(devobj, "status", json_object_new_string(st));
+
+    json_object_object_add(globalobj, key, devobj);
+    json_object_to_file_ext(NBD_SAVE_CONFIG_FILE, globalobj, JSON_C_TO_STRING_PRETTY);
+
+    ret = 0;
+err:
+    json_object_put(devobj);
+
+    return ret;
+}
+
 static int nbd_parse_from_json_config_file(void)
 {
     json_object *globalobj = NULL;
@@ -156,6 +219,7 @@ static int nbd_parse_from_json_config_file(void)
     struct nbd_device *dev;
     const char *tmp;
     char *ktmp;
+    const char *st;
 
     globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
     if (!globalobj)
@@ -215,72 +279,12 @@ static int nbd_parse_from_json_config_file(void)
              snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
              handler->cfg_parse(dev, ktmp, NULL);
              free(ktmp);
+             nbd_update_json_config_file(dev, key, true);
              g_hash_table_insert(nbd_devices_hash, key, dev);
          }
      }
 
      return 0;
-}
-
-static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
-                                       bool postmap)
-{
-    json_object *globalobj = NULL;
-    json_object *devobj = NULL;
-    json_object *obj = NULL;
-    int ret = 0;
-    bool need_free = false;
-
-    if (!dev || !key) {
-        nbd_err("Invalid dev or key parameter!\n");
-        return -EINVAL;
-    }
-
-    globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
-    if (globalobj) {
-        if (json_object_object_get_ex(globalobj, key, &devobj)) {
-            if (postmap) {
-                json_object_object_del(globalobj, key);
-            } else {
-                json_object_put(devobj);
-                nbd_out("%s is already in the json conig file!\n", key);
-                return 0;
-            }
-        }
-    } else {
-        /* The config file is empty */
-        globalobj = json_object_new_object();
-        if (!globalobj) {
-            nbd_err("No memory for globalobj!\n");
-            return -ENOMEM;
-        }
-        need_free = true;
-    }
-
-    devobj = json_object_new_object();
-    if (!devobj) {
-        nbd_err("No memory for devobj!\n");
-        ret = -ENOMEM;
-        goto err;
-    }
-
-    json_object_object_add(devobj, "type", json_object_new_int(dev->type));
-    json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
-    json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
-    json_object_object_add(devobj, "size", json_object_new_int(dev->size));
-    json_object_object_add(devobj, "blksize", json_object_new_int(dev->blksize));
-    json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
-    json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
-
-    json_object_object_add(devobj, "type", json_object_new_int(dev->type));
-    json_object_object_add(globalobj, key, devobj);
-    json_object_to_file_ext(NBD_SAVE_CONFIG_FILE, globalobj, JSON_C_TO_STRING_PRETTY);
-
-    ret = 0;
-err:
-    json_object_put(devobj);
-
-    return ret;
 }
 
 bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
@@ -519,6 +523,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
             goto err;
         }
 
+        dev->status = NBD_DEV_CONN_ST_CREATED;
         dev->type = map->type;
         dev->handler = handler;
         dev->readonly = map->readonly;
@@ -735,7 +740,6 @@ int nbd_handle_request(int sock, int threads)
     }
     free(cfg);
     free(buf);
-    free(key);
 
     pthread_mutex_lock(&dev->sock_lock);
     nbd_socket_write(sock, &nrep, sizeof(struct nego_reply));
@@ -778,6 +782,7 @@ int nbd_handle_request(int sock, int threads)
             dev->nbd[0] = '\0';
             dev->time[0] = '\0';
             dev->handler->unmap(dev);
+            nbd_update_json_config_file(dev, key, true);
             pthread_mutex_unlock(&dev->lock);
             ret = 0;
             goto err;
@@ -830,6 +835,7 @@ int nbd_handle_request(int sock, int threads)
     }
 
 err:
+    free(key);
     g_thread_pool_free(thread_pool, false, true);
     close(sock);
     return ret;

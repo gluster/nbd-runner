@@ -22,13 +22,6 @@
 #include "rpc_nbd.h"
 #include "utils.h"
 
-typedef enum {
-    NBD_DEV_CONN_ST_CREATED,
-    NBD_DEV_CONN_ST_MAPPED,
-    NBD_DEV_CONN_ST_UNMAPPED,
-    NBD_DEV_CONN_ST_DEAD,
-} dev_status_t;
-
 struct nbd_device {
     handler_t type;
     struct nbd_handler *handler;
