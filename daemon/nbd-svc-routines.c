@@ -148,13 +148,42 @@ static char *nbd_get_hash_key(const char *cfgstring)
     return strndup(cfgstring + 4, len);
 }
 
+static int nbd_config_delete_backstore(struct nbd_device *dev, const char *key)
+{
+    json_object *globalobj = NULL;
+    json_object *devobj = NULL;
+
+    if (!key) {
+        nbd_err("Invalid dev or key parameter!\n");
+        return -EINVAL;
+    }
+
+    if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
+        nbd_err("The device is still mapped, please unmap it first!\n");
+        return -EINVAL;
+    }
+
+    globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
+    if (!globalobj)
+        return 0;
+
+    if (!json_object_object_get_ex(globalobj, key, &devobj)) {
+        nbd_err("%s is no exist in conig file!\n", key);
+        json_object_put(globalobj);
+        return -EINVAL;
+    }
+
+    json_object_object_del(globalobj, key);
+    json_object_to_file_ext(NBD_SAVE_CONFIG_FILE, globalobj, JSON_C_TO_STRING_PRETTY);
+    return 0;
+}
+
 static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
                                        bool replace)
 {
     json_object *globalobj = NULL;
     json_object *devobj = NULL;
     json_object *obj = NULL;
-    bool need_free = false;
     const char *st;
     int ret = 0;
 
@@ -181,7 +210,6 @@ static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
             nbd_err("No memory for globalobj!\n");
             return -ENOMEM;
         }
-        need_free = true;
     }
 
     devobj = json_object_new_object();
@@ -234,41 +262,43 @@ static int nbd_parse_from_json_config_file(void)
              return -1;
          }
 
-         json_object_object_get_ex(globalobj, "type", &obj);
+         json_object_object_get_ex(devobj, "type", &obj);
          dev->type = json_object_get_int(obj);
          json_object_put(obj);
 
-         json_object_object_get_ex(globalobj, "nbd", &obj);
+         json_object_object_get_ex(devobj, "nbd", &obj);
          tmp = json_object_get_string(obj);
          if (tmp)
              strncpy(dev->nbd, tmp, NBD_DLEN_MAX);
          json_object_put(obj);
 
-         json_object_object_get_ex(globalobj, "maptime", &obj);
+         json_object_object_get_ex(devobj, "maptime", &obj);
          tmp = json_object_get_string(obj);
          if (tmp)
              strncpy(dev->time, tmp, NBD_TLEN_MAX);
          json_object_put(obj);
 
-         json_object_object_get_ex(globalobj, "size", &obj);
+         json_object_object_get_ex(devobj, "size", &obj);
          dev->size = json_object_get_int(obj);
          json_object_put(obj);
 
-         json_object_object_get_ex(globalobj, "blksize", &obj);
+         json_object_object_get_ex(devobj, "blksize", &obj);
          dev->blksize = json_object_get_int(obj);
          json_object_put(obj);
 
-         json_object_object_get_ex(globalobj, "prealloc", &obj);
+         json_object_object_get_ex(devobj, "prealloc", &obj);
          dev->prealloc = json_object_get_boolean(obj);
          json_object_put(obj);
 
-         json_object_object_get_ex(globalobj, "readonly", &obj);
+         json_object_object_get_ex(devobj, "readonly", &obj);
          dev->readonly = json_object_get_boolean(obj);
          json_object_put(obj);
 
          /* The connection is dead, needed to remap from the client */
          dev->status = NBD_DEV_CONN_ST_DEAD;
 
+         nbd_out("key: %s, type: %d, nbd: %s, maptime: %s, size: %d, blksize: %d, prealloc: %d, readonly: %d\n",
+                 key, dev->type, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
          handler = g_hash_table_lookup(nbd_handler_hash, &dev->type);
          if (!handler) {
              nbd_err("handler type %d is not registered!\n", dev->type);
@@ -440,13 +470,27 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
             nbd_err("failed to delete %s\n", delete->cfgstring);
             goto err;
         }
+
         dev->handler = handler;
+        dev->status = NBD_DEV_CONN_ST_UNMAPPED;
+        handler->delete(dev, rep);
+        goto err;
     }
 
     pthread_mutex_lock(&dev->lock);
-    handler->delete(dev, rep);
-    pthread_mutex_unlock(&dev->lock);
+    if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
+        rep->exit = -EPERM;
+        snprintf(rep->out, NBD_EXIT_MAX,
+                 "Device %s is still mapped, please unmap it first!", key);
+        nbd_err("Device %s is still mapped, please unmap it first!\n", key);
+        pthread_mutex_unlock(&dev->lock);
+        goto err;
+    }
 
+    handler->delete(dev, rep);
+
+    nbd_config_delete_backstore(dev, key);
+    pthread_mutex_unlock(&dev->lock);
     g_hash_table_remove(nbd_devices_hash, key);
 
 err:
@@ -776,7 +820,7 @@ int nbd_handle_request(int sock, int threads)
             nbd_err("invalid nbd request header!\n");
 
         if(request.type == htonl(NBD_CMD_DISC)) {
-            nbd_dbg("Unmap request received!\n");
+            nbd_dbg("Unmap request received for dev: %s!\n", key);
             pthread_mutex_lock(&dev->lock);
             dev->status = NBD_DEV_CONN_ST_UNMAPPED;
             dev->nbd[0] = '\0';
