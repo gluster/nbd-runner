@@ -56,7 +56,7 @@ struct nbd_response {
      * For the mapping info, for each map it should
      * be "{[/dev/nbdXX][backstore]}" string.
      */
-    string        out<>;
+    string        buf<>;
 
     /*
      * The following members will only be

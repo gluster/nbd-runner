@@ -168,14 +168,14 @@ int nbd_create_backstore(int count, char **options, int type)
     }
 
     ret = rep.exit;
-    if (ret && rep.out)
-        nbd_err("Create failed: %s\n", rep.out);
+    if (ret && rep.buf)
+        nbd_err("Create failed: %s\n", rep.buf);
     else
         nbd_out("Create succeeded!\n");
 
 err:
     if (clnt) {
-        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+        if (rep.buf && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
                                      (char *)&rep))
             nbd_err("clnt_freeres failed!\n");
         clnt_destroy(clnt);
@@ -260,14 +260,14 @@ int nbd_delete_backstore(int count, char **options, int type)
     }
 
     ret = rep.exit;
-    if (ret && rep.out)
-        nbd_err("Delete failed: %s\n", rep.out);
+    if (ret && rep.buf)
+        nbd_err("Delete failed: %s\n", rep.buf);
     else
         nbd_out("Delete succeeded!\n");
 
 err:
     if (clnt) {
-        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+        if (rep.buf && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
                                      (char *)&rep))
             nbd_err("clnt_freeres failed!\n");
         clnt_destroy(clnt);
@@ -327,8 +327,8 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
     time_string_now(map.time);
     strcpy(map.cfgstring, args->cfg);
     if (nbd_postmap_1(&map, &rep, args->clnt) != RPC_SUCCESS) {
-        if (rep.exit && rep.out) {
-            nbd_err("nbd_postmap_1 failed: %s!\n", rep.out);
+        if (rep.exit && rep.buf) {
+            nbd_err("nbd_postmap_1 failed: %s!\n", rep.buf);
             return NL_STOP;
         }
     }
@@ -774,8 +774,8 @@ int nbd_map_device(int count, char **options, int type)
     }
 
     ret = rep.exit;
-    if (ret && rep.out) {
-        nbd_err("Map failed: %s\n", rep.out);
+    if (ret && rep.buf) {
+        nbd_err("Map failed: %s\n", rep.buf);
         goto err;
     }
 
@@ -791,7 +791,7 @@ int nbd_map_device(int count, char **options, int type)
 
 err:
     if (clnt) {
-        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+        if (rep.buf && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
                                      (char *)&rep))
             nbd_err("clnt_freeres failed!\n");
         clnt_destroy(clnt);
@@ -926,12 +926,12 @@ int nbd_list_devices(int count, char **options, int type)
             goto nla_put_failure;
         }
 
-        if (rep.exit && rep.out) {
-            nbd_err("List failed: %s\n", rep.out);
+        if (rep.exit && rep.buf) {
+            nbd_err("List failed: %s\n", rep.buf);
             goto nla_put_failure;
         }
 
-        list_dump = strdup(rep.out);
+        list_dump = strdup(rep.buf);
     }
 
     netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST, type, NULL, NULL);
@@ -960,7 +960,7 @@ int nbd_list_devices(int count, char **options, int type)
 nla_put_failure:
     nl_socket_free(netfd);
     if (clnt) {
-        if (rep.out && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+        if (rep.buf && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
                     (char *)&rep))
             nbd_err("clnt_freeres failed!\n");
         clnt_destroy(clnt);

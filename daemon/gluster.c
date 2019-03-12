@@ -125,7 +125,7 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
     if (!cfg || !dev) {
         if (rep) {
             rep->exit = -EINVAL;
-            snprintf(rep->out, NBD_EXIT_MAX, "The cfg param is NULL, will do nothing!");
+            snprintf(rep->buf, NBD_EXIT_MAX, "The cfg param is NULL, will do nothing!");
         }
         nbd_err("The cfg param is NULL, will do nothing!\n");
         return false;
@@ -135,7 +135,7 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
     if (!info) {
         if (rep) {
             rep->exit = -ENOMEM;
-            snprintf(rep->out, NBD_EXIT_MAX, "No memory for info!");
+            snprintf(rep->buf, NBD_EXIT_MAX, "No memory for info!");
         }
         nbd_err("No memory for info\n");
         goto err;
@@ -146,7 +146,7 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
     if (!tmp) {
         if (rep) {
             rep->exit = -ENOMEM;
-            snprintf(rep->out, NBD_EXIT_MAX, "No memory for tmp!");
+            snprintf(rep->buf, NBD_EXIT_MAX, "No memory for tmp!");
         }
         nbd_err("No memory for tmp\n");
         goto err;
@@ -174,7 +174,7 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
             if (!sep) {
                 if (rep) {
                     rep->exit = -EINVAL;
-                    snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo key/pair: %s!", ptr);
+                    snprintf(rep->buf, NBD_EXIT_MAX, "Invalid volinfo key/pair: %s!", ptr);
                 }
                 nbd_err("Invalid volinfo value: %s!\n", ptr);
                 goto err;
@@ -189,7 +189,7 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
             if (!sep) {
                 if (rep) {
                     rep->exit = -EINVAL;
-                    snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo host value: %s!", ptr);
+                    snprintf(rep->buf, NBD_EXIT_MAX, "Invalid volinfo host value: %s!", ptr);
                 }
                 nbd_err("Invalid volinfo host value: %s!\n", ptr);
                 goto err;
@@ -203,7 +203,7 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
             if (*ptr != '/') {
                 if (rep) {
                     rep->exit = -EINVAL;
-                    snprintf(rep->out, NBD_EXIT_MAX, "Invalid volinfo path value: %s!", ptr);
+                    snprintf(rep->buf, NBD_EXIT_MAX, "Invalid volinfo path value: %s!", ptr);
                 }
                 nbd_err("Invalid path path value: %s!\n", ptr);
                 goto err;
@@ -241,14 +241,14 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
     glfs = nbd_volume_init(info->volume, info->host);
     if (!glfs) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
+        snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         goto err;
     }
 
     if (!glfs_access(glfs, info->path, F_OK)) {
         rep->exit = -EEXIST;
-        snprintf(rep->out, NBD_EXIT_MAX, "file %s is already exist in volume %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "file %s is already exist in volume %s!",
                  info->path, info->volume);
         nbd_err("file %s is already exist in volume %s!\n",
                  info->path, info->volume);
@@ -257,7 +257,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
 
     if (!nbd_check_available_space(glfs, info->volume, dev->size)) {
         rep->exit = -ENOSPC;
-        snprintf(rep->out, NBD_EXIT_MAX, "No enough space in volume %s, require %d!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "No enough space in volume %s, require %d!",
                  info->volume, dev->size);
         nbd_err("No enough space in volume %s, require %d!\n", info->volume,
                 dev->size);
@@ -268,7 +268,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
                     S_IRUSR | S_IWUSR);
     if (!fd) {
         rep->exit = -errno;
-        snprintf(rep->out, NBD_EXIT_MAX, "Failed to create file %s on volume %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "Failed to create file %s on volume %s!",
                  info->path, info->volume);
         nbd_err("Failed to create file %s on volume %s!\n",
                 info->path, info->volume);
@@ -281,7 +281,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
     if (glfs_ftruncate(fd, dev->size) < 0) {
 #endif
         rep->exit = -errno;
-        snprintf(rep->out, NBD_EXIT_MAX, "Failed to truncate file %s on volume %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "Failed to truncate file %s on volume %s!",
                  info->path, info->volume);
         nbd_err("Failed to truncate file %s on volume %s!\n",
                 info->path, info->volume);
@@ -290,7 +290,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
 
     if (glfs_lstat(glfs, info->path, &st) < 0) {
         rep->exit = -errno;
-        snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
                 info->path, info->volume);
         nbd_err("failed to lstat file %s in volume: %s!\n",
                 info->path, info->volume);
@@ -300,7 +300,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
 
     if (dev->prealloc && glfs_zerofill(fd, 0, dev->size) < 0) {
         rep->exit = -errno;
-        snprintf(rep->out, NBD_EXIT_MAX, "Failed to prealloc file %s on volume %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "Failed to prealloc file %s on volume %s!",
                  info->path, info->volume);
         nbd_err("Failed to prealloc file %s on volume %s!\n",
                 info->path, info->volume);
@@ -328,14 +328,14 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
     glfs = nbd_volume_init(info->volume, info->host);
     if (!glfs) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
+        snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         goto err;
     }
 
     if (glfs_access(glfs, info->path, F_OK)) {
         rep->exit = -ENOENT;
-        snprintf(rep->out, NBD_EXIT_MAX, "file %s is not exist in volume %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "file %s is not exist in volume %s!",
                  info->path, info->volume);
         nbd_err("file %s is not exist in volume %s!\n",
                  info->path, info->volume);
@@ -344,7 +344,7 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
 
     if (glfs_unlink(glfs, info->path) < 0) {
         rep->exit = -errno;
-        snprintf(rep->out, NBD_EXIT_MAX, "failed to delete file %s in volume %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "failed to delete file %s in volume %s!",
                  info->path, info->volume);
         nbd_err("failed to delete file %s in volume %s!",
                  info->path, info->volume);
@@ -375,14 +375,14 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
     glfs = nbd_volume_init(info->volume, info->host);
     if (!glfs) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
+        snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         goto err;
     }
 
     if (glfs_access(glfs, info->path, F_OK)) {
         rep->exit = -ENOENT;
-        snprintf(rep->out, NBD_EXIT_MAX, "file %s is not exist in volume %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "file %s is not exist in volume %s!",
                  info->path, info->volume);
         nbd_err("file %s is not exist in volume %s!\n",
                  info->path, info->volume);
@@ -392,7 +392,7 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
     if (!dev->size || !dev->blksize) {
         if (glfs_lstat(glfs, info->path, &st) < 0) {
             rep->exit = -errno;
-            snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
+            snprintf(rep->buf, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
                     info->path, info->volume);
             nbd_err("failed to lstat file %s in volume: %s!\n",
                     info->path, info->volume);
@@ -406,7 +406,7 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
     gfd = glfs_open(glfs, info->path, ALLOWED_BSOFLAGS);
     if (!gfd) {
         rep->exit = -errno;
-        snprintf(rep->out, NBD_EXIT_MAX, "failed to open file %s in volume: %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "failed to open file %s in volume: %s!",
                  info->path, info->volume);
         nbd_err("Failed to open file %s, %s\n", info->path, strerror(errno));
         goto err;
@@ -448,7 +448,7 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
     if (info->glfs) {
         if (glfs_lstat(glfs, info->path, &st) < 0) {
             rep->exit = -errno;
-            snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
+            snprintf(rep->buf, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
                     info->path, info->volume);
             nbd_err("failed to lstat file %s in volume: %s!\n",
                     info->path, info->volume);
@@ -461,14 +461,14 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
     glfs = nbd_volume_init(info->volume, info->host);
     if (!glfs) {
         rep->exit = -EINVAL;
-        snprintf(rep->out, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
+        snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         return -1;
     }
 
     if (glfs_lstat(glfs, info->path, &st) < 0) {
         rep->exit = -errno;
-        snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
                 info->path, info->volume);
         nbd_err("failed to lstat file %s in volume: %s!\n",
                 info->path, info->volume);
@@ -496,7 +496,7 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
         if (glfs_lstat(glfs, info->path, &st) < 0) {
             if (rep) {
                 rep->exit = -errno;
-                snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
+                snprintf(rep->buf, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
                          info->path, info->volume);
             }
             nbd_err("failed to lstat file %s in volume: %s!\n",
@@ -511,7 +511,7 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
     if (!glfs) {
         if (rep) {
             rep->exit = -EINVAL;
-            snprintf(rep->out, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
+            snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
         }
         nbd_err("Init volume %s failed!\n", info->volume);
         return -1;
@@ -520,7 +520,7 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
     if (glfs_lstat(glfs, info->path, &st) < 0) {
         if (rep) {
             rep->exit = -errno;
-            snprintf(rep->out, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
+            snprintf(rep->buf, NBD_EXIT_MAX, "failed to lstat file %s in volume: %s!",
                     info->path, info->volume);
         }
         nbd_err("failed to lstat file %s in volume: %s, %s!\n",
