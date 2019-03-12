@@ -175,6 +175,7 @@ static int nbd_config_delete_backstore(struct nbd_device *dev, const char *key)
 
     json_object_object_del(globalobj, key);
     json_object_to_file_ext(NBD_SAVE_CONFIG_FILE, globalobj, JSON_C_TO_STRING_PRETTY);
+    json_object_put(globalobj);
     return 0;
 }
 
@@ -198,7 +199,7 @@ static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
             if (replace) {
                 json_object_object_del(globalobj, key);
             } else {
-                json_object_put(devobj);
+                json_object_put(globalobj);
                 nbd_out("%s is already in the json conig file!\n", key);
                 return 0;
             }
@@ -234,8 +235,7 @@ static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
 
     ret = 0;
 err:
-    json_object_put(devobj);
-
+    json_object_put(globalobj);
     return ret;
 }
 
@@ -258,41 +258,34 @@ static int nbd_parse_from_json_config_file(void)
          if (!dev) {
              nbd_err("No memory for nbd device!\n");
              free(key);
-             json_object_put(devobj);
+             json_object_put(globalobj);
              return -1;
          }
 
          json_object_object_get_ex(devobj, "type", &obj);
          dev->type = json_object_get_int(obj);
-         json_object_put(obj);
 
          json_object_object_get_ex(devobj, "nbd", &obj);
          tmp = json_object_get_string(obj);
          if (tmp)
              strncpy(dev->nbd, tmp, NBD_DLEN_MAX);
-         json_object_put(obj);
 
          json_object_object_get_ex(devobj, "maptime", &obj);
          tmp = json_object_get_string(obj);
          if (tmp)
              strncpy(dev->time, tmp, NBD_TLEN_MAX);
-         json_object_put(obj);
 
          json_object_object_get_ex(devobj, "size", &obj);
          dev->size = json_object_get_int(obj);
-         json_object_put(obj);
 
          json_object_object_get_ex(devobj, "blksize", &obj);
          dev->blksize = json_object_get_int(obj);
-         json_object_put(obj);
 
          json_object_object_get_ex(devobj, "prealloc", &obj);
          dev->prealloc = json_object_get_boolean(obj);
-         json_object_put(obj);
 
          json_object_object_get_ex(devobj, "readonly", &obj);
          dev->readonly = json_object_get_boolean(obj);
-         json_object_put(obj);
 
          /* The connection is dead, needed to remap from the client */
          dev->status = NBD_DEV_CONN_ST_DEAD;
@@ -314,6 +307,7 @@ static int nbd_parse_from_json_config_file(void)
          }
      }
 
+     json_object_put(globalobj);
      return 0;
 }
 
@@ -662,13 +656,17 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
 
 bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
 {
+    json_object *globalobj = NULL;
+    json_object *devobj = NULL;
     struct nbd_device *dev;
     GHashTableIter iter;
     gpointer key, value;
     char *bstore, *out;
     int len = NBD_EXIT_MAX;
-    int pos = 0;
-    int l;
+    int l = 0;
+    char *buf = NULL;
+    const char *st;
+    int max = max(4096, max(NBD_DLEN_MAX, NBD_TLEN_MAX));
 
     rep->exit = 0;
 
@@ -677,6 +675,22 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         rep->exit = -ENOMEM;
         nbd_err("No memory for rep->out!\n");
         return true;
+    }
+
+    globalobj = json_object_new_object();
+    if (!globalobj) {
+        rep->exit = -ENOMEM;
+        snprintf(rep->out, NBD_EXIT_MAX, "No memory for the gloablobj!");
+        nbd_err("No memory for globalobj!\n");
+        return true;
+    }
+
+    buf = malloc(max);
+    if (!buf) {
+        rep->exit = -ENOMEM;
+        snprintf(rep->out, NBD_EXIT_MAX, "No memory for the tmp buf!");
+        nbd_err("No memory for tmp buf!\n");
+        goto err;
     }
 
     g_hash_table_iter_init(&iter, nbd_devices_hash);
@@ -692,30 +706,68 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         bstore = key;
         /*
          * The len equals to the lenght of
-         * "{[key][dev->nbd][dev->time]}" + 1
+         *   "\/dev\/nbd121":{                                --> 6 extra chars
+         *     "type":0,                                      --> 8 extra chars
+         *     "backstore":"dht@192.168.195.164:\/file313",   --> >= 12 extra chars
+         *     "maptime":"2019-03-12 13:03:10",               --> 13 extra chars
+         *     "size":1073741824,                             --> 8 extra chars
+         *     "blksize":4096,                                --> 11 extra chars
+         *     "readonly":false,                              --> 17 chars
+         *     "prealloc":false,                              --> 17 chars
+         *     "status":"mapped"                              --> 11 extra chars
+         *   },                                               --> 2 extar chars
+         *
          */
-        l = strlen(bstore) + strlen(dev->nbd) + strlen(dev->time) + 9;
-        if (l > len - pos) {
-            len = len * 2;
-            out = realloc(rep->out, len);
-            if (!out) {
-                rep->exit = -ENOMEM;
-                snprintf(rep->out, NBD_EXIT_MAX,
-                         "No memory for the list buffer!");
-                nbd_err("No memory for the list buffer!\n");
-                pthread_mutex_unlock(&dev->lock);
-                return true;
-            }
-            rep->out = out;
+        l += strlen(dev->nbd) + 6;
+        l += snprintf(buf, max, "%d", dev->type) + 8;
+        l += strlen(bstore) + 12;
+        l += strlen(dev->time) + 13;
+        l += snprintf(buf, max, "%d", dev->size) + 8;
+        l += snprintf(buf, max, "%d", dev->blksize) + 11;
+        l += 17;
+        l += 17;
+        st = nbd_dev_status_lookup_str(dev->status);
+        l += strlen(st) + 11;
+        l += 2;
+        l += 128;  /* Add 128 extra more space */
+
+        devobj = json_object_new_object();
+        if (!devobj) {
+            rep->exit = -ENOMEM;
+            snprintf(rep->out, NBD_EXIT_MAX, "No memory for the devobj!");
+            nbd_err("No memory for devobj!\n");
+            pthread_mutex_unlock(&dev->lock);
+            goto err;
         }
 
-        pos += sprintf(rep->out + pos, "{[%s][%s][%s]}", dev->nbd, bstore,
-                       dev->time);
+        json_object_object_add(devobj, "type", json_object_new_int(dev->type));
+        json_object_object_add(devobj, "backstore", json_object_new_string(bstore));
+        json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
+        json_object_object_add(devobj, "size", json_object_new_int(dev->size));
+        json_object_object_add(devobj, "blksize", json_object_new_int(dev->blksize));
+        json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
+        json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
+        json_object_object_add(devobj, "status", json_object_new_string(st));
         pthread_mutex_unlock(&dev->lock);
+        json_object_object_add(globalobj, dev->nbd, devobj);
     }
 
-    rep->out[pos] = '\0';
+    if (l > len) {
+        out = realloc(rep->out, l);
+        if (!out) {
+            rep->exit = -ENOMEM;
+            snprintf(rep->out, NBD_EXIT_MAX, "No memory for the list buffer!");
+            nbd_err("No memory for the list buffer!\n");
+            goto err;
+        }
+        rep->out = out;
+    }
 
+    snprintf(rep->out, l, "%s", json_object_to_json_string_ext(globalobj, JSON_C_TO_STRING_PRETTY));
+
+err:
+    json_object_put(globalobj);
+    free(buf);
     return true;
 }
 

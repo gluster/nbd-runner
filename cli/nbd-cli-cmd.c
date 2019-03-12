@@ -21,6 +21,7 @@
 #include <libnl3/netlink/genl/genl.h>
 #include <libnl3/netlink/genl/mngt.h>
 #include <libnl3/netlink/genl/ctrl.h>
+#include <json-c/json.h>
 
 #include "rpc_nbd.h"
 #include "utils.h"
@@ -30,12 +31,7 @@
 
 struct timeval TIMEOUT = {.tv_sec = 15};
 
-static GHashTable *list_hash = NULL;
-
-struct list_info {
-    char time[NBD_TLEN_MAX];
-    char cfg[NBD_CFGS_MAX];
-};
+static char *list_dump = NULL;
 
 static void free_key(gpointer key)
 {
@@ -344,12 +340,16 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
 {
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *msg_attr[NBD_ATTR_MAX + 1];
-    struct list_info *value;
+    json_object *globalobj = NULL;
+    json_object *devobj = NULL;
+    json_object *obj = NULL;
     uint32_t index;
     struct nlattr *attr;
     char key[NBD_DLEN_MAX];
+    const char *tmp;
     int rem;
     int status;
+    int ret;
 
     if (nla_parse(msg_attr, NBD_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
                   genlmsg_attrlen(gnlh, 0), NULL) < 0) {
@@ -362,20 +362,28 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
         return NL_STOP;
     }
 
-    nbd_out("DEVICES \tSTATUS \t\tTIME \t\t\tBACKSTORE\n");
-    nbd_out("------- \t------ \t\t---- \t\t\t---------\n");
+    if (list_dump) {
+        globalobj = json_tokener_parse(list_dump);
+        nbd_out("%-20s%-15s%-25s%-15s%s\n", "DEVICES", "STATUS", "TIME", "CONNECT", "BACKSTORE");
+        nbd_out("%-20s%-15s%-25s%-15s%s\n", "-------", "------", "----", "-------", "---------");
+    } else {
+        nbd_out("%-20s%s\n", "DEVICES", "STATUS");
+        nbd_out("%-20s%s\n", "-------", "------");
+    }
     nla_for_each_nested(attr, msg_attr[NBD_ATTR_DEVICE_LIST], rem) {
         struct nlattr *devices[NBD_DEVICE_ATTR_MAX + 1];
 
         if (nla_type(attr) != NBD_DEVICE_ITEM) {
             nbd_err("NBD_DEVICE_ITEM not set!\n");
-            return NL_STOP;
+            ret = NL_STOP;
+            goto err;
         }
 
         if (nla_parse_nested(devices, NBD_DEVICE_ATTR_MAX, attr,
                              nbd_device_policy) < 0) {
             nbd_err("nbd: error processing device list\n");
-            return NL_STOP;
+            ret = NL_STOP;
+            goto err;
         }
 
         index = (int)nla_get_u32(devices[NBD_DEVICE_INDEX]);
@@ -385,36 +393,71 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
         case NBD_LIST_MAPPED:
             if (status) {
                 snprintf(key, NBD_DLEN_MAX, "/dev/nbd%d", index);
-                value = g_hash_table_lookup(list_hash, key);
-                if (!value)
-                    nbd_out("%s\t%s \t\t%s \t\t\t%s\n", key, "Mapped", "Unkown", "Unkown");
-                else
-                    nbd_out("%s\t%s \t\t%s \t%s\n", key, "Mapped", value->time, value->cfg);
+                nbd_out("%-20s%-15s", key, "Mapped");
+                if (!list_dump) {
+                    nbd_out("\n");
+                    break;
+                }
+                if (json_object_object_get_ex(globalobj, key, &devobj)) {
+                    json_object_object_get_ex(devobj, "maptime", &obj);
+                    tmp = json_object_get_string(obj);
+                    nbd_out("%-25s", tmp ? tmp : "Unkown");
+
+                    json_object_object_get_ex(devobj, "status", &obj);
+                    tmp = json_object_get_string(obj);
+                    nbd_out("%-15s", tmp ? tmp : "Unkown");
+
+                    json_object_object_get_ex(devobj, "backstore", &obj);
+                    tmp = json_object_get_string(obj);
+                    nbd_out("%s\n", tmp ? tmp : "Unkown");
+                } else {
+                    nbd_out("%-25s%-15s%s\n", "Unkown", "Unkown", "Unkown");
+                }
             }
             break;
         case NBD_LIST_UNMAPPED:
             if (!status)
-                nbd_out("/dev/nbd%d\t%s\n", index, "Unmapped");
+                nbd_out("/dev/nbd%-12d%s\n", index, "Unmapped");
             break;
         case NBD_LIST_ALL:
             if (status) {
                 snprintf(key, NBD_DLEN_MAX, "/dev/nbd%d", index);
-                value = g_hash_table_lookup(list_hash, key);
-                if (!value)
-                    nbd_out("%s\t%s \t\t%s \t\t\t%s\n", key, "Mapped", "Unkown", "Unkown");
-                else
-                    nbd_out("%s\t%s \t\t%s \t%s\n", key, "Mapped", value->time, value->cfg);
+                nbd_out("%-20s%-15s", key, "Mapped");
+                if (!list_dump) {
+                    nbd_out("\n");
+                    break;
+                }
+                if (json_object_object_get_ex(globalobj, key, &devobj)) {
+                    json_object_object_get_ex(devobj, "maptime", &obj);
+                    tmp = json_object_get_string(obj);
+                    nbd_out("%-25s", tmp ? tmp : "Unkown");
+
+                    json_object_object_get_ex(devobj, "status", &obj);
+                    tmp = json_object_get_string(obj);
+                    nbd_out("%-15s", tmp ? tmp : "Unkown");
+
+                    json_object_object_get_ex(devobj, "backstore", &obj);
+                    tmp = json_object_get_string(obj);
+                    nbd_out("%s\n", tmp ? tmp : "Unkown");
+                } else {
+                    nbd_out("%-25s%-15s%s\n", "Unkown", "Unkown", "Unkown");
+                }
             } else {
-                nbd_out("/dev/nbd%d\t%s\n", index, "Unmapped");
+                nbd_out("/dev/nbd%-12d%s\n", index, "Unmapped");
             }
             break;
         default:
             nbd_err("Invalid list type: %d!\n", nbd_list_type);
-            return NL_STOP;
+            ret = NL_STOP;
+            goto err;
         }
     }
 
-    return NL_OK;
+    ret = NL_OK;
+err:
+    if (list_dump)
+        json_object_put(globalobj);
+    return ret;
 }
 
 static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd, int type,
@@ -814,99 +857,6 @@ int nbd_unmap_device(int count, char **options, int type)
     return unmap_device(netfd, driver_id, index);
 }
 
-static void nbd_build_list_hash(const char *info)
-{
-    struct list_info *value;
-    const char *pos;
-    const char *end;
-    char *sep;
-    char *key;
-
-    if (!info)
-        return;
-
-    pos = info;
-    end = info + strlen(info);
-
-    while (*pos == ' ')
-        pos++;
-
-    while (pos < end) {
-        key = NULL;
-        value = NULL;
-
-        if (*pos != '{' && *(pos + 1) != '[') {
-            nbd_err("invalid key string!\n");
-            goto err;
-        }
-
-        pos += 2;
-
-        key = calloc(1, NBD_DLEN_MAX);
-        if (!key) {
-            nbd_err("failed to alloc memory for key!\n");
-            goto err;
-        }
-
-        value = calloc(1, sizeof(struct list_info));
-        if (!value) {
-            nbd_err("failed to alloc memory for value!\n");
-            free(key);
-            goto err;
-        }
-
-        sep = strchr(pos, ']');
-        if (!sep) {
-            nbd_err("invalid key string!\n");
-            goto err;
-        }
-        strncpy(key, pos, sep - pos);
-        pos = sep + 1;
-
-        if (*pos != '[') {
-            nbd_err("invalid cfg string!\n");
-            goto err;
-        }
-        pos++;
-
-        sep = strchr(pos, ']');
-        if (!sep) {
-            nbd_err("invalid key string!\n");
-            goto err;
-        }
-        strncpy(value->cfg, pos, sep - pos);
-        pos = sep + 1;
-
-        if (*pos != '[') {
-            nbd_err("invalid cfg string!\n");
-            goto err;
-        }
-        pos++;
-
-        sep = strchr(pos, ']');
-        if (!sep) {
-            nbd_err("invalid key string!\n");
-            goto err;
-        }
-        strncpy(value->time, pos, sep - pos);
-        pos = sep + 1;
-
-        if (*pos != '}') {
-            nbd_err("invalid key string!\n");
-            goto err;
-        }
-
-        pos++;
-
-        g_hash_table_insert(list_hash, key, value);
-    }
-
-    return;
-err:
-    free(key);
-    free(value);
-}
-
 int nbd_list_devices(int count, char **options, int type)
 {
     CLIENT *clnt = NULL;
@@ -925,13 +875,6 @@ int nbd_list_devices(int count, char **options, int type)
     if (count < 0 || count > 3) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
-    }
-
-    list_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
-                                      free_value);
-    if (!list_hash) {
-        nbd_err("failed to create list_hash table!\n");
-        return -1;
     }
 
     ind = 0;
@@ -988,7 +931,7 @@ int nbd_list_devices(int count, char **options, int type)
             goto nla_put_failure;
         }
 
-        nbd_build_list_hash(rep.out);
+        list_dump = strdup(rep.out);
     }
 
     netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST, type, NULL, NULL);
@@ -1024,7 +967,6 @@ nla_put_failure:
     }
 
     free(host);
-    g_hash_table_destroy(list_hash);
     return ret;
 }
 
