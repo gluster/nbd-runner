@@ -275,7 +275,11 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
+#if GFAPI_VER6
     if (glfs_ftruncate(fd, dev->size, NULL, NULL) < 0) {
+#else
+    if (glfs_ftruncate(fd, dev->size) < 0) {
+#endif
         rep->exit = -errno;
         snprintf(rep->out, NBD_EXIT_MAX, "Failed to truncate file %s on volume %s!",
                  info->path, info->volume);
@@ -528,10 +532,15 @@ err:
     return ret;
 }
 
+#if GFAPI_VER6
 static void glfs_async_cbk(glfs_fd_t *gfd, ssize_t ret,
                            struct glfs_stat *prestat,
                            struct glfs_stat *poststat,
                            void *data)
+#else
+static void glfs_async_cbk(glfs_fd_t *gfd, ssize_t ret,
+                           void *data)
+#endif
 {
     struct nbd_handler_request *req = data;
 
