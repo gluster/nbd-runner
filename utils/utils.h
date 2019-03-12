@@ -63,6 +63,17 @@
 
 #define CFGFS_NBD_MOD "/sys/module/nbd"
 
+typedef enum {
+    NBD_DEV_CONN_ST_MIN = 0,
+
+    NBD_DEV_CONN_ST_CREATED,
+    NBD_DEV_CONN_ST_MAPPED,
+    NBD_DEV_CONN_ST_UNMAPPED,
+    NBD_DEV_CONN_ST_DEAD,
+
+    NBD_DEV_CONN_ST_MAX,
+} dev_status_t;
+
 #define round_down(a, b) ({            \
         __typeof__ (a) _a = (a);       \
         __typeof__ (b) _b = (b);       \
@@ -79,6 +90,8 @@ struct nego_reply {
     __u8  error[0];
 };
 
+const char *nbd_dev_status_lookup_str(dev_status_t st);
+dev_status_t nbd_dev_status_lookup(const char *st);
 GPtrArray *nbd_get_local_maphost(unsigned int family);
 bool nbd_valid_size(const char *value);
 ssize_t nbd_parse_size(const char *value, int sector_size);

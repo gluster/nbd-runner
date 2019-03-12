@@ -22,13 +22,6 @@
 #include "rpc_nbd.h"
 #include "utils.h"
 
-typedef enum {
-    NBD_DEV_CONN_ST_CREATED,
-    NBD_DEV_CONN_ST_MAPPED,
-    NBD_DEV_CONN_ST_UNMAPPED,
-    NBD_DEV_CONN_ST_DEAD,
-} dev_status_t;
-
 struct nbd_device {
     handler_t type;
     struct nbd_handler *handler;
@@ -39,6 +32,12 @@ struct nbd_device {
     bool prealloc;
     ssize_t size;
     ssize_t blksize;
+
+    /* To protect the nbd_device members */
+    pthread_mutex_t lock;
+
+    /* To make sure the socket is writen sequentially */
+    pthread_mutex_t sock_lock;
 
     dev_status_t status;
 
@@ -52,8 +51,6 @@ struct nbd_handler {
     const char *name;	/* Human-friendly name */
     handler_t subtype;     /* Type for matching */
     const char *cfgstring;	/* Handler specified cfgstring to setup the backstore */
-
-    pthread_mutex_t lock;
 
     void *data;		/* Handler private data. */
 
