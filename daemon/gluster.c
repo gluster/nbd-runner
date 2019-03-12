@@ -430,6 +430,9 @@ static bool glfs_unmap(struct nbd_device *dev)
     glfs_close(info->gfd);
     glfs_fini(info->glfs);
 
+    info->gfd = NULL;
+    info->glfs = NULL;
+
     return true;
 }
 
