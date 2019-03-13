@@ -6,6 +6,36 @@ A daemon that handles the userspace side of the NBD(Network Block Device) backst
 
 A cli utility, which aims at making backstore creation/deletion/mapping/unmaping/listing.
 
+# one simple graph:
+
+```script
+                         nbd-runner                                   nbd-cli
+                  +----------------------+                     +---------------------+
+                  |                      |                     |                     |
+                  |                      |                     |                     |
++-----------+     |      CONTROL HOST IP |  RPC control route  | create/delete       |
+|           |     |      listen on       <---------------------> map/unmap/list, etc |
+|  Gluster  <----->      TCP/24110 port  |                     |  +                  |
+|           |     |                      |                     |  |                  |
++-----------+     |                      |                     |  |                  |
+                  |                      |                     |  | MAP will         |
+                  |                      |                     |  | setup            |
+                  |                      |                     |  | the NBD          |
+                  |                      |                     |  | devices          |
+                  |                      |                     |  |                  |
++-----------+     |                      |                     |  |                  |
+|           |     |                      |                     |  |                  |
+|   Ceph    <----->                      |                     |  |          READ    |
+|           |     |       IO HOST IP     | MAPPED NBD(IO) route|  v          WRITE   |
++-----------+     |       listen on      <-------------------->+ /dev/nbdXX  FLUSH   |
+                  |       TCP/24111 port |                     |             TRIM    |
+                  |                      |                     |             ...     |
+                  |                      |                     |                     |
+                  +----------------------+                     +---------------------+
+
+```
+<b>NOTE:</b> The 'CONTROL HOST IP' and the 'IO HOST IP' could be same or different, and the 'nbd-runner' and 'nbd-cli' could run on the same node or in different nodes, both are up to your use case. 
+
 ## License
 nbd-runner is licensed to you under your choice of the GNU Lesser General Public License, version 3 or any later version ([LGPLv3](https://opensource.org/licenses/lgpl-3.0.html) or later), or the GNU General Public License, version 2 ([GPLv2](https://opensource.org/licenses/GPL-2.0)), in all cases as published by the Free Software Foundation.
 
@@ -20,9 +50,9 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 # ./configure # '--with-tirpc=no' means try to use legacy glibc, otherwise use libtirpc by default, '--with-gfapi6' means use GFAPI version >= 6.0
 # make -j
 # make install
-#
-# NOTE: Glibc has removed the rpc functions from the [2.26 release](https://sourceware.org/ml/libc-alpha/2017-08/msg00010.html). Instead of relying on glibc providing these, the modern libtirpc library should be used instead. For the old glibc version or some distribute Linux we will still use the glibc instead to privide the RPC library.
 </pre>
+
+<b>NOTE:</b> Glibc has removed the rpc functions from the [2.26 release](https://sourceware.org/ml/libc-alpha/2017-08/msg00010.html). Instead of relying on glibc providing these, the modern libtirpc library should be used instead. For the old glibc version or some distribute Linux we will still use the glibc instead to privide the RPC library.
 
 ### Usage
 ------
