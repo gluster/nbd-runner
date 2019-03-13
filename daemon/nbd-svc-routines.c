@@ -944,12 +944,12 @@ int rpc_nbd_1_freeresult(SVCXPRT *transp, xdrproc_t xdr_result, caddr_t result)
     return 1;
 }
 
-void free_key(gpointer key)
+static void free_key(gpointer key)
 {
     free(key);
 }
 
-void free_value(gpointer value)
+static void free_value(gpointer value)
 {
     struct nbd_device *dev = value;
 

@@ -47,16 +47,37 @@ struct glfs_info {
     glfs_fd_t *gfd;
 };
 
+static GHashTable *glfs_volume_hash;
+
 static struct glfs *nbd_volume_init(char *volume, char *host)
 {
     struct glfs *glfs;
+    char *key;
     int ret;
+    int len;
+
+    if (!volume || !host)
+        return NULL;
+
+    len = strlen(volume) + strlen(host) + 2;
+
+    key = malloc(len);
+    if (!key) {
+        nbd_err("No memory for buf!\n");
+        return NULL;
+    }
+
+    snprintf(key, len, "%s@%s", volume, host);
+
+    glfs = g_hash_table_lookup(glfs_volume_hash, key);
+    if (glfs)
+        return glfs;
 
     glfs = glfs_new(volume);
     if (!glfs) {
         nbd_err("Not able to Initialize volume %s, %s\n",
                 volume, strerror(errno));
-        return NULL;
+        goto out;
     }
 
     ret = glfs_set_volfile_server(glfs, "tcp", host, 24007);
@@ -87,11 +108,12 @@ static struct glfs *nbd_volume_init(char *volume, char *host)
         goto out;
     }
 
+    g_hash_table_insert(glfs_volume_hash, key, glfs);
     return glfs;
 
 out:
     glfs_fini(glfs);
-
+    free(key);
     return NULL;
 }
 
@@ -594,6 +616,18 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
     }
 }
 
+static void free_key(gpointer key)
+{
+    free(key);
+}
+
+static void free_value(gpointer value)
+{
+    struct glfs *glfs = value;
+
+    glfs_fini(glfs);
+}
+
 struct nbd_handler glfs_handler = {
     .name           = "Gluster gfapi handler",
     .subtype        = NBD_BACKSTORE_GLUSTER,
@@ -611,5 +645,12 @@ struct nbd_handler glfs_handler = {
 /* Entry point must be named "handler_init". */
 int handler_init(void)
 {
+    glfs_volume_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
+                                             free_value);
+    if (!glfs_volume_hash) {
+        nbd_err("failed to create glfs_volume_hash hash table!\n");
+        return -1;
+    }
+
 	return nbd_register_handler(&glfs_handler);
 }
