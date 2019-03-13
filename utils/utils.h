@@ -32,8 +32,8 @@
 #include <gmodule.h>
 #include "config.h"
 
-#define nbd_version_info ""                                       \
-"nbd-runner (0.1)\n\n"                                              \
+#define nbd_version_info ""                                         \
+"nbd-runner/nbd-cli (0.1)\n\n"                                      \
 "Repository rev: https://github.com/gluster/nbd-runner.git\n"       \
 "Copyright (c) 2019 Red Hat, Inc. <https://redhat.com/>\n"          \
 "gluster-nbd comes with ABSOLUTELY NO WARRANTY.\n"                  \

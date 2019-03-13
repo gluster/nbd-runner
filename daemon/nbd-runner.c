@@ -298,6 +298,9 @@ int main (int argc, char **argv)
             }
 
             ind += 2;
+        } else if (!strcmp("version", argv[ind])) {
+            _nbd_out("%s\n", nbd_version_info);
+            goto out;
         } else if (!strcmp("help", argv[ind])) {
             usage();
             goto out;
