@@ -664,7 +664,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     char *bstore, *out;
     int len = NBD_EXIT_MAX;
     int l = 0;
-    char *buf = NULL;
+    char *tmp = NULL;
     const char *st;
     int max = max(4096, max(NBD_DLEN_MAX, NBD_TLEN_MAX));
 
@@ -685,8 +685,8 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         return true;
     }
 
-    buf = malloc(max);
-    if (!buf) {
+    tmp = malloc(max);
+    if (!tmp) {
         rep->exit = -ENOMEM;
         snprintf(rep->buf, NBD_EXIT_MAX, "No memory for the tmp buf!");
         nbd_err("No memory for tmp buf!\n");
@@ -719,11 +719,11 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
          *
          */
         l += strlen(dev->nbd) + 6;
-        l += snprintf(buf, max, "%d", dev->type) + 8;
+        l += snprintf(tmp, max, "%d", dev->type) + 8;
         l += strlen(bstore) + 12;
         l += strlen(dev->time) + 13;
-        l += snprintf(buf, max, "%d", dev->size) + 8;
-        l += snprintf(buf, max, "%d", dev->blksize) + 11;
+        l += snprintf(tmp, max, "%d", dev->size) + 8;
+        l += snprintf(tmp, max, "%d", dev->blksize) + 11;
         l += 17;
         l += 17;
         st = nbd_dev_status_lookup_str(dev->status);
@@ -767,7 +767,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
 
 err:
     json_object_put(globalobj);
-    free(buf);
+    free(tmp);
     return true;
 }
 
