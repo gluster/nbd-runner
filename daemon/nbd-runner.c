@@ -32,7 +32,7 @@
 #define NBD_DEF_THREADS  1
 #define NBD_MAX_THREADS  16
 
-static char *maphost;
+static char *iohost;
 
 struct io_thread_data {
     int threads;
@@ -45,19 +45,20 @@ static void usage(void)
              "\tnbd-runner [<args>]\n\n"
              "Commands:\n"
              "\thelp\n"
-             "\t\tdisplay help for nbd-runner command\n\n"
+             "\t\tDisplay help for nbd-runner command\n\n"
              "\tthreads <NUMBER>\n"
-             "\t\tspecify the IO thread number for each mapped backstore, 1 as default\n\n"
-             "\trpchost <RPC_HOST>\n"
-             "\t\tspecify the listenning IP for the RPC server, INADDR_ANY as default\n\n"
-             "\tmaphost <MAP_HOST>\n"
-             "\t\tspecify the listenning IP for the MAP server, INADDR_ANY as default\n\n"
+             "\t\tSpecify the IO thread number for each mapped backstore, 1 as default\n\n"
+             "\trpchost <CONTROL_HOST>\n"
+             "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the control\n"
+             "\t\tcommands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default\n\n"
+             "\tiohost <IO_HOST>\n"
+             "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the NBD device's\n"
+             "\t\tIO operations(WRITE/READ/FLUSH/TRIM, etc), INADDR_ANY as default\n\n"
              "\tversion\n"
-             "\t\tshow version info and exit.\n\n"
+             "\t\tShow version info and exit.\n\n"
              "\tNOTE:\n"
-             "\t\tThe RPC_HOST is used for the control commands from nbd-cli, such as the create/delete/map/list, etc.\n"
-             "\t\tAnd the MAP_HOST is used by the map command which will establish the IO connection with NBD devices.\n"
-             "\t\tThis will be useful if you'd like the control commands and the IOs through different NICs\n"
+             "\t\tThe CONTROL_HOST and the IO_HOST will be useful if you'd like the control commands\n"
+             "\t\troute different from the IOs route via different NICs, or just omit them as default\n"
             );
 }
 
@@ -110,10 +111,10 @@ static void *nbd_map_svc_thread_start(void *arg)
     }
 
     sin.sin_family = AF_INET;
-    if (maphost) {
-        if (inet_pton(AF_INET, maphost, (void *)&sin.sin_addr.s_addr) < 0)
+    if (iohost) {
+        if (inet_pton(AF_INET, iohost, (void *)&sin.sin_addr.s_addr) < 0)
         {
-            nbd_err("failed to convert %s to binary form!\n", maphost);
+            nbd_err("failed to convert %s to binary form!\n", iohost);
             goto err;
         }
     } else {
@@ -248,25 +249,25 @@ int main (int argc, char **argv)
 
     ind = 1;
     while (ind < argc) {
-        if (!strcmp("maphost", argv[ind])) {
+        if (!strcmp("iohost", argv[ind])) {
             if (ind + 1 >= argc) {
-                nbd_err("Invalid argument 'host <MAP_HOST>'!\n\n");
+                nbd_err("Invalid argument '<iohost IO_HOST>'!\n\n");
                 goto out;
             }
 
-            maphost = strdup(argv[ind + 1]);
-            if (!maphost) {
+            iohost = strdup(argv[ind + 1]);
+            if (!iohost) {
                 nbd_err("No memory for host!\n");
                 goto out;
             }
 
-            if (!nbd_init_maphost(maphost, AF_INET))
+            if (!nbd_init_maphost(iohost, AF_INET))
                 goto out;
 
             ind += 2;
         } else if (!strcmp("rpchost", argv[ind])) {
             if (ind + 1 >= argc) {
-                nbd_err("Invalid argument 'host <RPC_HOST>'!\n\n");
+                nbd_err("Invalid argument 'rpchost <CONTROL_HOST>'!\n\n");
                 goto out;
             }
 

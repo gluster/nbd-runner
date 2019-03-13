@@ -26,11 +26,11 @@
 
 static void usage(void)
 {
-    _nbd_out("Usage:\n"
-            " gluster help\t\t-display help for gluster commands\n"
-            " ceph help\t\t-display help for ceph commands, TODO\n"
-            " global help\t\t-display help for global commands, TODO\n"
-            " version\t\t-display the version of nbd-cli\n\n"
+    _nbd_out("Usage:\n\n"
+            "\tgluster help\n\t\tDisplay help for gluster commands\n\n"
+            "\tceph help [TODO]\n\t\tDisplay help for ceph commands\n\n"
+            "\tglobal help [TODO]\n\t\tDisplay help for global commands\n\n"
+            "\tversion\n\t\tDisplay the version of nbd-cli\n\n"
             );
 }
 

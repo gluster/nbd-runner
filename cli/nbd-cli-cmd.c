@@ -103,7 +103,7 @@ int nbd_create_backstore(int count, char **options, int type)
     while (ind < count) {
         if (!strcmp("host", options[ind])) {
             if (ind + 1 >= count) {
-                nbd_err("Invalid argument 'host <HOST>'!\n\n");
+                nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
                 goto err;
             }
 
@@ -145,7 +145,7 @@ int nbd_create_backstore(int count, char **options, int type)
     }
 
     if (!host) {
-        nbd_err("<host HOST> param is a must here!\n");
+        nbd_err("<host CONTROL_HOST> param is a must here!\n");
         goto err;
     }
 
@@ -221,7 +221,7 @@ int nbd_delete_backstore(int count, char **options, int type)
 
     if (!strcmp("host", options[1])) {
         if (count < 3) {
-            nbd_err("Invalid argument 'host <HOST>'!\n\n");
+            nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
             goto err;
         }
 
@@ -234,7 +234,7 @@ int nbd_delete_backstore(int count, char **options, int type)
     }
 
     if (!host) {
-        nbd_err("<host HOST> param is a must here!\n");
+        nbd_err("<host CONTROL_HOST> param is a must here!\n");
         goto err;
     }
 
@@ -649,7 +649,7 @@ int nbd_map_device(int count, char **options, int type)
             ind += 1;
         } else if (!strcmp("host", options[ind])) {
             if (ind + 1 >= count) {
-                nbd_err("Invalid argument 'host <HOST>'!\n\n");
+                nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
                 goto err;
             }
 
@@ -686,7 +686,7 @@ int nbd_map_device(int count, char **options, int type)
     }
 
     if (!host) {
-        nbd_err("<host HOST> param is a must here!\n");
+        nbd_err("<host CONTROL_HOST> param is a must here!\n");
         goto err;
     }
 
@@ -800,7 +800,7 @@ int nbd_unmap_device(int count, char **options, int type)
         } else if (!strcmp("host", options[ind])) {
             if (ind + 1 >= count) {
                 ret = -EINVAL;
-                nbd_err("Invalid argument 'host <HOST>'!\n\n");
+                nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
                 goto err;
             }
 
@@ -820,7 +820,7 @@ int nbd_unmap_device(int count, char **options, int type)
     }
 
     if (!host) {
-        nbd_err("<host HOST> param is a must here!\n");
+        nbd_err("<host CONTROL_HOST> param is a must here!\n");
         goto err;
     }
 
@@ -1097,7 +1097,7 @@ int nbd_list_devices(int count, char **options, int type)
     while (ind < count) {
         if (!strcmp(options[ind], "host")) {
             if (ind + 1 >= count) {
-                nbd_err("Invalid argument 'host <HOST>'!\n\n");
+                nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
                 goto nla_put_failure;
             }
 
