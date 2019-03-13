@@ -31,7 +31,7 @@
 
 struct timeval TIMEOUT = {.tv_sec = 15};
 
-static char *list_dump = NULL;
+static GHashTable *list_hash;
 
 static void free_key(gpointer key)
 {
@@ -279,13 +279,18 @@ err:
 }
 
 typedef enum {
+    /* These are for the NBD device stats */
     NBD_LIST_MAPPED,
     NBD_LIST_UNMAPPED,
+
+    /* The followings are for the backstore state */
+    NBD_LIST_CREATED,
+    NBD_LIST_DEAD,
+    NBD_LIST_LIVE,
+
+    /* Will list all the states above */
     NBD_LIST_ALL,
 } list_type;
-
-static int nbd_list_type = NBD_LIST_ALL;
-static char *list_detail;
 
 static struct nla_policy nbd_device_policy[NBD_DEVICE_ATTR_MAX + 1] = {
     [NBD_DEVICE_INDEX]              =       { .type = NLA_U32 },
@@ -340,16 +345,16 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
 {
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *msg_attr[NBD_ATTR_MAX + 1];
-    json_object *globalobj = NULL;
-    json_object *devobj = NULL;
-    json_object *obj = NULL;
     uint32_t index;
     struct nlattr *attr;
-    char key[NBD_DLEN_MAX];
-    const char *tmp;
     int rem;
+    char *key;
+    int *value;
     int status;
-    int ret;
+    int ret = NL_OK;
+
+    if (!list_hash)
+        return NL_OK;
 
     if (nla_parse(msg_attr, NBD_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
                   genlmsg_attrlen(gnlh, 0), NULL) < 0) {
@@ -362,14 +367,6 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
         return NL_STOP;
     }
 
-    if (list_dump) {
-        globalobj = json_tokener_parse(list_dump);
-        nbd_out("%-20s%-15s%-25s%-15s%s\n", "DEVICES", "STATUS", "TIME", "CONNECT", "BACKSTORE");
-        nbd_out("%-20s%-15s%-25s%-15s%s\n", "-------", "------", "----", "-------", "---------");
-    } else {
-        nbd_out("%-20s%s\n", "DEVICES", "STATUS");
-        nbd_out("%-20s%s\n", "-------", "------");
-    }
     nla_for_each_nested(attr, msg_attr[NBD_ATTR_DEVICE_LIST], rem) {
         struct nlattr *devices[NBD_DEVICE_ATTR_MAX + 1];
 
@@ -389,74 +386,15 @@ static int list_nl_callback(struct nl_msg *msg, void *arg)
         index = (int)nla_get_u32(devices[NBD_DEVICE_INDEX]);
         status = (int)nla_get_u8(devices[NBD_DEVICE_CONNECTED]);
 
-        switch (nbd_list_type) {
-        case NBD_LIST_MAPPED:
-            if (status) {
-                snprintf(key, NBD_DLEN_MAX, "/dev/nbd%d", index);
-                nbd_out("%-20s%-15s", key, "Mapped");
-                if (!list_dump) {
-                    nbd_out("\n");
-                    break;
-                }
-                if (json_object_object_get_ex(globalobj, key, &devobj)) {
-                    json_object_object_get_ex(devobj, "maptime", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_out("%-25s", tmp ? tmp : "Unkown");
+        key = malloc(NBD_DLEN_MAX);
+        snprintf(key, NBD_DLEN_MAX, "/dev/nbd%d", index);
+        value = malloc(sizeof(int));
+        *value = status;
 
-                    json_object_object_get_ex(devobj, "status", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_out("%-15s", tmp ? tmp : "Unkown");
-
-                    json_object_object_get_ex(devobj, "backstore", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_out("%s\n", tmp ? tmp : "Unkown");
-                } else {
-                    nbd_out("%-25s%-15s%s\n", "Unkown", "Unkown", "Unkown");
-                }
-            }
-            break;
-        case NBD_LIST_UNMAPPED:
-            if (!status)
-                nbd_out("/dev/nbd%-12d%s\n", index, "Unmapped");
-            break;
-        case NBD_LIST_ALL:
-            if (status) {
-                snprintf(key, NBD_DLEN_MAX, "/dev/nbd%d", index);
-                nbd_out("%-20s%-15s", key, "Mapped");
-                if (!list_dump) {
-                    nbd_out("\n");
-                    break;
-                }
-                if (json_object_object_get_ex(globalobj, key, &devobj)) {
-                    json_object_object_get_ex(devobj, "maptime", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_out("%-25s", tmp ? tmp : "Unkown");
-
-                    json_object_object_get_ex(devobj, "status", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_out("%-15s", tmp ? tmp : "Unkown");
-
-                    json_object_object_get_ex(devobj, "backstore", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_out("%s\n", tmp ? tmp : "Unkown");
-                } else {
-                    nbd_out("%-25s%-15s%s\n", "Unkown", "Unkown", "Unkown");
-                }
-            } else {
-                nbd_out("/dev/nbd%-12d%s\n", index, "Unmapped");
-            }
-            break;
-        default:
-            nbd_err("Invalid list type: %d!\n", nbd_list_type);
-            ret = NL_STOP;
-            goto err;
-        }
+        g_hash_table_insert(list_hash, key, value);
     }
 
-    ret = NL_OK;
 err:
-    if (list_dump)
-        json_object_put(globalobj);
     return ret;
 }
 
@@ -830,31 +768,308 @@ nla_put_failure:
 
 int nbd_unmap_device(int count, char **options, int type)
 {
+    CLIENT *clnt = NULL;
+    struct nbd_response rep = {0,};
+    struct addrinfo *res;
+    char *host = NULL;
+    int sock = RPC_ANYSOCK;
+    struct nbd_unmap unmap = {.type = type};
     struct nl_sock *netfd;
     int driver_id;
-    int index = -1;
+    int ind;
+    int ret;;
+    int dev_index = -1;
 
     /* strict check */
-    if (count != 1) {
+    if (count != 3) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
     }
 
-    if (sscanf(options[0], "/dev/nbd%d", &index) != 1) {
-        nbd_err("Invalid nbd device target!\n");
-        return -1;
+    ind = 0;
+    while (ind < count) {
+        if (!strncmp("/dev/nbd", options[ind], strlen("/dev/nbd"))) {
+            if (sscanf(options[ind], "/dev/nbd%d", &dev_index) != 1) {
+                ret = -errno;
+                nbd_err("Invalid nbd-device!\n");
+                goto err;
+            }
+
+            strcpy(unmap.nbd, options[ind]);
+            ind += 1;
+        } else if (!strcmp("host", options[ind])) {
+            if (ind + 1 >= count) {
+                ret = -EINVAL;
+                nbd_err("Invalid argument 'host <HOST>'!\n\n");
+                goto err;
+            }
+
+            host = strdup(options[ind + 1]);
+            if (!host) {
+                ret = -ENOMEM;
+                nbd_err("No memory for host!\n");
+                goto err;
+            }
+
+            ind += 2;
+        } else {
+            ret = -EINVAL;
+            nbd_err("Invalid argument '%s'!\n", options[ind]);
+            goto err;
+        }
     }
 
-    if (index < 0) {
+    if (!host) {
+        nbd_err("<host HOST> param is a must here!\n");
+        goto err;
+    }
+
+    if (dev_index < 0) {
+        ret = -EINVAL;
         nbd_err("Invalid nbd device target!\n");
-        return -1;
+        goto err;
+    }
+
+    res = nbd_get_sock_addr(host);
+    if (!res) {
+        ret = -ENOMEM;
+        nbd_err("failed to get sock addr!\n");
+        goto err;
+    }
+
+    clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
+                          RPC_NBD_VERS, &sock, 0, 0);
+    if (!clnt) {
+        ret = -errno;
+        nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
+        goto err;
+    }
+
+    if (nbd_unmap_1(&unmap, &rep, clnt) != RPC_SUCCESS) {
+        ret = -errno;
+        nbd_err("nbd_premap_1 failed!\n");
+        goto err;
+    }
+
+    ret = rep.exit;
+    if (ret && rep.buf) {
+        nbd_err("Map failed: %s\n", rep.buf);
+        goto err;
     }
 
     netfd = nbd_setup_netlink(&driver_id, NBD_CLI_UNMAP, type, NULL, NULL);
-    if (!netfd)
-        return -1;
+    if (!netfd) {
+        ret = -ENOMEM;
+        goto err;
+    }
 
-    return unmap_device(netfd, driver_id, index);
+    ret = unmap_device(netfd, driver_id, dev_index);
+
+err:
+    free(host);
+    return ret;
+}
+
+static void list_info(const char *info, list_type ltype)
+{
+    json_object *globalobj = NULL;
+    json_object *dobj = NULL;
+    json_object *obj = NULL;
+    uint32_t index;
+    GHashTableIter iter;
+    gpointer key, value;
+    const char *tmp;
+    int status;
+
+    if (!info) {
+        nbd_err("Invalid argument and info is NULL!\n");
+        return;
+    }
+
+    _nbd_out("%-20s%-15s%-25s%-15s%s\n", "DEVICES", "NBD-STAT", "TIME", "BS-STAT", "BACKSTORE");
+    _nbd_out("%-20s%-15s%-25s%-15s%s\n", "-------", "--------", "----", "-------", "---------");
+
+    globalobj = json_tokener_parse(info);
+
+    switch (ltype) {
+    case NBD_LIST_MAPPED:
+        if (globalobj) {
+            json_object_object_foreach(globalobj, objkey, devobj) {
+                json_object_object_get_ex(devobj, "nbd", &obj);
+                tmp = json_object_get_string(obj);
+                if (tmp && tmp[0]) {
+                    g_hash_table_remove(list_hash, tmp);
+
+                    _nbd_out("%-20s%-15s", tmp, "Mapped");
+
+                    json_object_object_get_ex(devobj, "maptime", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-25s", tmp ? tmp : "NA");
+
+                    json_object_object_get_ex(devobj, "status", &obj);
+                    tmp = json_object_get_string(obj);
+                    if (!strcmp(tmp, "dead"))
+                        _nbd_out("%-15s%s\n", "Dead", objkey);
+                    else if (!strcmp(tmp, "mapped"))
+                        _nbd_out("%-15s%s\n", "Live", objkey);
+                    else
+                        _nbd_out("%-15s", "NA");
+                }
+            }
+        }
+        g_hash_table_iter_init(&iter, list_hash);
+        while (g_hash_table_iter_next(&iter, &key, &value)) {
+            status = *(int *)value;
+            if (status) {
+                _nbd_out("%-20s%-15s", key, "Mapped");
+                if (json_object_object_get_ex(globalobj, key, &dobj)) {
+                    json_object_object_get_ex(dobj, "maptime", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-25s", tmp ? tmp : "NA");
+
+                    json_object_object_get_ex(dobj, "status", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-15s", tmp ? tmp : "NA");
+
+                    json_object_object_get_ex(dobj, "backstore", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%s\n", tmp ? tmp : "NA");
+                } else {
+                    _nbd_out("%-25s%-15s%s\n", "NA", "NA", "NA");
+                }
+            }
+        }
+        break;
+    case NBD_LIST_UNMAPPED:
+        g_hash_table_iter_init(&iter, list_hash);
+        while (g_hash_table_iter_next(&iter, &key, &value)) {
+            status = *(int *)value;
+            if (!status)
+                _nbd_out("%-20s%-15s%-25s%-15s%s\n", key, "Unmapped",
+                        "NA", "NA", "NA");
+        }
+        break;
+    case NBD_LIST_CREATED:
+        if (globalobj) {
+            json_object_object_foreach(globalobj, objkey, devobj) {
+                json_object_object_get_ex(devobj, "status", &obj);
+                tmp = json_object_get_string(obj);
+                if (!strcmp(tmp, "created"))
+                    _nbd_out("%-20s%-15s%-25s%-15s%s\n", "NA", "NA", "NA",
+                            "Created", objkey);
+            }
+        }
+        break;
+    case NBD_LIST_DEAD:
+        if (globalobj) {
+            json_object_object_foreach(globalobj, objkey, devobj) {
+                json_object_object_get_ex(devobj, "status", &obj);
+                tmp = json_object_get_string(obj);
+                if (!strcmp(tmp, "dead")) {
+                    json_object_object_get_ex(devobj, "nbd", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-20s%-15s", tmp ? tmp : "NA", "Mapped");
+
+                    json_object_object_get_ex(devobj, "maptime", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-25s%-15s%s\n", tmp ? tmp : "NA", "Dead", objkey);
+                }
+            }
+        }
+        break;
+    case NBD_LIST_LIVE:
+        if (globalobj) {
+            json_object_object_foreach(globalobj, objkey, devobj) {
+                json_object_object_get_ex(devobj, "nbd", &obj);
+                tmp = json_object_get_string(obj);
+                if (tmp && tmp[0]) {
+                    _nbd_out("%-20s", tmp);
+
+                    json_object_object_get_ex(devobj, "status", &obj);
+                    tmp = json_object_get_string(obj);
+                    if (strcmp(tmp, "mapped"))
+                        continue;
+
+                    _nbd_out("%-15s", "Mapped");
+
+                    json_object_object_get_ex(devobj, "maptime", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-25s", tmp ? tmp : "NA");
+
+                    _nbd_out("%-15s%s\n", "Live", objkey);
+                }
+            }
+        }
+        break;
+    case NBD_LIST_ALL:
+        if (globalobj) {
+            json_object_object_foreach(globalobj, objkey, devobj) {
+                json_object_object_get_ex(devobj, "nbd", &obj);
+                tmp = json_object_get_string(obj);
+                if (tmp && tmp[0]) {
+                    g_hash_table_remove(list_hash, tmp);
+
+                    _nbd_out("%-20s%-15s", tmp, "Mapped");
+
+                    json_object_object_get_ex(devobj, "maptime", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-25s", tmp ? tmp : "NA");
+
+                    json_object_object_get_ex(devobj, "status", &obj);
+                    tmp = json_object_get_string(obj);
+                    if (!strcmp(tmp, "dead"))
+                        _nbd_out("%-15s%s\n", "Dead", objkey);
+                    else if (!strcmp(tmp, "mapped"))
+                        _nbd_out("%-15s%s\n", "Live", objkey);
+                    else
+                        _nbd_out("%-15s", "NA");
+                } else {
+                    _nbd_out("%-20s%-15s%-25s", "NA", "NA", "NA");
+                    json_object_object_get_ex(devobj, "status", &obj);
+                    tmp = json_object_get_string(obj);
+                    if (!strcmp(tmp, "created"))
+                        _nbd_out("%-15s", "Created");
+                    else
+                        _nbd_out("%-15s", "NA");
+                    _nbd_out("%s\n", objkey);
+                }
+            }
+        }
+        g_hash_table_iter_init(&iter, list_hash);
+        while (g_hash_table_iter_next(&iter, &key, &value)) {
+            status = *(int *)value;
+            if (status) {
+                _nbd_out("%-20s%-15s", key, "Mapped");
+                if (json_object_object_get_ex(globalobj, key, &dobj)) {
+                    json_object_object_get_ex(dobj, "maptime", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-25s", tmp ? tmp : "NA");
+
+                    json_object_object_get_ex(dobj, "status", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%-15s", tmp ? tmp : "NA");
+
+                    json_object_object_get_ex(dobj, "backstore", &obj);
+                    tmp = json_object_get_string(obj);
+                    _nbd_out("%s\n", tmp ? tmp : "NA");
+                } else {
+                    _nbd_out("%-25s%-15s%s\n", "NA", "NA", "NA");
+                }
+            } else {
+                _nbd_out("%-20s%-15s%-25s%-15s%s\n", key, "Unmapped",
+                        "NA", "NA", "NA");
+            }
+        }
+        break;
+    default:
+        nbd_err("Invalid list type: %d!\n", ltype);
+        goto err;
+    }
+
+err:
+    if (globalobj)
+        json_object_put(globalobj);
+    return;
 }
 
 int nbd_list_devices(int count, char **options, int type)
@@ -870,9 +1085,10 @@ int nbd_list_devices(int count, char **options, int type)
     int driver_id;
     int ind;
     int ret = -1;
+    list_type ltype = NBD_LIST_ALL;
 
     /* strict check */
-    if (count < 0 || count > 3) {
+    if (count < 2 || count > 3) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
     }
@@ -893,13 +1109,22 @@ int nbd_list_devices(int count, char **options, int type)
 
             ind += 2;
         } else if (!strcmp(options[ind], "map")) {
-            nbd_list_type = NBD_LIST_MAPPED;
+            ltype = NBD_LIST_MAPPED;
             ind++;
         } else if (!strcmp(options[ind], "unmap")) {
-            nbd_list_type = NBD_LIST_UNMAPPED;
+            ltype = NBD_LIST_UNMAPPED;
+            ind++;
+        } else if (!strcmp(options[ind], "create")) {
+            ltype = NBD_LIST_CREATED;
+            ind++;
+        } else if (!strcmp(options[ind], "dead")) {
+            ltype = NBD_LIST_DEAD;
+            ind++;
+        } else if (!strcmp(options[ind], "live")) {
+            ltype = NBD_LIST_LIVE;
             ind++;
         } else if (!strcmp(options[ind], "all")) {
-            nbd_list_type = NBD_LIST_ALL;
+            ltype = NBD_LIST_ALL;
             ind++;
         } else {
             nbd_err("Invalid argument for list: %s!\n", options[ind]);
@@ -930,8 +1155,12 @@ int nbd_list_devices(int count, char **options, int type)
             nbd_err("List failed: %s\n", rep.buf);
             goto nla_put_failure;
         }
+    }
 
-        list_dump = strdup(rep.buf);
+    list_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key, free_value);
+    if (!list_hash) {
+        nbd_err("failed to create list_hash table!\n");
+        goto nla_put_failure;
     }
 
     netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST, type, NULL, NULL);
@@ -955,6 +1184,7 @@ int nbd_list_devices(int count, char **options, int type)
     if (nl_send_sync(netfd, msg) < 0)
         nbd_err("Failed to setup device, check dmesg\n");
 
+    list_info(rep.buf, ltype);
     ret = 0;
 
 nla_put_failure:
@@ -966,6 +1196,8 @@ nla_put_failure:
         clnt_destroy(clnt);
     }
 
+    if (list_hash)
+        g_hash_table_destroy(list_hash);
     free(host);
     return ret;
 }

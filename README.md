@@ -109,14 +109,23 @@ Usage:
 
 	gluster help
 		display help for gluster commands
+
 	gluster create <VOLUME@HOST:/FILEPATH> [prealloc] <size SIZE> <host RPC_HOST>
-		create FILEPATH in the VOLUME, prealloc is false as default, and the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)
+		create FILEPATH in the VOLUME, prealloc is false as default, and the SIZE is valid
+		with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)
+
 	gluster delete <VOLUME@HOST:/FILEPATH> <host RPC_HOST>
 		delete FILEPATH from the VOLUME
-	gluster map <VOLUME@HOST:/FILEPATH> [nbd-device] [timeout TIME] <host RPC_HOST> [readonly]
+
+	gluster map <VOLUME@HOST:/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host RPC_HOST>
 		map FILEPATH to the nbd device, as default the timeout 0, none readonly
-	gluster unmap <nbd-device>
+
+	gluster unmap <nbd-device> <host RPC_HOST>
 		unmap the nbd device
-	gluster list [map|unmap|all] [host RPC_HOST]
-		list the mapped|unmapped|all nbd devices, all as default, if the host is omit, it will only list the local nbd device info.
+
+	gluster list [map|unmap|create|dead|live|all] <host RPC_HOST>
+		list the mapped|unmapped NBD devices or the created|dead|live backstores, all as
+		default. 'create' means the backstores are just created or unmapped. 'dead' means
+		the IO connection is lost, this is mainly due to the nbd-runner service is restart
+		without unmapping. 'live' means everything is okay for both mapped and IO connection.
 ```

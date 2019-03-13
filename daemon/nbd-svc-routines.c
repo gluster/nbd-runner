@@ -43,6 +43,7 @@
 
 static GHashTable *nbd_handler_hash;
 static GHashTable *nbd_devices_hash;
+static GHashTable *nbd_nbds_hash;
 static GPtrArray *maphost;
 
 #define NBD_NL_VERSION 1
@@ -179,19 +180,21 @@ static int nbd_config_delete_backstore(struct nbd_device *dev, const char *key)
     return 0;
 }
 
-static int nbd_update_json_config_file(struct nbd_device *dev, const char *key,
-                                       bool replace)
+static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
 {
     json_object *globalobj = NULL;
     json_object *devobj = NULL;
     json_object *obj = NULL;
     const char *st;
+    char *key;
     int ret = 0;
 
-    if (!dev || !key) {
-        nbd_err("Invalid dev or key parameter!\n");
+    if (!dev) {
+        nbd_err("Invalid dev parameter!\n");
         return -EINVAL;
     }
+
+    key = dev->bstore;
 
     globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
     if (globalobj) {
@@ -288,7 +291,12 @@ static int nbd_parse_from_json_config_file(void)
          dev->readonly = json_object_get_boolean(obj);
 
          /* The connection is dead, needed to remap from the client */
-         dev->status = NBD_DEV_CONN_ST_DEAD;
+         if (dev->nbd[0])
+             dev->status = NBD_DEV_CONN_ST_DEAD;
+         else
+             dev->status = NBD_DEV_CONN_ST_CREATED;
+
+         strcpy(dev->bstore, key);
 
          nbd_out("key: %s, type: %d, nbd: %s, maptime: %s, size: %d, blksize: %d, prealloc: %d, readonly: %d\n",
                  key, dev->type, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
@@ -302,8 +310,13 @@ static int nbd_parse_from_json_config_file(void)
              snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
              handler->cfg_parse(dev, ktmp, NULL);
              free(ktmp);
-             nbd_update_json_config_file(dev, key, true);
-             g_hash_table_insert(nbd_devices_hash, key, dev);
+             nbd_update_json_config_file(dev, true);
+             ktmp = strdup(key);
+             g_hash_table_insert(nbd_devices_hash, ktmp, dev);
+             if (dev->nbd[0]) {
+                 ktmp = strdup(dev->nbd);
+                 g_hash_table_insert(nbd_nbds_hash, ktmp, dev);
+             }
          }
      }
 
@@ -390,7 +403,10 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     dev->blksize = handler->get_blksize(dev, NULL);
     if (dev->blksize < 0)
         goto err;
-    nbd_update_json_config_file(dev, key, false);
+
+    strcpy(dev->bstore, key);
+
+    nbd_update_json_config_file(dev, false);
     g_hash_table_insert(nbd_devices_hash, key, dev);
 
 err:
@@ -466,7 +482,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         }
 
         dev->handler = handler;
-        dev->status = NBD_DEV_CONN_ST_UNMAPPED;
+        dev->status = NBD_DEV_CONN_ST_CREATED;
         handler->delete(dev, rep);
         goto err;
     }
@@ -485,6 +501,8 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
 
     nbd_config_delete_backstore(dev, key);
     pthread_mutex_unlock(&dev->lock);
+    if (dev->nbd[0])
+        g_hash_table_remove(nbd_devices_hash, dev->nbd);
     g_hash_table_remove(nbd_devices_hash, key);
 
 err:
@@ -576,9 +594,11 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
             goto err;
         }
 
+        strcpy(dev->bstore, key);
+
         pthread_mutex_init(&dev->sock_lock, NULL);
         pthread_mutex_init(&dev->lock, NULL);
-        nbd_update_json_config_file(dev, key, false);
+        nbd_update_json_config_file(dev, false);
         g_hash_table_insert(nbd_devices_hash, key, dev);
         inserted = true;
     }
@@ -618,6 +638,7 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
     struct nbd_device *dev;
     char *cfg = map->cfgstring;
     char *key;
+    char *nbd;
 
     rep->exit = 0;
 
@@ -648,7 +669,43 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
     dev->status = NBD_DEV_CONN_ST_MAPPED;
     strcpy(dev->time, map->time);
     strcpy(dev->nbd, map->nbd);
-    nbd_update_json_config_file(dev, key, true);
+    nbd = strdup(dev->nbd);
+    g_hash_table_insert(nbd_nbds_hash, nbd, dev);
+    nbd_update_json_config_file(dev, true);
+    pthread_mutex_unlock(&dev->lock);
+
+    return true;
+}
+
+bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
+{
+    struct nbd_device *dev;
+
+    rep->exit = 0;
+
+    rep->buf = calloc(1, NBD_EXIT_MAX);
+    if (!rep->buf) {
+        rep->exit = -ENOMEM;
+        nbd_err("No memory for rep->buf!\n");
+        return true;
+    }
+
+    if (!unmap->nbd[0]) {
+        rep->exit = -EINVAL;
+        snprintf(rep->buf, NBD_EXIT_MAX, "Invalid nbd device, it shouldn't be null!");
+        nbd_err("Invalid nbd device, it shouldn't be null!\n");
+        return true;
+    }
+
+    dev = g_hash_table_lookup(nbd_nbds_hash, unmap->nbd);
+    if (!dev)
+        return true;
+
+    pthread_mutex_lock(&dev->lock);
+    dev->status = NBD_DEV_CONN_ST_CREATED;
+    dev->nbd[0] = '\0';
+    dev->time[0] = '\0';
+    nbd_update_json_config_file(dev, true);
     pthread_mutex_unlock(&dev->lock);
 
     return true;
@@ -661,7 +718,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     struct nbd_device *dev;
     GHashTableIter iter;
     gpointer key, value;
-    char *bstore, *out;
+    char *out;
     int len = NBD_EXIT_MAX;
     int l = 0;
     char *tmp = NULL;
@@ -703,12 +760,11 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
             continue;
         }
 
-        bstore = key;
         /*
-         * The len equals to the lenght of
-         *   "\/dev\/nbd121":{                                --> 6 extra chars
+         * The length equals to
+         *   "dht@192.168.195.164:\/file313":{                --> >=5 extra chars
          *     "type":0,                                      --> 8 extra chars
-         *     "backstore":"dht@192.168.195.164:\/file313",   --> >= 12 extra chars
+         *     "nbd":"\/dev\/nbd121",                         --> 11 extra chars
          *     "maptime":"2019-03-12 13:03:10",               --> 13 extra chars
          *     "size":1073741824,                             --> 8 extra chars
          *     "blksize":4096,                                --> 11 extra chars
@@ -716,11 +772,10 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
          *     "prealloc":false,                              --> 17 chars
          *     "status":"mapped"                              --> 11 extra chars
          *   },                                               --> 2 extar chars
-         *
          */
-        l += strlen(dev->nbd) + 6;
+        l += strlen(dev->nbd) + 5;
+        l += strlen(key) + 11;
         l += snprintf(tmp, max, "%d", dev->type) + 8;
-        l += strlen(bstore) + 12;
         l += strlen(dev->time) + 13;
         l += snprintf(tmp, max, "%d", dev->size) + 8;
         l += snprintf(tmp, max, "%d", dev->blksize) + 11;
@@ -741,7 +796,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         }
 
         json_object_object_add(devobj, "type", json_object_new_int(dev->type));
-        json_object_object_add(devobj, "backstore", json_object_new_string(bstore));
+        json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
         json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
         json_object_object_add(devobj, "size", json_object_new_int(dev->size));
         json_object_object_add(devobj, "blksize", json_object_new_int(dev->blksize));
@@ -749,7 +804,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
         json_object_object_add(devobj, "status", json_object_new_string(st));
         pthread_mutex_unlock(&dev->lock);
-        json_object_object_add(globalobj, dev->nbd, devobj);
+        json_object_object_add(globalobj, key, devobj);
     }
 
     if (l > len) {
@@ -874,11 +929,7 @@ int nbd_handle_request(int sock, int threads)
         if(request.type == htonl(NBD_CMD_DISC)) {
             nbd_dbg("Unmap request received for dev: %s!\n", key);
             pthread_mutex_lock(&dev->lock);
-            dev->status = NBD_DEV_CONN_ST_UNMAPPED;
-            dev->nbd[0] = '\0';
-            dev->time[0] = '\0';
             dev->handler->unmap(dev);
-            nbd_update_json_config_file(dev, key, true);
             pthread_mutex_unlock(&dev->lock);
             ret = 0;
             goto err;
@@ -978,6 +1029,13 @@ bool nbd_service_init(void)
         return false;
     }
 
+    nbd_nbds_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
+                                          NULL);
+    if (!nbd_nbds_hash) {
+        nbd_err("failed to create nbd_nbds_hash hash table!\n");
+        return false;
+    }
+
     return !!nbd_parse_from_json_config_file();
 }
 
@@ -985,6 +1043,7 @@ void nbd_service_fini(void)
 {
     g_hash_table_destroy(nbd_handler_hash);
     g_hash_table_destroy(nbd_devices_hash);
+    g_hash_table_destroy(nbd_nbds_hash);
 }
 
 int nbd_register_handler(struct nbd_handler *handler)

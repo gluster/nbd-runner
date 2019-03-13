@@ -31,7 +31,7 @@ static int gluster_help_routine(int count, char **options)
             continue;
 
         _nbd_out("\t%s\n", gluster_cmds[i].pattern);
-        _nbd_out("\t\t%s\n", gluster_cmds[i].desc);
+        _nbd_out("\t\t%s\n\n", gluster_cmds[i].desc);
     }
     _nbd_out("\n");
 }
@@ -74,23 +74,23 @@ struct cli_cmd gluster_cmds[] = {
     },
     {.pattern = "gluster create <VOLUME@HOST:/FILEPATH> [prealloc] <size SIZE> <host RPC_HOST>",
      .call    = gluster_create_routine,
-     .desc    = "create FILEPATH in the VOLUME, prealloc is false as default, and the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)",
+     .desc    = "create FILEPATH in the VOLUME, prealloc is false as default, and the SIZE is valid\n\t\twith B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)",
     },
     {.pattern = "gluster delete <VOLUME@HOST:/FILEPATH> <host RPC_HOST>",
      .call    = gluster_delete_routine,
      .desc    = "delete FILEPATH from the VOLUME",
     },
-    {.pattern = "gluster map <VOLUME@HOST:/FILEPATH> [nbd-device] [timeout TIME] <host RPC_HOST> [readonly]",
+    {.pattern = "gluster map <VOLUME@HOST:/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host RPC_HOST>",
      .call    = gluster_map_routine,
      .desc    = "map FILEPATH to the nbd device, as default the timeout 0, none readonly",
     },
-    {.pattern = "gluster unmap <nbd-device>",
+    {.pattern = "gluster unmap <nbd-device> <host RPC_HOST>",
      .call    = gluster_unmap_routine,
      .desc    = "unmap the nbd device",
     },
-    {.pattern = "gluster list [map|unmap|all] [host RPC_HOST]",
+    {.pattern = "gluster list [map|unmap|create|dead|live|all] <host RPC_HOST>",
      .call    = gluster_list_routine,
-     .desc    = "list the mapped|unmapped|all nbd devices, all as default, if the host is omit, it will only list the local nbd device info.",
+     .desc    = "list the mapped|unmapped NBD devices or the created|dead|live backstores, all as\n\t\tdefault. 'create' means the backstores are just created or unmapped. 'dead' means\n\t\tthe IO connection is lost, this is mainly due to the nbd-runner service is restart\n\t\twithout unmapping. 'live' means everything is okay for both mapped and IO connection."
     },
     {.pattern = NULL,
      .call    = NULL,
