@@ -41,6 +41,7 @@ struct nbd_device {
 
     dev_status_t status;
 
+    char bstore[NBD_CFGS_MAX];
     char nbd[NBD_DLEN_MAX]; /* e.g. "/dev/nbd14" */
     char time[NBD_TLEN_MAX]; /* e.g. "2019-02-12 12:00:37" */
 

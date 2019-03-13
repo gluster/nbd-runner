@@ -41,6 +41,11 @@ struct nbd_postmap {
     char          cfgstring[CFGS_MAX];
 };
 
+struct nbd_unmap {
+    handler_t     type;
+    char          nbd[DLEN_MAX];
+};
+
 struct nbd_list {
     handler_t     type;
 };
@@ -82,6 +87,7 @@ program RPC_NBD {
         nbd_response NBD_DELETE(nbd_delete) = 2;
         nbd_response NBD_PREMAP(nbd_premap) = 3;
         nbd_response NBD_POSTMAP(nbd_postmap) = 4;
-        nbd_response NBD_LIST(nbd_list) = 5;
+        nbd_response NBD_UNMAP(nbd_unmap) = 5;
+        nbd_response NBD_LIST(nbd_list) = 6;
     } = 1;
 } = RPC1_RPC_PROG_NUM;
