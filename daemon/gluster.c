@@ -333,7 +333,6 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
 
 err:
     glfs_close(fd);
-    glfs_fini(glfs);
 
     return ret;
 }
@@ -376,7 +375,6 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
     ret = true;
 
 err:
-    glfs_fini(glfs);
     free(info);
     dev->priv = NULL;
     return ret;
@@ -440,8 +438,6 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
     ret = true;
 
 err:
-    if (!ret)
-        glfs_fini(glfs);
     return ret;
 }
 
@@ -450,7 +446,6 @@ static bool glfs_unmap(struct nbd_device *dev)
     struct glfs_info *info = dev->priv;
 
     glfs_close(info->gfd);
-    glfs_fini(info->glfs);
 
     info->gfd = NULL;
     info->glfs = NULL;
@@ -500,7 +495,6 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
 
     ret = st.st_size;
 err:
-    glfs_fini(glfs);
     return ret;
 }
 
@@ -553,7 +547,6 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
 
     ret = st.st_blksize;
 err:
-    glfs_fini(glfs);
     return ret;
 }
 
