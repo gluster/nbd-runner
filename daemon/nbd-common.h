@@ -87,7 +87,7 @@ int nbd_register_handler(struct nbd_handler *handler);
 int handler_init(void);
 bool nbd_service_init(void);
 void nbd_service_fini(void);
-GPtrArray *nbd_init_maphost(char *host, unsigned int family);
-void nbd_fini_maphost(void);
+GPtrArray *nbd_init_iohost(char *host, unsigned int family);
+void nbd_fini_iohost(void);
 
 #endif /* __NBD_HANDLER_H */

@@ -44,7 +44,9 @@
 static GHashTable *nbd_handler_hash;
 static GHashTable *nbd_devices_hash;
 static GHashTable *nbd_nbds_hash;
-static GPtrArray *maphost;
+static GPtrArray *iohost;
+
+int io_port = NBD_MAP_SVC_PORT;
 
 #define NBD_NL_VERSION 1
 
@@ -53,7 +55,7 @@ static void nbd_gfree_data(gpointer data)
     free(data);
 }
 
-GPtrArray *nbd_init_maphost(char *host, unsigned int family)
+GPtrArray *nbd_init_iohost(char *host, unsigned int family)
 {
     gpointer ip;
     struct ifaddrs *ifaddr = NULL;
@@ -66,20 +68,20 @@ GPtrArray *nbd_init_maphost(char *host, unsigned int family)
         return NULL;
     }
 
-    if (maphost) {
-        nbd_out("maphost already initialized!\n");
-        return maphost;
+    if (iohost) {
+        nbd_out("iohost already initialized!\n");
+        return iohost;
     }
 
-    maphost = g_ptr_array_new_full(16, nbd_gfree_data);
-    if (!maphost) {
-        nbd_err("failed to init g_ptr array for maphost, %s!\n", strerror(errno));
+    iohost = g_ptr_array_new_full(16, nbd_gfree_data);
+    if (!iohost) {
+        nbd_err("failed to init g_ptr array for iohost, %s!\n", strerror(errno));
         return NULL;
     }
 
     if (host) {
-        g_ptr_array_add(maphost, host);
-        return maphost;
+        g_ptr_array_add(iohost, host);
+        return iohost;
     }
 
     if (getifaddrs(&ifaddr) == -1) {
@@ -109,27 +111,27 @@ GPtrArray *nbd_init_maphost(char *host, unsigned int family)
                 nbd_err("no memory for ip!\n");
                 goto err;
             }
-            g_ptr_array_add(maphost, ip);
+            g_ptr_array_add(iohost, ip);
         }
     }
 
     freeifaddrs(ifaddr);
-    return maphost;
+    return iohost;
 
 err:
-    g_ptr_array_free(maphost, true);
-    maphost = NULL;
+    g_ptr_array_free(iohost, true);
+    iohost = NULL;
     freeifaddrs(ifaddr);
     return NULL;
 }
 
-void nbd_fini_maphost(void)
+void nbd_fini_iohost(void)
 {
-    if (!maphost)
+    if (!iohost)
         return;
 
-    g_ptr_array_free(maphost, true);
-    maphost = NULL;
+    g_ptr_array_free(iohost, true);
+    iohost = NULL;
 }
 
 static char *nbd_get_hash_key(const char *cfgstring)
@@ -613,9 +615,9 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     rep->blksize = dev->blksize;
     pthread_mutex_unlock(&dev->lock);
 
-    if (!maphost) {
-        maphost = nbd_init_maphost(NULL, AF_INET);
-        if (!maphost) {
+    if (!iohost) {
+        iohost = nbd_init_iohost(NULL, AF_INET);
+        if (!iohost) {
             rep->exit = -EINVAL;
             snprintf(rep->buf, NBD_EXIT_MAX, "failed to parse the listen IP addr!");
             nbd_err("failed to parse the listen IP addr!\n");
@@ -624,8 +626,8 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     }
 
     /* Currently we will use the first host */
-    snprintf(rep->host, NBD_HOST_MAX, "%s", g_ptr_array_index (maphost, 0));
-    snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_MAP_SVC_PORT);
+    snprintf(rep->host, NBD_HOST_MAX, "%s", g_ptr_array_index (iohost, 0));
+    snprintf(rep->port, NBD_PORT_MAX, "%d", io_port);
 
 err:
     if (!inserted)

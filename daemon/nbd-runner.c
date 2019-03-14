@@ -40,6 +40,8 @@ struct io_thread_data {
     int sockfd;
 };
 
+extern int io_port;
+
 static void usage(void)
 {
     _nbd_out("Usage:\n"
@@ -121,12 +123,14 @@ static void *nbd_map_svc_thread_start(void *arg)
     } else {
         sin.sin_addr.s_addr = htonl(INADDR_ANY);
     }
-    sin.sin_port = htons(NBD_MAP_SVC_PORT);
+
+again:
+    sin.sin_port = htons(io_port);
 
     if (bind(listenfd, (struct sockaddr*)&sin, sizeof(struct sockaddr)) < 0) {
-        nbd_err("bind on port %d failed, %s\n", NBD_MAP_SVC_PORT,
-                strerror(errno));
-        goto err;
+        nbd_out("bind on port %d failed, %s\n", io_port, strerror(errno));
+        nbd_out("will try to use port %d!\n", ++io_port);
+        goto again;
     }
 
     if (listen(listenfd, 16) < 0) {
@@ -262,7 +266,7 @@ int main (int argc, char **argv)
                 goto out;
             }
 
-            if (!nbd_init_maphost(iohost, AF_INET))
+            if (!nbd_init_iohost(iohost, AF_INET))
                 goto out;
 
             ind += 2;
@@ -347,7 +351,7 @@ int main (int argc, char **argv)
 
 out:
     free(rpchost);
-    nbd_fini_maphost();
+    nbd_fini_iohost();
     if (lockfd != -1)
         close(lockfd);
     nbd_log_destroy();
