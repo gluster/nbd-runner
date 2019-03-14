@@ -22,6 +22,7 @@
 #include <arpa/inet.h>
 
 #include "utils.h"
+#include "version.h"
 #include "nbd-log.h"
 #include "rpc_nbd.h"
 #include "rpc_nbd_svc.h"
@@ -299,7 +300,8 @@ int main (int argc, char **argv)
 
             ind += 2;
         } else if (!strcmp("version", argv[ind])) {
-            _nbd_out("%s\n", nbd_version_info);
+            _nbd_out("nbd-runner (%d.%d)\n\n", NBD_VERSION_MAJ, NBD_VERSION_MIN);
+            _nbd_out("%s\n", NBD_LICENSE_INFO);
             goto out;
         } else if (!strcmp("help", argv[ind])) {
             usage();

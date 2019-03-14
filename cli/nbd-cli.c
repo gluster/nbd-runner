@@ -20,9 +20,10 @@
 #include <sys/utsname.h>
 
 #include "rpc_nbd.h"
-#include "utils/utils.h"
+#include "utils.h"
 #include "nbd-log.h"
 #include "nbd-cli-cmd.h"
+#include "version.h"
 
 static void usage(void)
 {
@@ -185,7 +186,8 @@ int main(int argc, char *argv[])
             usage();
             goto out;
         case NBD_OPT_VERSION:
-            _nbd_out("%s\n", nbd_version_info);
+            _nbd_out("nbd-cli (%d.%d)\n\n", NBD_VERSION_MAJ, NBD_VERSION_MIN);
+            _nbd_out("%s\n", NBD_LICENSE_INFO);
             goto out;
         case NBD_OPT_MAX:
         default:
