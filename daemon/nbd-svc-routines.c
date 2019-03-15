@@ -40,13 +40,14 @@
 #include "nbd-log.h"
 #include "utils.h"
 #include "nbd-common.h"
+#include "nbd-sysconfig.h"
 
 static GHashTable *nbd_handler_hash;
 static GHashTable *nbd_devices_hash;
 static GHashTable *nbd_nbds_hash;
-static GPtrArray *iohost;
 
-int io_port = NBD_MAP_SVC_PORT;
+static char *ihost;
+int iport = NBD_MAP_SVC_PORT;
 
 #define NBD_NL_VERSION 1
 
@@ -55,8 +56,9 @@ static void nbd_gfree_data(gpointer data)
     free(data);
 }
 
-GPtrArray *nbd_init_iohost(char *host, unsigned int family)
+static GPtrArray *nbd_init_iohost(unsigned int family)
 {
+    GPtrArray *iohost;
     gpointer ip;
     struct ifaddrs *ifaddr = NULL;
     struct ifaddrs *ifa;
@@ -68,20 +70,10 @@ GPtrArray *nbd_init_iohost(char *host, unsigned int family)
         return NULL;
     }
 
-    if (iohost) {
-        nbd_out("iohost already initialized!\n");
-        return iohost;
-    }
-
     iohost = g_ptr_array_new_full(16, nbd_gfree_data);
     if (!iohost) {
         nbd_err("failed to init g_ptr array for iohost, %s!\n", strerror(errno));
         return NULL;
-    }
-
-    if (host) {
-        g_ptr_array_add(iohost, host);
-        return iohost;
     }
 
     if (getifaddrs(&ifaddr) == -1) {
@@ -120,18 +112,16 @@ GPtrArray *nbd_init_iohost(char *host, unsigned int family)
 
 err:
     g_ptr_array_free(iohost, true);
-    iohost = NULL;
     freeifaddrs(ifaddr);
     return NULL;
 }
 
-void nbd_fini_iohost(void)
+static void nbd_fini_iohost(GPtrArray *iohost)
 {
     if (!iohost)
         return;
 
     g_ptr_array_free(iohost, true);
-    iohost = NULL;
 }
 
 static char *nbd_get_hash_key(const char *cfgstring)
@@ -615,19 +605,9 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     rep->blksize = dev->blksize;
     pthread_mutex_unlock(&dev->lock);
 
-    if (!iohost) {
-        iohost = nbd_init_iohost(NULL, AF_INET);
-        if (!iohost) {
-            rep->exit = -EINVAL;
-            snprintf(rep->buf, NBD_EXIT_MAX, "failed to parse the listen IP addr!");
-            nbd_err("failed to parse the listen IP addr!\n");
-            goto err;
-        }
-    }
-
     /* Currently we will use the first host */
-    snprintf(rep->host, NBD_HOST_MAX, "%s", g_ptr_array_index (iohost, 0));
-    snprintf(rep->port, NBD_PORT_MAX, "%d", io_port);
+    snprintf(rep->host, NBD_HOST_MAX, "%s", ihost);
+    snprintf(rep->port, NBD_PORT_MAX, "%d", iport);
 
 err:
     if (!inserted)
@@ -1011,8 +991,10 @@ static void free_value(gpointer value)
     free(dev);
 }
 
-bool nbd_service_init(void)
+bool nbd_service_init(struct nbd_config *cfg)
 {
+    GPtrArray *iohost;
+
     mkdir(NBD_SAVE_CONFIG_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     open(NBD_SAVE_CONFIG_FILE, O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
@@ -1022,23 +1004,51 @@ bool nbd_service_init(void)
         return false;
     }
 
-    handler_init();
+    if (!cfg || !cfg->ihost[0]) {
+        iohost = nbd_init_iohost(AF_INET);
+        if (!iohost) {
+            nbd_err("failed to parse the listen IP addr!\n");
+            goto err;
+        }
+
+        ihost = strdup(g_ptr_array_index(iohost, 0));
+        if (!ihost) {
+            nbd_err("no memory for ihost!\n");
+            goto err;
+        }
+        nbd_fini_iohost(iohost);
+    } else {
+        ihost = strdup(cfg->ihost);
+        if (!ihost) {
+            nbd_err("no memory for ihost!\n");
+            goto err;
+        }
+    }
+
+    gluster_handler_init(cfg->ghost);
 
     nbd_devices_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
                                              free_value);
     if (!nbd_devices_hash) {
         nbd_err("failed to create nbd_devices_hash hash table!\n");
-        return false;
+        goto err;
     }
 
     nbd_nbds_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
                                           NULL);
     if (!nbd_nbds_hash) {
         nbd_err("failed to create nbd_nbds_hash hash table!\n");
-        return false;
+        goto err;
     }
 
     return !!nbd_parse_from_json_config_file();
+
+err:
+    nbd_fini_iohost(iohost);
+    g_hash_table_destroy(nbd_handler_hash);
+    g_hash_table_destroy(nbd_devices_hash);
+    g_hash_table_destroy(nbd_nbds_hash);
+    return false;
 }
 
 void nbd_service_fini(void)

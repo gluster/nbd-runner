@@ -1,0 +1,36 @@
+# Master nbd-runner configuration file
+
+# Logging Controls
+# There are 6 logging levels supported:
+#    0: CRIT
+#    1: ERROR
+#    2: WARNING
+#    3: INFO
+#    4: DEBUG
+#    5: DEBUG IO
+# And the default logging level is 3, if you want to change the
+# default level, uncomment it and set your level number:
+# log_level = 3
+#
+# Logging Directory Path
+# The default logging Directory path is /var/log, uncomment it
+# and set your own path:
+# log_dir = "/var/log"
+#
+# IO Host Address
+# The default listening IP address for NBD devices' connection to
+# do the IOs, as default will listen on INADDR_ANY, uncomment it
+# and set your own IP:
+# ihost = ""
+#
+# Runner Host Address
+# The default listening IP address for RPC Control commands, such
+# as the nbd-cli [gluster|ceph|...] create/delete/map/unmap/list,
+# as default will listen on INADDR_ANY, uncomment it and set your
+# own IP:
+# rhost = ""
+#
+# Gluster Host Address
+# The default Gluster cluster server IP address to initialize the
+# volume, "localhost" as default, uncomment it and set your own IP:
+# ghost = "localhost"

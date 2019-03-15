@@ -27,20 +27,21 @@
 #include "rpc_nbd.h"
 #include "rpc_nbd_svc.h"
 #include "nbd-common.h"
+#include "nbd-sysconfig.h"
 
 #define NBD_LOCK_FILE "/run/nbd-runner.lock"
 #define NBD_MIN_THREADS  1
 #define NBD_DEF_THREADS  1
 #define NBD_MAX_THREADS  16
 
-static char *iohost;
+static struct nbd_config *nbd_cfg;
 
 struct io_thread_data {
     int threads;
     int sockfd;
 };
 
-extern int io_port;
+extern int iport;
 
 static void usage(void)
 {
@@ -51,12 +52,14 @@ static void usage(void)
              "\t\tDisplay help for nbd-runner command\n\n"
              "\tthreads <NUMBER>\n"
              "\t\tSpecify the IO thread number for each mapped backstore, 1 as default\n\n"
-             "\trpchost <RUNNER_HOST>\n"
+             "\trhost <RUNNER_HOST>\n"
              "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the control\n"
              "\t\tcommands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default\n\n"
-             "\tiohost <IO_HOST>\n"
+             "\tihost <IO_HOST>\n"
              "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the NBD device's\n"
              "\t\tIO operations(WRITE/READ/FLUSH/TRIM, etc), INADDR_ANY as default\n\n"
+             "\tghost <IO_HOST>\n"
+             "\t\tSpecify the Gluster server IP for the volume to connect to, 'localhost' as default\n\n"
              "\tversion\n"
              "\t\tShow version info and exit.\n\n"
              "\tNOTE:\n"
@@ -114,10 +117,10 @@ static void *nbd_map_svc_thread_start(void *arg)
     }
 
     sin.sin_family = AF_INET;
-    if (iohost) {
-        if (inet_pton(AF_INET, iohost, (void *)&sin.sin_addr.s_addr) < 0)
+    if (nbd_cfg->ihost[0]) {
+        if (inet_pton(AF_INET, nbd_cfg->ihost, (void *)&sin.sin_addr.s_addr) < 0)
         {
-            nbd_err("failed to convert %s to binary form!\n", iohost);
+            nbd_err("failed to convert %s to binary form!\n", nbd_cfg->ihost);
             goto err;
         }
     } else {
@@ -125,11 +128,11 @@ static void *nbd_map_svc_thread_start(void *arg)
     }
 
 again:
-    sin.sin_port = htons(io_port);
+    sin.sin_port = htons(iport);
 
     if (bind(listenfd, (struct sockaddr*)&sin, sizeof(struct sockaddr)) < 0) {
-        nbd_out("bind on port %d failed, %s\n", io_port, strerror(errno));
-        nbd_out("will try to use port %d!\n", ++io_port);
+        nbd_out("bind on port %d failed, %s\n", iport, strerror(errno));
+        nbd_out("will try to use port %d!\n", ++iport);
         goto again;
     }
 
@@ -166,7 +169,6 @@ static void *nbd_rpc_svc_thread_start(void *arg)
     register SVCXPRT *transp = NULL;
     struct sockaddr_in sin = {0, };
     int listenfd = RPC_ANYSOCK;
-    char *rpchost = arg;
     int opt = 1;
     int ret;
 
@@ -184,10 +186,10 @@ static void *nbd_rpc_svc_thread_start(void *arg)
     }
 
     sin.sin_family = AF_INET;
-    if (rpchost) {
-        if (inet_pton(AF_INET, rpchost, (void *)&sin.sin_addr.s_addr) < 0)
+    if (nbd_cfg->rhost[0]) {
+        if (inet_pton(AF_INET, nbd_cfg->rhost, (void *)&sin.sin_addr.s_addr) < 0)
         {
-            nbd_err("failed to convert %s to binary form!\n", rpchost);
+            nbd_err("failed to convert %s to binary form!\n", nbd_cfg->rhost);
             goto out;
         }
     } else {
@@ -241,10 +243,14 @@ int main (int argc, char **argv)
     struct flock lock = {0, };
     char *rpchost = NULL;
     int threads = NBD_DEF_THREADS;
-    int ret;
+    int ret = EXIT_FAILURE;
     int ind;
 
-    nbd_service_init();
+    nbd_cfg = nbd_load_config();
+    if (!nbd_cfg) {
+        nbd_err("nbd_initialize_config failed!\n");
+        goto out;
+    }
 
     ret = nbd_log_init();
     if (ret < 0) {
@@ -254,33 +260,46 @@ int main (int argc, char **argv)
 
     ind = 1;
     while (ind < argc) {
-        if (!strcmp("iohost", argv[ind])) {
+        if (!strcmp("ihost", argv[ind])) {
             if (ind + 1 >= argc) {
-                nbd_err("Invalid argument '<iohost IO_HOST>'!\n\n");
+                nbd_err("Invalid argument '<ihost IO_HOST>'!\n");
                 goto out;
             }
 
-            iohost = strdup(argv[ind + 1]);
-            if (!iohost) {
-                nbd_err("No memory for host!\n");
+            if (!nbd_is_valid_host(argv[ind + 1])) {
+                nbd_err("Invalid IP %s!\n", argv[ind + 1]);
                 goto out;
             }
 
-            if (!nbd_init_iohost(iohost, AF_INET))
-                goto out;
+            snprintf(nbd_cfg->ihost, NBD_HOST_MAX, "%s", argv[ind + 1]);
 
             ind += 2;
-        } else if (!strcmp("rpchost", argv[ind])) {
+        } else if (!strcmp("rhost", argv[ind])) {
             if (ind + 1 >= argc) {
-                nbd_err("Invalid argument 'rpchost <RUNNER_HOST>'!\n\n");
+                nbd_err("Invalid argument 'rhost <RUNNER_HOST>'!\n\n");
                 goto out;
             }
 
-            rpchost = strdup(argv[ind + 1]);
-            if (!rpchost) {
-                nbd_err("No memory for host!\n");
+            if (!nbd_is_valid_host(argv[ind + 1])) {
+                nbd_err("Invalid IP %s!\n", argv[ind + 1]);
                 goto out;
             }
+
+            snprintf(nbd_cfg->rhost, NBD_HOST_MAX, "%s", argv[ind + 1]);
+
+            ind += 2;
+        } else if (!strcmp("ghost", argv[ind])) {
+            if (ind + 1 >= argc) {
+                nbd_err("Invalid argument '<ghost IO_HOST>'!\n");
+                goto out;
+            }
+
+            if (!nbd_is_valid_host(argv[ind + 1])) {
+                nbd_err("Invalid IP %s!\n", argv[ind + 1]);
+                goto out;
+            }
+
+            snprintf(nbd_cfg->ghost, NBD_HOST_MAX, "%s", argv[ind + 1]);
 
             ind += 2;
         } else if (!strcmp("threads", argv[ind])) {
@@ -331,13 +350,15 @@ int main (int argc, char **argv)
         goto out;
     }
 
+    nbd_service_init(nbd_cfg);
+
     /* set signal */
     signal(SIGPIPE, SIG_IGN);
 
     pmap_unset(RPC_NBD, RPC_NBD_VERS);
 
-    pthread_create(&rpc_svc_threadid, NULL, nbd_rpc_svc_thread_start, rpchost);
     pthread_create(&map_svc_threadid, NULL, nbd_map_svc_thread_start, &threads);
+    pthread_create(&rpc_svc_threadid, NULL, nbd_rpc_svc_thread_start, NULL);
     pthread_join(map_svc_threadid, NULL);
     pthread_join(rpc_svc_threadid, NULL);
 
@@ -349,12 +370,12 @@ int main (int argc, char **argv)
                 strerror(errno));
     }
 
+    ret = EXIT_SUCCESS;
 out:
-    free(rpchost);
-    nbd_fini_iohost();
     if (lockfd != -1)
         close(lockfd);
     nbd_log_destroy();
     nbd_service_fini();
-    exit (EXIT_FAILURE);
+    nbd_free_config(nbd_cfg);
+    exit(ret);
 }

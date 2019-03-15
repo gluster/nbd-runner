@@ -1,8 +1,8 @@
 noinst_LTLIBRARIES = libutils.la
 
-libutils_la_SOURCES = utils.c time.c
+libutils_la_SOURCES = utils.c time.c nbd-sysconfig.c
 
-noinst_HEADERS = utils.h nbd-log.h
+noinst_HEADERS = utils.h nbd-log.h nbd-sysconfig.h
 
 libutils_la_CFLAGS = $(TIPRC_CFLAGS) $(GLIB2_CFLAGS)			\
 				     -DDATADIR=\"$(localstatedir)\"    			\

@@ -26,6 +26,7 @@
 #include <ctype.h>
 #include <inttypes.h>
 
+#include "nbd-sysconfig.h"
 
 static inline int _nbd_err(const char *fmt, ...)
 {

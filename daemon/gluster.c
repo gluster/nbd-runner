@@ -46,6 +46,8 @@ struct glfs_info {
     glfs_fd_t *gfd;
 };
 
+static char *glfs_host;
+
 static GHashTable *glfs_volume_hash;
 
 static struct glfs *nbd_volume_init(char *volume)
@@ -77,7 +79,7 @@ static struct glfs *nbd_volume_init(char *volume)
         goto out;
     }
 
-    ret = glfs_set_volfile_server(glfs, "tcp", "localhost", 24007);
+    ret = glfs_set_volfile_server(glfs, "tcp", glfs_host, 24007);
     if (ret) {
         nbd_err("Not able to add Volfile server for volume %s, %s\n",
                 volume, strerror(errno));
@@ -604,7 +606,7 @@ struct nbd_handler glfs_handler = {
 };
 
 /* Entry point must be named "handler_init". */
-int handler_init(void)
+int gluster_handler_init(const char *host)
 {
     glfs_volume_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
                                              free_value);
@@ -612,6 +614,11 @@ int handler_init(void)
         nbd_err("failed to create glfs_volume_hash hash table!\n");
         return -1;
     }
+
+    if (!host)
+        glfs_host = strdup("localhost");
+    else
+        glfs_host = strdup(host);
 
 	return nbd_register_handler(&glfs_handler);
 }
