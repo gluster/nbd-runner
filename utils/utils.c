@@ -240,3 +240,22 @@ const char *nbd_dev_status_lookup_str(dev_status_t st)
         return NULL;
     return dev_status_lookup[st];
 }
+
+bool nbd_is_valid_host(const char *host)
+{
+    char *tmp;
+
+    if (!strcmp(host, "localhost"))
+        return true;
+
+    tmp = malloc(1024);
+    if (!tmp) {
+        nbd_err("No memory for tmp buffer!\n");
+        return false;
+    }
+
+    if (!inet_pton(AF_INET, host, tmp) && !inet_pton(AF_INET6, host, tmp))
+        return false;
+
+    return true;
+}

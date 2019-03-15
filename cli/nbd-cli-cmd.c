@@ -78,7 +78,7 @@ int nbd_create_backstore(int count, char **options, int type)
     int max_len = 1024;
 
     /* strict check */
-    if (count != 5 && count != 6 ) {
+    if (count < 3 || count > 6 ) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
     }
@@ -103,13 +103,21 @@ int nbd_create_backstore(int count, char **options, int type)
     while (ind < count) {
         if (!strcmp("host", options[ind])) {
             if (ind + 1 >= count) {
-                nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
+                ret = -EINVAL;
+                nbd_err("Invalid argument '<host RUNNER_HOST>'!\n\n");
                 goto err;
             }
 
             host = strdup(options[ind + 1]);
             if (!host) {
+                ret = -ENOMEM;
                 nbd_err("No memory for host!\n");
+                goto err;
+            }
+
+            if (!nbd_is_valid_host(host)) {
+                ret = -EINVAL;
+                nbd_err("Invalid host '%s'!\n", host);
                 goto err;
             }
 
@@ -119,6 +127,7 @@ int nbd_create_backstore(int count, char **options, int type)
             ind += 1;
         } else if (!strcmp("size", options[ind])) {
             if (ind + 1 >= count) {
+                ret = -EINVAL;
                 nbd_err("Invalid argument 'size <SIZE>'!\n\n");
                 goto err;
             }
@@ -144,13 +153,15 @@ int nbd_create_backstore(int count, char **options, int type)
         }
     }
 
-    if (!host) {
-        nbd_err("<host CONTROL_HOST> param is a must here!\n");
+    if (!host && !(host = strdup("localhost"))) {
+        ret = -ENOMEM;
+        nbd_err("No memory for host!\n");
         goto err;
     }
 
     res = nbd_get_sock_addr(host);
     if (!res) {
+        ret = -ENOMEM;
         nbd_err("failed to get sock addr!\n");
         goto err;
     }
@@ -158,11 +169,13 @@ int nbd_create_backstore(int count, char **options, int type)
     clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
                           RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
+        ret = -errno;
         nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
         goto err;
     }
 
     if (nbd_create_1(create, &rep, clnt) != RPC_SUCCESS) {
+        ret = -errno;
         nbd_err("nbd_create_1 failed!\n");
         goto err;
     }
@@ -199,7 +212,7 @@ int nbd_delete_backstore(int count, char **options, int type)
     int max_len = 1024;
 
     /* strict check */
-    if (count != 3) {
+    if (count != 1 && count != 3) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
     }
@@ -219,22 +232,30 @@ int nbd_delete_backstore(int count, char **options, int type)
         goto err;
     }
 
-    if (!strcmp("host", options[1])) {
-        if (count < 3) {
-            nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
-            goto err;
-        }
+    if (count == 3) {
+        if(!strcmp("host", options[1])) {
+            host = strdup(options[2]);
+            if (!host) {
+                ret = -ENOMEM;
+                nbd_err("No memory for host!\n");
+                goto err;
+            }
 
-        host = strdup(options[2]);
-        if (!host) {
-            ret = -ENOMEM;
-            nbd_err("No memory for host!\n");
-            goto err;
+            if (!nbd_is_valid_host(host)) {
+                ret = -EINVAL;
+                nbd_err("Invalid host '%s'!\n", host);
+                goto err;
+            }
+        } else {
+                ret = -EINVAL;
+                nbd_err("Invalid parameter '%s %s'!\n", options[1], options[2]);
+                goto err;
         }
     }
 
-    if (!host) {
-        nbd_err("<host CONTROL_HOST> param is a must here!\n");
+    if (!host && !(host = strdup("localhost"))) {
+        ret = -ENOMEM;
+        nbd_err("No memory for host!\n");
         goto err;
     }
 
@@ -615,7 +636,7 @@ int nbd_map_device(int count, char **options, int type)
     int max_len = 1024;
 
     /* strict check */
-    if (count < 3 || count > 7 ) {
+    if (count < 1 || count > 7 ) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
     }
@@ -649,7 +670,7 @@ int nbd_map_device(int count, char **options, int type)
             ind += 1;
         } else if (!strcmp("host", options[ind])) {
             if (ind + 1 >= count) {
-                nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
+                nbd_err("Invalid argument '<host RUNNER_HOST>'!\n\n");
                 goto err;
             }
 
@@ -657,6 +678,11 @@ int nbd_map_device(int count, char **options, int type)
             if (!host) {
                 ret = -ENOMEM;
                 nbd_err("No memory for host!\n");
+                goto err;
+            }
+
+            if (!nbd_is_valid_host(host)) {
+                nbd_err("Invalid host '%s'!\n", host);
                 goto err;
             }
 
@@ -685,8 +711,9 @@ int nbd_map_device(int count, char **options, int type)
         }
     }
 
-    if (!host) {
-        nbd_err("<host CONTROL_HOST> param is a must here!\n");
+    if (!host && !(host = strdup("localhost"))) {
+        ret = -ENOMEM;
+        nbd_err("No memory for host!\n");
         goto err;
     }
 
@@ -781,7 +808,7 @@ int nbd_unmap_device(int count, char **options, int type)
     int dev_index = -1;
 
     /* strict check */
-    if (count != 3) {
+    if (count != 1 && count != 3) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
     }
@@ -800,7 +827,7 @@ int nbd_unmap_device(int count, char **options, int type)
         } else if (!strcmp("host", options[ind])) {
             if (ind + 1 >= count) {
                 ret = -EINVAL;
-                nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
+                nbd_err("Invalid argument '<host RUNNER_HOST>'!\n\n");
                 goto err;
             }
 
@@ -808,6 +835,11 @@ int nbd_unmap_device(int count, char **options, int type)
             if (!host) {
                 ret = -ENOMEM;
                 nbd_err("No memory for host!\n");
+                goto err;
+            }
+
+            if (!nbd_is_valid_host(host)) {
+                nbd_err("Invalid host '%s'!\n", host);
                 goto err;
             }
 
@@ -819,8 +851,9 @@ int nbd_unmap_device(int count, char **options, int type)
         }
     }
 
-    if (!host) {
-        nbd_err("<host CONTROL_HOST> param is a must here!\n");
+    if (!host && !(host = strdup("localhost"))) {
+        ret = -ENOMEM;
+        nbd_err("No memory for host!\n");
         goto err;
     }
 
@@ -878,7 +911,7 @@ static void list_info(const char *info, list_type ltype)
     uint32_t index;
     GHashTableIter iter;
     gpointer key, value;
-    const char *tmp;
+    const char *tmp, *tmp1;
     int status;
 
     if (!info) {
@@ -983,14 +1016,12 @@ static void list_info(const char *info, list_type ltype)
                 json_object_object_get_ex(devobj, "nbd", &obj);
                 tmp = json_object_get_string(obj);
                 if (tmp && tmp[0]) {
-                    _nbd_out("%-20s", tmp);
-
                     json_object_object_get_ex(devobj, "status", &obj);
-                    tmp = json_object_get_string(obj);
-                    if (strcmp(tmp, "mapped"))
-                        continue;
+                    tmp1 = json_object_get_string(obj);
+                    if (strcmp(tmp1, "mapped"))
+                        break;
 
-                    _nbd_out("%-15s", "Mapped");
+                    _nbd_out("%-20s%-15s", tmp, "Mapped");
 
                     json_object_object_get_ex(devobj, "maptime", &obj);
                     tmp = json_object_get_string(obj);
@@ -1088,7 +1119,7 @@ int nbd_list_devices(int count, char **options, int type)
     list_type ltype = NBD_LIST_ALL;
 
     /* strict check */
-    if (count < 2 || count > 3) {
+    if (count < 0 || count > 3) {
          nbd_err("Invalid argument counts\n");
          return -EINVAL;
     }
@@ -1097,13 +1128,21 @@ int nbd_list_devices(int count, char **options, int type)
     while (ind < count) {
         if (!strcmp(options[ind], "host")) {
             if (ind + 1 >= count) {
-                nbd_err("Invalid argument '<host CONTROL_HOST>'!\n\n");
+                ret = -EINVAL;
+                nbd_err("Invalid argument '<host RUNNER_HOST>'!\n\n");
                 goto nla_put_failure;
             }
 
             host = strdup(options[ind + 1]);
             if (!host) {
+                ret = -ENOMEM;
                 nbd_err("No memory for host!\n");
+                goto nla_put_failure;
+            }
+
+            if (!nbd_is_valid_host(host)) {
+                ret = -EINVAL;
+                nbd_err("Invalid host '%s'!\n", host);
                 goto nla_put_failure;
             }
 
@@ -1127,48 +1166,61 @@ int nbd_list_devices(int count, char **options, int type)
             ltype = NBD_LIST_ALL;
             ind++;
         } else {
+            ret = -EINVAL;
             nbd_err("Invalid argument for list: %s!\n", options[ind]);
             goto nla_put_failure;
         }
     }
 
-    if (host) {
-        res = nbd_get_sock_addr(host);
-        if (!res) {
-            nbd_err("failed to get sock addr!\n");
-            goto nla_put_failure;
-        }
+    if (!host && !(host = strdup("localhost"))) {
+        ret = -ENOMEM;
+        nbd_err("No memory for host!\n");
+        goto nla_put_failure;
+    }
 
-        clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
-                              RPC_NBD_VERS, &sock, 0, 0);
-        if (!clnt) {
-            nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
-            goto nla_put_failure;
-        }
+    res = nbd_get_sock_addr(host);
+    if (!res) {
+        ret = -ENOMEM;
+        nbd_err("failed to get sock addr!\n");
+        goto nla_put_failure;
+    }
 
-        if (nbd_list_1(&list, &rep, clnt) != RPC_SUCCESS) {
-            nbd_err("nbd_list_1 failed!\n");
-            goto nla_put_failure;
-        }
+    clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
+            RPC_NBD_VERS, &sock, 0, 0);
+    if (!clnt) {
+        ret = -errno;
+        nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
+        goto nla_put_failure;
+    }
 
-        if (rep.exit && rep.buf) {
-            nbd_err("List failed: %s\n", rep.buf);
-            goto nla_put_failure;
-        }
+    if (nbd_list_1(&list, &rep, clnt) != RPC_SUCCESS) {
+        ret = -errno;
+        nbd_err("nbd_list_1 failed!\n");
+        goto nla_put_failure;
+    }
+
+    ret = rep.exit;
+    if (ret && rep.buf) {
+        nbd_err("List failed: %s\n", rep.buf);
+        goto nla_put_failure;
     }
 
     list_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key, free_value);
     if (!list_hash) {
+        ret = -errno;
         nbd_err("failed to create list_hash table!\n");
         goto nla_put_failure;
     }
 
     netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST, type, NULL, NULL);
-    if (!netfd)
-            goto nla_put_failure;
+    if (!netfd) {
+        ret = -ENOMEM;
+        goto nla_put_failure;
+    }
 
     msg = nlmsg_alloc();
     if (!msg) {
+        ret = -ENOMEM;
         nbd_err("Couldn't allocate netlink message, %s!\n", strerror(errno));
         goto nla_put_failure;
     }
@@ -1181,8 +1233,10 @@ int nbd_list_devices(int count, char **options, int type)
      */
     NLA_PUT_U32(msg, NBD_ATTR_INDEX, -1);
 
-    if (nl_send_sync(netfd, msg) < 0)
+    if (nl_send_sync(netfd, msg) < 0) {
+        ret = -errno;
         nbd_err("Failed to setup device, check dmesg\n");
+    }
 
     list_info(rep.buf, ltype);
     ret = 0;
