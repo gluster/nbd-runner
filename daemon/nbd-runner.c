@@ -8,7 +8,7 @@
   cases as published by the Free Software Foundation.
 */
 
-#define   _GNU_SOURCE
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <fcntl.h>

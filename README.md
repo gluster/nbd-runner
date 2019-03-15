@@ -34,7 +34,7 @@ A cli utility, which aims at making backstore creation/deletion/mapping/unmaping
                   +----------------------+                     +---------------------+
 
 ```
-<b>NOTE:</b> The 'CONTROL HOST IP' and the 'IO HOST IP' could be same or different, and the 'nbd-runner' and 'nbd-cli' could run on the same node or in different nodes, both are up to your use case. 
+<b>NOTE:</b> The 'CONTROL HOST IP' and the 'IO HOST IP' could be same or different, and the 'nbd-runner' and 'nbd-cli' could run on the same node or in different nodes, both are up to your use case. And please make sure that the 'nbd-runner' runs on one of the gluster/ceph server nodes.
 
 ## License
 nbd-runner is licensed to you under your choice of the GNU Lesser General Public License, version 3 or any later version ([LGPLv3](https://opensource.org/licenses/lgpl-3.0.html) or later), or the GNU General Public License, version 2 ([GPLv2](https://opensource.org/licenses/GPL-2.0)), in all cases as published by the Free Software Foundation.
@@ -129,11 +129,11 @@ Usage:
 
    or
 
-    `# nbd-cli gluster create <VOLUME@GLUSTER_HOST:/FILEPATH> [prealloc] <size SIZE> <host CONTROL_HOST>`
+    `# nbd-cli gluster create <VOLUME/FILEPATH> [prealloc] <size SIZE> <host CONTROL_HOST>`
 
 4. Map the file created in backstore gluster volume to the NBD device(in local host), you can specify one unmapped /dev/nbdXX or just omit it and then the NBD kernel module will allocate one for you.
 
-    `# nbd-cli gluster map <VOLUME@GLUSTER_HOST:/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host CONTROL_HOST>`
+    `# nbd-cli gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host CONTROL_HOST>`
 
 5. You will see the mapped NBD device returned and displayed, or you can check the mapped device info by:
 
@@ -149,14 +149,14 @@ Usage:
 	gluster help
 		Display help for gluster commands
 
-	gluster create <VOLUME@GLUSTER_HOST:/FILEPATH> [prealloc] <size SIZE> <host CONTROL_HOST>
+	gluster create <VOLUME/FILEPATH> [prealloc] <size SIZE> <host CONTROL_HOST>
 		Create FILEPATH in the VOLUME, prealloc is false as default, and the SIZE is valid
 		with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)
 
-	gluster delete <VOLUME@GLUSTER_HOST:/FILEPATH> <host CONTROL_HOST>
+	gluster delete <VOLUME/FILEPATH> <host CONTROL_HOST>
 		Delete FILEPATH from the VOLUME
 
-	gluster map <VOLUME@GLUSTER_HOST:/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host CONTROL_HOST>
+	gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host CONTROL_HOST>
 		Map FILEPATH to the nbd device, as default the timeout 0, none readonly
 
 	gluster unmap <nbd-device> <host CONTROL_HOST>
