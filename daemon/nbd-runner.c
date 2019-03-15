@@ -8,7 +8,7 @@
   cases as published by the Free Software Foundation.
 */
 
-#define   _GNU_SOURCE
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <fcntl.h>
@@ -51,7 +51,7 @@ static void usage(void)
              "\t\tDisplay help for nbd-runner command\n\n"
              "\tthreads <NUMBER>\n"
              "\t\tSpecify the IO thread number for each mapped backstore, 1 as default\n\n"
-             "\trpchost <CONTROL_HOST>\n"
+             "\trpchost <RUNNER_HOST>\n"
              "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the control\n"
              "\t\tcommands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default\n\n"
              "\tiohost <IO_HOST>\n"
@@ -60,7 +60,7 @@ static void usage(void)
              "\tversion\n"
              "\t\tShow version info and exit.\n\n"
              "\tNOTE:\n"
-             "\t\tThe CONTROL_HOST and the IO_HOST will be useful if you'd like the control commands\n"
+             "\t\tThe RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands\n"
              "\t\troute different from the IOs route via different NICs, or just omit them as default\n"
             );
 }
@@ -272,7 +272,7 @@ int main (int argc, char **argv)
             ind += 2;
         } else if (!strcmp("rpchost", argv[ind])) {
             if (ind + 1 >= argc) {
-                nbd_err("Invalid argument 'rpchost <CONTROL_HOST>'!\n\n");
+                nbd_err("Invalid argument 'rpchost <RUNNER_HOST>'!\n\n");
                 goto out;
             }
 

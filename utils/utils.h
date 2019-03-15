@@ -105,6 +105,7 @@ int nbd_socket_write(int fd, void *buf, size_t count);
 int nbd_socket_read(int fd, void *buf, size_t count);
 int nbd_handle_request(int sock, int threads);
 bool nbd_minimal_kernel_version_check(void);
+bool nbd_is_valid_host(const char *host);
 
 int time_string_now(char* buf);
 #endif /* __UTILS_H */

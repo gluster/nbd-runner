@@ -13,7 +13,7 @@ A cli utility, which aims at making backstore creation/deletion/mapping/unmaping
                   +----------------------+                     +---------------------+
                   |                      |                     |                     |
                   |                      |                     |                     |
-+-----------+     |      CONTROL HOST IP |  RPC control route  | create/delete       |
++-----------+     |      RUNNER HOST IP  |  RPC control route  | create/delete       |
 |           |     |      listen on       <---------------------> map/unmap/list, etc |
 |  Gluster  <----->      TCP/24110 port  |                     |  +                  |
 |           |     |                      |                     |  |                  |
@@ -34,7 +34,7 @@ A cli utility, which aims at making backstore creation/deletion/mapping/unmaping
                   +----------------------+                     +---------------------+
 
 ```
-<b>NOTE:</b> The 'CONTROL HOST IP' and the 'IO HOST IP' could be same or different, and the 'nbd-runner' and 'nbd-cli' could run on the same node or in different nodes, both are up to your use case. 
+<b>NOTE:</b> The 'RUNNER HOST IP' and the 'IO HOST IP' could be same or different, and the 'nbd-runner' and 'nbd-cli' could run on the same node or in different nodes, both are up to your use case. And please make sure that the 'nbd-runner' runs on one of the gluster/ceph server nodes.
 
 ## License
 nbd-runner is licensed to you under your choice of the GNU Lesser General Public License, version 3 or any later version ([LGPLv3](https://opensource.org/licenses/lgpl-3.0.html) or later), or the GNU General Public License, version 2 ([GPLv2](https://opensource.org/licenses/GPL-2.0)), in all cases as published by the Free Software Foundation.
@@ -73,7 +73,7 @@ Commands:
 	threads <NUMBER>
 		Specify the IO thread number for each mapped backstore, 1 as default
 
-	rpchost <CONTROL_HOST>
+	rpchost <RUNNER_HOST>
 		Specify the listenning IP for the nbd-runner server to receive/reply the control
 		commands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default
 
@@ -85,7 +85,7 @@ Commands:
 		Show version info and exit.
 
 	NOTE:
-		The CONTROL_HOST and the IO_HOST will be useful if you'd like the control commands
+		The RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands
 		route different from the IOs route via different NICs, or just omit them as default
 ```
 
@@ -129,15 +129,15 @@ Usage:
 
    or
 
-    `# nbd-cli gluster create <VOLUME@GLUSTER_HOST:/FILEPATH> [prealloc] <size SIZE> <host CONTROL_HOST>`
+    `# nbd-cli gluster create <VOLUME/FILEPATH> [prealloc] <size SIZE> <host RUNNER_HOST>`
 
 4. Map the file created in backstore gluster volume to the NBD device(in local host), you can specify one unmapped /dev/nbdXX or just omit it and then the NBD kernel module will allocate one for you.
 
-    `# nbd-cli gluster map <VOLUME@GLUSTER_HOST:/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host CONTROL_HOST>`
+    `# nbd-cli gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host RUNNER_HOST>`
 
 5. You will see the mapped NBD device returned and displayed, or you can check the mapped device info by:
 
-    `# nbd-cli gluster list <map|unmap|create|dead|live|all> <host CONTROL_HOST>`
+    `# nbd-cli gluster list <map|unmap|create|dead|live|all> <host RUNNER_HOST>`
 
 6. We expose the file in the gluster volume as NBD device using nbd-runner, exporting the target file as block device via /dev/nbdXX
 
@@ -149,22 +149,25 @@ Usage:
 	gluster help
 		Display help for gluster commands
 
-	gluster create <VOLUME@GLUSTER_HOST:/FILEPATH> [prealloc] <size SIZE> <host CONTROL_HOST>
+	gluster create <VOLUME/FILEPATH> [prealloc] <size SIZE> [host RUNNER_HOST]
 		Create FILEPATH in the VOLUME, prealloc is false as default, and the SIZE is valid
-		with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB)
+		with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB), RUNNER_HOST will
+		be 'localhost' as default
 
-	gluster delete <VOLUME@GLUSTER_HOST:/FILEPATH> <host CONTROL_HOST>
-		Delete FILEPATH from the VOLUME
+	gluster delete <VOLUME/FILEPATH> [host RUNNER_HOST]
+		Delete FILEPATH from the VOLUME, RUNNER_HOST will be 'localhost' as default
 
-	gluster map <VOLUME@GLUSTER_HOST:/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host CONTROL_HOST>
-		Map FILEPATH to the nbd device, as default the timeout 0, none readonly
+	gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]
+		Map FILEPATH to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST
+		will be 'localhost' as default
 
-	gluster unmap <nbd-device> <host CONTROL_HOST>
-		Unmap the nbd device
+	gluster unmap <nbd-device> [host RUNNER_HOST]
+		Unmap the nbd device, RUNNER_HOST will be 'localhost' as default
 
-	gluster list [map|unmap|create|dead|live|all] <host CONTROL_HOST>
-		Dist the mapped|unmapped NBD devices or the created|dead|live backstores, all as
+	gluster list [map|unmap|create|dead|live|all] [host RUNNER_HOST]
+		List the mapped|unmapped NBD devices or the created|dead|live backstores, all as
 		default. 'create' means the backstores are just created or unmapped. 'dead' means
 		the IO connection is lost, this is mainly due to the nbd-runner service is restart
-		without unmapping. 'live' means everything is okay for both mapped and IO connection.
+		without unmapping. 'live' means everything is okay for both mapped and IO connection,
+		RUNNER_HOST will be 'localhost' as default
 ```

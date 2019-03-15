@@ -41,7 +41,6 @@
 
 struct glfs_info {
     char volume[NAME_MAX];
-    char host[NBD_HOST_MAX];
     char path[PATH_MAX];
     struct glfs *glfs;
     glfs_fd_t *gfd;
@@ -49,25 +48,23 @@ struct glfs_info {
 
 static GHashTable *glfs_volume_hash;
 
-static struct glfs *nbd_volume_init(char *volume, char *host)
+static struct glfs *nbd_volume_init(char *volume)
 {
     struct glfs *glfs;
     char *key;
     int ret;
     int len;
 
-    if (!volume || !host)
+    if (!volume)
         return NULL;
 
-    len = strlen(volume) + strlen(host) + 2;
+    len = strlen(volume) + 2;
 
-    key = malloc(len);
+    key = strdup(volume);
     if (!key) {
         nbd_err("No memory for buf!\n");
         return NULL;
     }
-
-    snprintf(key, len, "%s@%s", volume, host);
 
     glfs = g_hash_table_lookup(glfs_volume_hash, key);
     if (glfs)
@@ -80,7 +77,7 @@ static struct glfs *nbd_volume_init(char *volume, char *host)
         goto out;
     }
 
-    ret = glfs_set_volfile_server(glfs, "tcp", host, 24007);
+    ret = glfs_set_volfile_server(glfs, "tcp", "localhost", 24007);
     if (ret) {
         nbd_err("Not able to add Volfile server for volume %s, %s\n",
                 volume, strerror(errno));
@@ -178,9 +175,9 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
 
     /*
      * The valid cfgstring is like:
-     *    "volname@host:/path;"
+     *    "volname/filepath;"
      * or
-     *    "volname@host:/path"
+     *    "volname/filepath"
      */
     do {
         sem = strchr(ptr, ';');
@@ -190,51 +187,22 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
         if (*ptr == '\0') {
             /* in case the last valid char is ';' */
             break;
-        } else if (strchr(ptr, '@') && strchr(ptr, ':')) {
-            /* volname@host:/path */
-            sep = strchr(ptr, '@');
-            if (!sep) {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->buf, NBD_EXIT_MAX, "Invalid volinfo key/pair: %s!", ptr);
-                }
-                nbd_err("Invalid volinfo value: %s!\n", ptr);
-                goto err;
-            }
-
-            *sep = '\0';
-
-            strncpy(info->volume, ptr, NAME_MAX);
-
-            ptr = sep + 1;
-            sep = strchr(ptr, ':');
-            if (!sep) {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->buf, NBD_EXIT_MAX, "Invalid volinfo host value: %s!", ptr);
-                }
-                nbd_err("Invalid volinfo host value: %s!\n", ptr);
-                goto err;
-            }
-
-            *sep = '\0';
-
-            strncpy(info->host, ptr, NBD_HOST_MAX);
-
-            ptr = sep + 1;
-            if (*ptr != '/') {
-                if (rep) {
-                    rep->exit = -EINVAL;
-                    snprintf(rep->buf, NBD_EXIT_MAX, "Invalid volinfo path value: %s!", ptr);
-                }
-                nbd_err("Invalid path path value: %s!\n", ptr);
-                goto err;
-            }
-
-            ptr++;
-
-            strncpy(info->path, ptr, PATH_MAX);
         }
+
+        sep = strchr(ptr, '/');
+        if (!sep) {
+            if (rep) {
+                rep->exit = -EINVAL;
+                snprintf(rep->buf, NBD_EXIT_MAX, "Invalid volinfo volume/filepath: %s!", ptr);
+            }
+            nbd_err("Invalid volinfo value: %s!\n", ptr);
+            goto err;
+        }
+
+        *sep = '\0';
+
+        strncpy(info->volume, ptr, NAME_MAX);
+        strncpy(info->path, sep + 1, PATH_MAX);
 
         if (sem)
             ptr = sem + 1;
@@ -260,7 +228,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
 
     rep->exit = 0;
 
-    glfs = nbd_volume_init(info->volume, info->host);
+    glfs = nbd_volume_init(info->volume);
     if (!glfs) {
         rep->exit = -EINVAL;
         snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
@@ -346,7 +314,7 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
 
     rep->exit = 0;
 
-    glfs = nbd_volume_init(info->volume, info->host);
+    glfs = nbd_volume_init(info->volume);
     if (!glfs) {
         rep->exit = -EINVAL;
         snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
@@ -392,7 +360,7 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
     rep->exit = 0;
 
     /* To check whether the file is exist */
-    glfs = nbd_volume_init(info->volume, info->host);
+    glfs = nbd_volume_init(info->volume);
     if (!glfs) {
         rep->exit = -EINVAL;
         snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
@@ -475,7 +443,7 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
         return st.st_size;
     }
 
-    glfs = nbd_volume_init(info->volume, info->host);
+    glfs = nbd_volume_init(info->volume);
     if (!glfs) {
         rep->exit = -EINVAL;
         snprintf(rep->buf, NBD_EXIT_MAX, "Init volume %s failed!", info->volume);
@@ -523,7 +491,7 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
         return st.st_blksize;
     }
 
-    glfs = nbd_volume_init(info->volume, info->host);
+    glfs = nbd_volume_init(info->volume);
     if (!glfs) {
         if (rep) {
             rep->exit = -EINVAL;
