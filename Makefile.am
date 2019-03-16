@@ -5,7 +5,7 @@ SUBDIRS = rpc utils cli daemon
 DISTCLEANFILES = Makefile.in autom4te.cache
 
 EXTRA_DIST = autogen.sh README.md COPYING-GPLV2 COPYING-LGPLV3 \
-						 INSTALL
+			 INSTALL nbd-runner.sysconfig
 
 if USE_SYSTEMD
 RPM_WITH_FLAGS = --with systemd
@@ -13,8 +13,14 @@ else
 RPM_WITH_FLAGS = --with initd
 endif
 
+install-data-local:
+	$(MKDIR_P) $(DESTDIR)${sysconfigdir};        \
+	$(INSTALL_DATA) nbd-runner.sysconfig         \
+	$(DESTDIR)${sysconfigdir}/nbd-runner;
+
 uninstall-local:
-	cd $(DESTDIR)$(bindir) && rm -f nbd-runner nbd-cli
+	cd $(DESTDIR)$(bindir) && rm -f nbd-runner nbd-cli \
+	rm -f $(DESTDIR)${sysconfigdir}/nbd-runner
 
 gitclean: clean distclean
 	find . -path gnulib -prune -name Makefile.in -exec rm -f {} \;
