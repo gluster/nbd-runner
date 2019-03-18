@@ -34,6 +34,8 @@ static int gluster_help_routine(int count, char **options)
         _nbd_out("\t\t%s\n\n", gluster_cmds[i].desc);
     }
     _nbd_out("\n");
+
+    return 0;
 }
 
 static int gluster_create_routine(int count, char **options)

@@ -332,7 +332,6 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
     struct nbd_response rep = {0,};
     struct map_args *args = arg;
     uint32_t index;
-    int ret;
 
     if (nla_parse(msg_attr, NBD_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
                   genlmsg_attrlen(gnlh, 0), NULL) < 0) {
@@ -502,7 +501,7 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
             nbd_err("nego failed: %s, %d\n", buf, nrep.exit);
             free(buf);
         } else {
-            nbd_err("nego failed: %d\n", buf, nrep.exit);
+            nbd_err("nego failed: %s, %d\n", buf, nrep.exit);
         }
         goto nla_put_failure;
     }
@@ -558,7 +557,6 @@ static int nbd_connect_to_server(char *host, int port)
 {
     struct sockaddr_in addr;
     int sock;
-    int ret;
 
     if (!host || port < 0) {
         nbd_err("Invalid host or port param!\n");
@@ -591,10 +589,10 @@ err:
 static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index,
                            int timeout, bool readonly, int type, CLIENT *clnt)
 {
-    int ret;
-    int sockfd;
     struct nl_sock *netfd;
     int driver_id;
+    int sockfd;
+    int ret;
 
     /* Connect to server for IOs */
     sockfd = nbd_connect_to_server(rep->host, atoi(rep->port));
@@ -604,7 +602,8 @@ static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index,
     /* Setup netlink to configure the nbd device */
     netfd = nbd_setup_netlink(&driver_id, NBD_CLI_MAP, type, cfg, clnt);
     if (!netfd)
-        return -1;
+        goto err;
+
 
     /* Setup the IOs sock fd to nbd device to start IOs */
     ret = nbd_device_connect(cfg, netfd, sockfd, driver_id, rep->size,
@@ -803,9 +802,9 @@ int nbd_unmap_device(int count, char **options, int type)
     struct nbd_unmap unmap = {.type = type};
     struct nl_sock *netfd;
     int driver_id;
+    int dev_index;
     int ind;
     int ret;;
-    int dev_index = -1;
 
     /* strict check */
     if (count != 1 && count != 3) {
@@ -813,6 +812,7 @@ int nbd_unmap_device(int count, char **options, int type)
          return -EINVAL;
     }
 
+    dev_index = -1;
     ind = 0;
     while (ind < count) {
         if (!strncmp("/dev/nbd", options[ind], strlen("/dev/nbd"))) {
@@ -908,7 +908,6 @@ static void list_info(const char *info, list_type ltype)
     json_object *globalobj = NULL;
     json_object *dobj = NULL;
     json_object *obj = NULL;
-    uint32_t index;
     GHashTableIter iter;
     gpointer key, value;
     const char *tmp, *tmp1;
@@ -1259,7 +1258,7 @@ nla_put_failure:
 int nbd_register_cmds(GHashTable *cmds_hash, struct cli_cmd *cmds)
 {
     char *key;
-    char *sep, *q, *tmp;
+    char *sep, *q;
     const char *p;
     int len;
     int i;

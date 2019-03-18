@@ -166,7 +166,6 @@ int main(int argc, char *argv[])
     struct cli_cmd *clicmd;
     int ret = EXIT_FAILURE;
     char *key = NULL;
-    int type;
     int len;
 
     nbd_log_init();

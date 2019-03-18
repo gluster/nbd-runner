@@ -19,25 +19,25 @@
 
 int time_string_now(char* buf)
 {
-	struct tm *tm;
-	struct timeval tv;
+    struct tm *tm;
+    struct timeval tv;
 
     if (!buf)
         return -EINVAL;
 
-	if (gettimeofday(&tv, NULL) < 0)
-		return -errno;
+    if (gettimeofday(&tv, NULL) < 0)
+        return -errno;
 
-	/* The value maybe changed in multi-thread*/
-	tm = localtime(&tv.tv_sec);
-	if (tm == NULL)
-		return -errno;
+    /* The value maybe changed in multi-thread*/
+    tm = localtime(&tv.tv_sec);
+    if (tm == NULL)
+        return -errno;
 
-	tm->tm_year += 1900;
-	tm->tm_mon += 1;
+    tm->tm_year += 1900;
+    tm->tm_mon += 1;
 
-	snprintf(buf, NBD_TLEN_MAX, "%4d-%02d-%02d %02d:%02d:%02d", tm->tm_year,
+    snprintf(buf, NBD_TLEN_MAX, "%4d-%02d-%02d %02d:%02d:%02d", tm->tm_year,
              tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
 
-	return 0;
+    return 0;
 }

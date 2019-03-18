@@ -55,12 +55,9 @@ static struct glfs *nbd_volume_init(char *volume)
     struct glfs *glfs;
     char *key;
     int ret;
-    int len;
 
     if (!volume)
         return NULL;
-
-    len = strlen(volume) + 2;
 
     key = strdup(volume);
     if (!key) {
@@ -249,9 +246,9 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
 
     if (!nbd_check_available_space(glfs, info->volume, dev->size)) {
         rep->exit = -ENOSPC;
-        snprintf(rep->buf, NBD_EXIT_MAX, "No enough space in volume %s, require %d!",
+        snprintf(rep->buf, NBD_EXIT_MAX, "No enough space in volume %s, require %ld!",
                  info->volume, dev->size);
-        nbd_err("No enough space in volume %s, require %d!\n", info->volume,
+        nbd_err("No enough space in volume %s, require %ld!\n", info->volume,
                 dev->size);
         goto err;
     }
@@ -311,7 +308,6 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
 {
     struct glfs_info *info = dev->priv;
     struct glfs *glfs = NULL;
-    struct glfs_fd *fd = NULL;
     bool ret = false;
 
     rep->exit = 0;
@@ -356,7 +352,6 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
     struct glfs *glfs = NULL;
     glfs_fd_t *gfd = NULL;
     struct stat st;
-    struct nbd_ip *ips = NULL, *p, *q;
     bool ret = false;
 
     rep->exit = 0;
@@ -552,13 +547,13 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
 
     switch (req->cmd) {
     case NBD_CMD_WRITE:
-        nbd_dbg("NBD_CMD_WRITE: offset: %llu, len: %u\n", req->offset,
+        nbd_dbg("NBD_CMD_WRITE: offset: %ld len: %ld\n", req->offset,
                 req->len);
         glfs_pwrite_async(info->gfd, req->rwbuf, req->len, req->offset,
                           ALLOWED_BSOFLAGS, glfs_async_cbk, req);
         break;
     case NBD_CMD_READ:
-        nbd_dbg("NBD_CMD_READ: offset: %llu, len: %u\n", req->offset,
+        nbd_dbg("NBD_CMD_READ: offset: %ld, len: %ld\n", req->offset,
                 req->len);
         glfs_pread_async(info->gfd, req->rwbuf, req->len, req->offset, SEEK_SET,
                          glfs_async_cbk, req);
@@ -568,7 +563,7 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
         glfs_fdatasync_async(info->gfd, glfs_async_cbk, req);
         break;
     case NBD_CMD_TRIM:
-        nbd_dbg("NBD_CMD_TRIM: offset: %llu, len: %u\n", req->offset,
+        nbd_dbg("NBD_CMD_TRIM: offset: %ld, len: %ld\n", req->offset,
                 req->len);
         glfs_discard_async(info->gfd, req->offset, req->len,
                 glfs_async_cbk, req);
@@ -620,5 +615,5 @@ int gluster_handler_init(const char *host)
     else
         glfs_host = strdup(host);
 
-	return nbd_register_handler(&glfs_handler);
+    return nbd_register_handler(&glfs_handler);
 }

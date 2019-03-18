@@ -43,7 +43,12 @@
 #define NBD_HOST_MAX  255
 #define NBD_CFGS_MAX  1024
 #define NBD_PORT_MAX  32
-#define NBD_EXIT_MAX  1024
+/*
+ * Currently only when the NBD_EXIT_MAX >= PATH_MAX(4096) + NAME_MAX(255)
+ * will eliminate the snprintf's truncate warning, and here we set it to
+ * 8192.
+ */
+#define NBD_EXIT_MAX  8192
 #define NBD_TLEN_MAX  32    /* "2019-02-13 12:20:45" */
 #define NBD_DLEN_MAX  16    /* "/dev/nbdXX" */
 

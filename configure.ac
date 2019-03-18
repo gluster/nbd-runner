@@ -14,6 +14,8 @@ AC_INIT([nbd-runner],
 
 AC_SUBST([PACKAGE_RELEASE], 1)
 
+CFLAGS="${CLFAGS} -Werror -Wall -Wdeclaration-after-statement"
+
 AC_ARG_WITH(systemddir,
             AC_HELP_STRING([--with-systemddir=DIR],
                            [systemd service files in DIR @<:@PREFIX/lib/systemd/system@:>@]),
