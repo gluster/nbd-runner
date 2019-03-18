@@ -1050,9 +1050,14 @@ err:
 
 void nbd_service_fini(void)
 {
-    g_hash_table_destroy(nbd_handler_hash);
-    g_hash_table_destroy(nbd_devices_hash);
-    g_hash_table_destroy(nbd_nbds_hash);
+    if (nbd_handler_hash)
+        g_hash_table_destroy(nbd_handler_hash);
+
+    if (nbd_devices_hash)
+        g_hash_table_destroy(nbd_devices_hash);
+
+    if (nbd_nbds_hash)
+        g_hash_table_destroy(nbd_nbds_hash);
 }
 
 int nbd_register_handler(struct nbd_handler *handler)
