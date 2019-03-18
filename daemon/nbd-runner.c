@@ -108,7 +108,6 @@ static void *nbd_map_svc_thread_start(void *arg)
     struct event_base *base;
     struct event listen_ev;
     int listenfd;
-    int ret = 0;
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
     if(listenfd < 0){
@@ -241,7 +240,6 @@ int main (int argc, char **argv)
     pthread_t rpc_svc_threadid;
     pthread_t map_svc_threadid;
     struct flock lock = {0, };
-    char *rpchost = NULL;
     int threads = NBD_DEF_THREADS;
     int ret = EXIT_FAILURE;
     int ind;
@@ -311,7 +309,7 @@ int main (int argc, char **argv)
             threads = atoi(argv[ind + 1]);
             if (threads < NBD_MIN_THREADS) {
                 nbd_err("Currently the min threads are %d, will set it to %d!\n",
-                        NBD_MIN_THREADS);
+                        NBD_MIN_THREADS, NBD_MIN_THREADS);
                 threads = NBD_MIN_THREADS;
             }
 

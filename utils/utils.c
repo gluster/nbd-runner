@@ -174,12 +174,12 @@ int nbd_socket_write(int fd, void *buf, size_t count)
 
 bool nbd_minimal_kernel_version_check(void)
 {
-    struct utsname ver = {'\0', };
+    struct utsname ver;
     size_t num[VERNUM_BUFLEN] = {0, };
     int i = 0;
     char *rel;
-    size_t len;
 
+    bzero(&ver, sizeof(struct utsname));
     if (uname(&ver) != 0) {
         nbd_err("uname() failed: %s\n", strerror(errno));
         goto err;

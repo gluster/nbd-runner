@@ -176,7 +176,6 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
 {
     json_object *globalobj = NULL;
     json_object *devobj = NULL;
-    json_object *obj = NULL;
     const char *st;
     char *key;
     int ret = 0;
@@ -242,78 +241,79 @@ static int nbd_parse_from_json_config_file(void)
     struct nbd_device *dev;
     const char *tmp;
     char *ktmp;
-    const char *st;
 
     globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
     if (!globalobj)
         return 0;
 
-     json_object_object_foreach(globalobj, key, devobj) {
-         dev = calloc(1, sizeof(struct nbd_device));
-         if (!dev) {
-             nbd_err("No memory for nbd device!\n");
-             free(key);
-             json_object_put(globalobj);
-             return -1;
-         }
+    {
+        json_object_object_foreach(globalobj, key, devobj) {
+            dev = calloc(1, sizeof(struct nbd_device));
+            if (!dev) {
+                nbd_err("No memory for nbd device!\n");
+                free(key);
+                json_object_put(globalobj);
+                return -1;
+            }
 
-         json_object_object_get_ex(devobj, "type", &obj);
-         dev->type = json_object_get_int(obj);
+            json_object_object_get_ex(devobj, "type", &obj);
+            dev->type = json_object_get_int(obj);
 
-         json_object_object_get_ex(devobj, "nbd", &obj);
-         tmp = json_object_get_string(obj);
-         if (tmp)
-             strncpy(dev->nbd, tmp, NBD_DLEN_MAX);
+            json_object_object_get_ex(devobj, "nbd", &obj);
+            tmp = json_object_get_string(obj);
+            if (tmp)
+                strncpy(dev->nbd, tmp, NBD_DLEN_MAX);
 
-         json_object_object_get_ex(devobj, "maptime", &obj);
-         tmp = json_object_get_string(obj);
-         if (tmp)
-             strncpy(dev->time, tmp, NBD_TLEN_MAX);
+            json_object_object_get_ex(devobj, "maptime", &obj);
+            tmp = json_object_get_string(obj);
+            if (tmp)
+                strncpy(dev->time, tmp, NBD_TLEN_MAX);
 
-         json_object_object_get_ex(devobj, "size", &obj);
-         dev->size = json_object_get_int(obj);
+            json_object_object_get_ex(devobj, "size", &obj);
+            dev->size = json_object_get_int(obj);
 
-         json_object_object_get_ex(devobj, "blksize", &obj);
-         dev->blksize = json_object_get_int(obj);
+            json_object_object_get_ex(devobj, "blksize", &obj);
+            dev->blksize = json_object_get_int(obj);
 
-         json_object_object_get_ex(devobj, "prealloc", &obj);
-         dev->prealloc = json_object_get_boolean(obj);
+            json_object_object_get_ex(devobj, "prealloc", &obj);
+            dev->prealloc = json_object_get_boolean(obj);
 
-         json_object_object_get_ex(devobj, "readonly", &obj);
-         dev->readonly = json_object_get_boolean(obj);
+            json_object_object_get_ex(devobj, "readonly", &obj);
+            dev->readonly = json_object_get_boolean(obj);
 
-         /* The connection is dead, needed to remap from the client */
-         if (dev->nbd[0])
-             dev->status = NBD_DEV_CONN_ST_DEAD;
-         else
-             dev->status = NBD_DEV_CONN_ST_CREATED;
+            /* The connection is dead, needed to remap from the client */
+            if (dev->nbd[0])
+                dev->status = NBD_DEV_CONN_ST_DEAD;
+            else
+                dev->status = NBD_DEV_CONN_ST_CREATED;
 
-         strcpy(dev->bstore, key);
+            strcpy(dev->bstore, key);
 
-         nbd_out("key: %s, type: %d, nbd: %s, maptime: %s, size: %d, blksize: %d, prealloc: %d, readonly: %d\n",
-                 key, dev->type, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
-         handler = g_hash_table_lookup(nbd_handler_hash, &dev->type);
-         if (!handler) {
-             nbd_err("handler type %d is not registered!\n", dev->type);
-             free(dev);
-         } else {
-             dev->handler = handler;
-             ktmp = malloc(NBD_CFGS_MAX);
-             snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
-             handler->cfg_parse(dev, ktmp, NULL);
-             free(ktmp);
-             nbd_update_json_config_file(dev, true);
-             ktmp = strdup(key);
-             g_hash_table_insert(nbd_devices_hash, ktmp, dev);
-             if (dev->nbd[0]) {
-                 ktmp = strdup(dev->nbd);
-                 g_hash_table_insert(nbd_nbds_hash, ktmp, dev);
-             }
-         }
-     }
+            nbd_out("key: %s, type: %d, nbd: %s, maptime: %s, size: %ld, blksize: %ld, prealloc: %d, readonly: %d\n",
+                    key, dev->type, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
+            handler = g_hash_table_lookup(nbd_handler_hash, &dev->type);
+            if (!handler) {
+                nbd_err("handler type %d is not registered!\n", dev->type);
+                free(dev);
+            } else {
+                dev->handler = handler;
+                ktmp = malloc(NBD_CFGS_MAX);
+                snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
+                handler->cfg_parse(dev, ktmp, NULL);
+                free(ktmp);
+                nbd_update_json_config_file(dev, true);
+                ktmp = strdup(key);
+                g_hash_table_insert(nbd_devices_hash, ktmp, dev);
+                if (dev->nbd[0]) {
+                    ktmp = strdup(dev->nbd);
+                    g_hash_table_insert(nbd_nbds_hash, ktmp, dev);
+                }
+            }
+        }
+    }
 
-     json_object_put(globalobj);
-     return 0;
+    json_object_put(globalobj);
+    return 0;
 }
 
 bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
@@ -508,7 +508,6 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     struct nbd_handler *handler;
     char *key = NULL;
     bool inserted = false;
-    int i;
 
     rep->exit = 0;
 
@@ -759,8 +758,8 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         l += strlen(key) + 11;
         l += snprintf(tmp, max, "%d", dev->type) + 8;
         l += strlen(dev->time) + 13;
-        l += snprintf(tmp, max, "%d", dev->size) + 8;
-        l += snprintf(tmp, max, "%d", dev->blksize) + 11;
+        l += snprintf(tmp, max, "%ld", dev->size) + 8;
+        l += snprintf(tmp, max, "%ld", dev->blksize) + 11;
         l += 17;
         l += 17;
         st = nbd_dev_status_lookup_str(dev->status);
@@ -831,15 +830,13 @@ int nbd_handle_request(int sock, int threads)
     struct nbd_request request;
     struct nbd_reply reply;
     GThreadPool *thread_pool;
-    int ret = -1;
-    struct sigaction sa;
     struct nego_request nhdr;
     struct nego_reply nrep = {0, };
-    bool readonly = false;
     char *cfg = NULL;
     char *buf = NULL;
     char *key = NULL;
     int cmd;
+    int ret = -1;
 
     /* nego start */
     bzero(&nhdr, sizeof(struct nego_request));

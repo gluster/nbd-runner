@@ -66,8 +66,6 @@ static inline int _nbd_out(const char *fmt, ...)
         syslog(LOG_INFO, __VA_ARGS__);                              \
     } while (0)
 
-static bool nbd_log_debug = false;
-
 #define nbd_dbg(...)                                                \
     do {                                                            \
             _nbd_out(__VA_ARGS__);                                  \
