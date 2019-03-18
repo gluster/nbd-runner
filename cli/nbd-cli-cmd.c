@@ -29,8 +29,6 @@
 #include "nbd-netlink.h"
 #include "nbd-cli-cmd.h"
 
-struct timeval TIMEOUT = {.tv_sec = 15};
-
 static GHashTable *list_hash;
 
 static void free_key(gpointer key)
