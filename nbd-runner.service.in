@@ -1,0 +1,14 @@
+[Unit]
+Description=Network Block Device For Distributed Storages
+Requires=rpcbind.service
+After=network.target rpcbind.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/sysconfig/nbd-runner
+ExecStart=/usr/local/sbin/nbd-runner threads 2
+KillMode=process
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
