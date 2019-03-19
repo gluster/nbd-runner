@@ -63,6 +63,20 @@ PKG_CHECK_MODULES(LIBNL3, [libnl-genl-3.0 >= 3.1],,
 AC_SUBST(LIBNL3_CFLAGS)
 AC_SUBST(LIBNL3_LIBS)
 
+AC_ARG_WITH([clang],
+    [AS_HELP_STRING([--with-clang], [do use clang, default no])],
+    [with_clang=$withval],
+    [with_clang=missing])
+
+if test "x$with_clang" == "xyes"; then
+    AC_CHECK_PROG(CLANG, clang, yes, no)
+    if test "x$CLANG" = "xno"; then
+        AC_MSG_ERROR([clang not found, needed for building])
+    else
+        CC="clang"
+    fi
+fi
+
 AC_ARG_WITH([tirpc],
     [AS_HELP_STRING([--with-tirpc], [do use tirpc, default yes])],
     [with_tirpc=$withval],

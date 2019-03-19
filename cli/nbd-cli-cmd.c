@@ -70,6 +70,7 @@ int nbd_create_backstore(int count, char **options, int type)
     struct addrinfo *res;
     char *host = NULL;
     int sock = RPC_ANYSOCK;
+    ssize_t size;
     int ret = 0;
     int ind;
     int len;
@@ -136,12 +137,14 @@ int nbd_create_backstore(int count, char **options, int type)
                 goto err;
             }
 
-            create->size = nbd_parse_size(options[ind + 1], 0);
-            if (create->size < 0) {
+            size = nbd_parse_size(options[ind + 1], 0);
+            if (size < 0) {
                 nbd_err("Invalid size value: %s!\n", options[ind + 1]);
                 ret = -EINVAL;
                 goto err;
             }
+
+            create->size = size;
 
             ind += 2;
         } else {
@@ -499,7 +502,7 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
             nbd_err("nego failed: %s, %d\n", buf, nrep.exit);
             free(buf);
         } else {
-            nbd_err("nego failed: %s, %d\n", buf, nrep.exit);
+            nbd_err("nego failed %d\n", nrep.exit);
         }
         goto nla_put_failure;
     }
@@ -837,6 +840,7 @@ int nbd_unmap_device(int count, char **options, int type)
             }
 
             if (!nbd_is_valid_host(host)) {
+                ret = -EINVAL;
                 nbd_err("Invalid host '%s'!\n", host);
                 goto err;
             }
@@ -1108,7 +1112,7 @@ int nbd_list_devices(int count, char **options, int type)
     char *host = NULL;
     int sock = RPC_ANYSOCK;
     struct nbd_list list = {.type = type};
-    struct nl_sock *netfd;
+    struct nl_sock *netfd = NULL;
     struct nl_msg *msg;
     int driver_id;
     int ind;

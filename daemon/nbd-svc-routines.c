@@ -829,7 +829,7 @@ int nbd_handle_request(int sock, int threads)
     struct nbd_handler_request *req;
     struct nbd_request request;
     struct nbd_reply reply;
-    GThreadPool *thread_pool;
+    GThreadPool *thread_pool = NULL;
     struct nego_request nhdr;
     struct nego_reply nrep = {0, };
     char *cfg = NULL;
@@ -864,9 +864,11 @@ int nbd_handle_request(int sock, int threads)
     if (!dev) {
         nrep.exit = -EINVAL;
         buf = calloc(1, 4096);
-        nrep.len = snprintf(buf, 4096, "No such device found: %s", cfg);
-        if (nrep.len < 0)
+        ret = snprintf(buf, 4096, "No such device found: %s", cfg);
+        if (ret < 0)
             nrep.len = 0;
+        else
+            nrep.len = ret;
     }
     free(cfg);
     free(buf);
@@ -990,7 +992,7 @@ static void free_value(gpointer value)
 
 bool nbd_service_init(struct nbd_config *cfg)
 {
-    GPtrArray *iohost;
+    GPtrArray *iohost = NULL;
 
     mkdir(NBD_SAVE_CONFIG_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     open(NBD_SAVE_CONFIG_FILE, O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
