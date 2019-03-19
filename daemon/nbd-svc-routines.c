@@ -39,6 +39,7 @@
 #include "rpc_nbd.h"
 #include "nbd-log.h"
 #include "utils.h"
+#include "strlcpy.h"
 #include "nbd-common.h"
 #include "nbd-sysconfig.h"
 
@@ -262,12 +263,12 @@ static int nbd_parse_from_json_config_file(void)
             json_object_object_get_ex(devobj, "nbd", &obj);
             tmp = json_object_get_string(obj);
             if (tmp)
-                strncpy(dev->nbd, tmp, NBD_DLEN_MAX);
+                strlcpy(dev->nbd, tmp, NBD_DLEN_MAX);
 
             json_object_object_get_ex(devobj, "maptime", &obj);
             tmp = json_object_get_string(obj);
             if (tmp)
-                strncpy(dev->time, tmp, NBD_TLEN_MAX);
+                strlcpy(dev->time, tmp, NBD_TLEN_MAX);
 
             json_object_object_get_ex(devobj, "size", &obj);
             dev->size = json_object_get_int(obj);
