@@ -169,6 +169,7 @@ static void nbd_conf_set_options(struct nbd_config *cfg)
 {
 	/* set log_level option */
 	NBD_PARSE_CFG_INT(cfg, log_level);
+	nbd_set_log_level(cfg->log_level);
 
 	/* set log_dir path option */
 	NBD_PARSE_CFG_STR(cfg, log_dir);

@@ -28,59 +28,45 @@
 
 #include "nbd-sysconfig.h"
 
-static inline int _nbd_err(const char *fmt, ...)
-{
-    va_list ap;
-    int ret = 0;
+#define NBD_LOG_CRIT	LOG_CRIT	/* critical conditions */
+#define NBD_LOG_ERROR	LOG_ERR		/* error conditions */
+#define NBD_LOG_WARN	LOG_WARNING	/* warning conditions */
+#define NBD_LOG_INFO	LOG_INFO	/* informational */
+#define NBD_LOG_DEBUG	LOG_DEBUG	/* debug-level messages */
+#define NBD_LOG_DEBUG_IO   (LOG_DEBUG + 1)	/* nbd io messages */
 
-    va_start(ap, fmt);
+struct nbd_device;
 
-    ret = vfprintf(stderr, fmt, ap);
-    va_end(ap);
+int nbd_setup_log(char *log_dir);
+void nbd_destroy_log(void);
+void nbd_set_log_level(int level);
 
-    return ret;
-}
+__attribute__ ((format (printf, 4, 5)))
+void nbd_crit_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+__attribute__ ((format (printf, 4, 5)))
+void nbd_err_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+__attribute__ ((format (printf, 4, 5)))
+void nbd_warn_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+__attribute__ ((format (printf, 4, 5)))
+void nbd_info_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+__attribute__ ((format (printf, 4, 5)))
+void nbd_dbg_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+__attribute__ ((format (printf, 4, 5)))
+void nbd_dbg_io_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 
-static inline int _nbd_out(const char *fmt, ...)
-{
-    va_list ap;
-    int ret = 0;
 
-    va_start(ap, fmt);
+#define nbd_dev_crit(dev, ...)  do { nbd_crit_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_err(dev, ...)  do { nbd_err_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_warn(dev, ...) do { nbd_warn_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_info(dev, ...) do { nbd_info_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_dbg(dev, ...)  do { nbd_dbg_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_dbg_io(dev, ...)  do { nbd_dbg_io_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
 
-    ret = vprintf(fmt, ap);
-    va_end(ap);
-
-    return ret;
-}
-
-#define nbd_err(...)                                                \
-    do {                                                            \
-        _nbd_err(__VA_ARGS__);                                      \
-        syslog(LOG_ERR, __VA_ARGS__);                               \
-    } while (0)
-
-#define nbd_out(...)                                                \
-    do {                                                            \
-        _nbd_out(__VA_ARGS__);                                      \
-        syslog(LOG_INFO, __VA_ARGS__);                              \
-    } while (0)
-
-#define nbd_dbg(...)                                                \
-    do {                                                            \
-            _nbd_out(__VA_ARGS__);                                  \
-            syslog(LOG_DEBUG, __VA_ARGS__);                         \
-    } while (0)
-
-static inline int nbd_log_init(void)
-{
-    openlog(NULL, 0, 0);
-    return 0;
-}
-
-static inline void nbd_log_destroy(void)
-{
-    closelog();
-}
+#define nbd_crit(...) do { nbd_crit_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_err(...)  do { nbd_err_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_warn(...) do { nbd_warn_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_info(...) do { nbd_info_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dbg(...)  do { nbd_dbg_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dbg_io(...)  do { nbd_dbg_io_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
 
 #endif /* __NBD_LOG_H */

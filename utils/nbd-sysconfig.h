@@ -22,7 +22,7 @@
 #define NBD_CONFIG_DIR_DEFAULT "/etc/sysconfig"
 #define NBD_CONFIG_FILE_DEFAULT NBD_CONFIG_DIR_DEFAULT"/nbd-runner"
 
-#define NBD_LOG_DIR_DEFAULT "/var/log/nbd-runner.log"
+#define NBD_LOG_DIR_DEFAULT "/var/log"
 #define NBD_HOST_LOCAL_DEFAULT "localhost"
 
 struct nbd_config {
@@ -42,7 +42,7 @@ struct nbd_config {
  *    2: WARNING
  *    3: INFO
  *    4: DEBUG
- *    5: DEBUG SCSI CMD
+ *    5: DEBUG NBD IO
  */
 enum {
     NBD_CONF_LOG_LEVEL_MIN = 0,

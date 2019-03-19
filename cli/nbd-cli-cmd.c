@@ -182,7 +182,7 @@ int nbd_create_backstore(int count, char **options, int type)
     if (ret && rep.buf)
         nbd_err("Create failed: %s\n", rep.buf);
     else
-        nbd_out("Create succeeded!\n");
+        nbd_info("Create succeeded!\n");
 
 err:
     if (clnt) {
@@ -282,7 +282,7 @@ int nbd_delete_backstore(int count, char **options, int type)
     if (ret && rep.buf)
         nbd_err("Delete failed: %s\n", rep.buf);
     else
-        nbd_out("Delete succeeded!\n");
+        nbd_info("Delete succeeded!\n");
 
 err:
     if (clnt) {
@@ -343,7 +343,7 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
     }
 
     index = nla_get_u32(msg_attr[NBD_ATTR_INDEX]);
-    nbd_out("Connected /dev/nbd%d\n", (int)index);
+    nbd_info("Connected /dev/nbd%d\n", (int)index);
 
     map.type = args->type;
     snprintf(map.nbd, NBD_DLEN_MAX, "/dev/nbd%d", index);
@@ -749,7 +749,7 @@ int nbd_map_device(int count, char **options, int type)
         goto err;
     }
 
-    nbd_out("Map succeeded!\n");
+    nbd_info("Map succeeded!\n");
 
 err:
     if (clnt) {
@@ -784,7 +784,7 @@ static int unmap_device(struct nl_sock *netfd, int driver_id, int index)
         ret = -1;
     }
 
-    nbd_out("Unmap succeeded!\n");
+    nbd_info("Unmap succeeded!\n");
 
 nla_put_failure:
     return ret;
@@ -916,8 +916,8 @@ static void list_info(const char *info, list_type ltype)
         return;
     }
 
-    _nbd_out("%-20s%-15s%-25s%-15s%s\n", "DEVICES", "NBD-STAT", "TIME", "BS-STAT", "BACKSTORE");
-    _nbd_out("%-20s%-15s%-25s%-15s%s\n", "-------", "--------", "----", "-------", "---------");
+    nbd_info("%-20s%-15s%-25s%-15s%s\n", "DEVICES", "NBD-STAT", "TIME", "BS-STAT", "BACKSTORE");
+    nbd_info("%-20s%-15s%-25s%-15s%s\n", "-------", "--------", "----", "-------", "---------");
 
     globalobj = json_tokener_parse(info);
 
@@ -930,20 +930,20 @@ static void list_info(const char *info, list_type ltype)
                 if (tmp && tmp[0]) {
                     g_hash_table_remove(list_hash, tmp);
 
-                    _nbd_out("%-20s%-15s", tmp, "Mapped");
+                    nbd_info("%-20s%-15s", tmp, "Mapped");
 
                     json_object_object_get_ex(devobj, "maptime", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-25s", tmp ? tmp : "NA");
+                    nbd_info("%-25s", tmp ? tmp : "NA");
 
                     json_object_object_get_ex(devobj, "status", &obj);
                     tmp = json_object_get_string(obj);
                     if (!strcmp(tmp, "dead"))
-                        _nbd_out("%-15s%s\n", "Dead", objkey);
+                        nbd_info("%-15s%s\n", "Dead", objkey);
                     else if (!strcmp(tmp, "mapped"))
-                        _nbd_out("%-15s%s\n", "Live", objkey);
+                        nbd_info("%-15s%s\n", "Live", objkey);
                     else
-                        _nbd_out("%-15s", "NA");
+                        nbd_info("%-15s", "NA");
                 }
             }
         }
@@ -951,21 +951,21 @@ static void list_info(const char *info, list_type ltype)
         while (g_hash_table_iter_next(&iter, &key, &value)) {
             status = *(int *)value;
             if (status) {
-                _nbd_out("%-20s%-15s", key, "Mapped");
+                nbd_info("%-20s%-15s", (char *)key, "Mapped");
                 if (json_object_object_get_ex(globalobj, key, &dobj)) {
                     json_object_object_get_ex(dobj, "maptime", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-25s", tmp ? tmp : "NA");
+                    nbd_info("%-25s", tmp ? tmp : "NA");
 
                     json_object_object_get_ex(dobj, "status", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-15s", tmp ? tmp : "NA");
+                    nbd_info("%-15s", tmp ? tmp : "NA");
 
                     json_object_object_get_ex(dobj, "backstore", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%s\n", tmp ? tmp : "NA");
+                    nbd_info("%s\n", tmp ? tmp : "NA");
                 } else {
-                    _nbd_out("%-25s%-15s%s\n", "NA", "NA", "NA");
+                    nbd_info("%-25s%-15s%s\n", "NA", "NA", "NA");
                 }
             }
         }
@@ -975,7 +975,7 @@ static void list_info(const char *info, list_type ltype)
         while (g_hash_table_iter_next(&iter, &key, &value)) {
             status = *(int *)value;
             if (!status)
-                _nbd_out("%-20s%-15s%-25s%-15s%s\n", key, "Unmapped",
+                nbd_info("%-20s%-15s%-25s%-15s%s\n", (char *)key, "Unmapped",
                         "NA", "NA", "NA");
         }
         break;
@@ -985,7 +985,7 @@ static void list_info(const char *info, list_type ltype)
                 json_object_object_get_ex(devobj, "status", &obj);
                 tmp = json_object_get_string(obj);
                 if (!strcmp(tmp, "created"))
-                    _nbd_out("%-20s%-15s%-25s%-15s%s\n", "NA", "NA", "NA",
+                    nbd_info("%-20s%-15s%-25s%-15s%s\n", "NA", "NA", "NA",
                             "Created", objkey);
             }
         }
@@ -998,11 +998,11 @@ static void list_info(const char *info, list_type ltype)
                 if (!strcmp(tmp, "dead")) {
                     json_object_object_get_ex(devobj, "nbd", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-20s%-15s", tmp ? tmp : "NA", "Mapped");
+                    nbd_info("%-20s%-15s", tmp ? tmp : "NA", "Mapped");
 
                     json_object_object_get_ex(devobj, "maptime", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-25s%-15s%s\n", tmp ? tmp : "NA", "Dead", objkey);
+                    nbd_info("%-25s%-15s%s\n", tmp ? tmp : "NA", "Dead", objkey);
                 }
             }
         }
@@ -1018,13 +1018,13 @@ static void list_info(const char *info, list_type ltype)
                     if (strcmp(tmp1, "mapped"))
                         break;
 
-                    _nbd_out("%-20s%-15s", tmp, "Mapped");
+                    nbd_info("%-20s%-15s", tmp, "Mapped");
 
                     json_object_object_get_ex(devobj, "maptime", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-25s", tmp ? tmp : "NA");
+                    nbd_info("%-25s", tmp ? tmp : "NA");
 
-                    _nbd_out("%-15s%s\n", "Live", objkey);
+                    nbd_info("%-15s%s\n", "Live", objkey);
                 }
             }
         }
@@ -1037,29 +1037,29 @@ static void list_info(const char *info, list_type ltype)
                 if (tmp && tmp[0]) {
                     g_hash_table_remove(list_hash, tmp);
 
-                    _nbd_out("%-20s%-15s", tmp, "Mapped");
+                    nbd_info("%-20s%-15s", tmp, "Mapped");
 
                     json_object_object_get_ex(devobj, "maptime", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-25s", tmp ? tmp : "NA");
+                    nbd_info("%-25s", tmp ? tmp : "NA");
 
                     json_object_object_get_ex(devobj, "status", &obj);
                     tmp = json_object_get_string(obj);
                     if (!strcmp(tmp, "dead"))
-                        _nbd_out("%-15s%s\n", "Dead", objkey);
+                        nbd_info("%-15s%s\n", "Dead", objkey);
                     else if (!strcmp(tmp, "mapped"))
-                        _nbd_out("%-15s%s\n", "Live", objkey);
+                        nbd_info("%-15s%s\n", "Live", objkey);
                     else
-                        _nbd_out("%-15s", "NA");
+                        nbd_info("%-15s", "NA");
                 } else {
-                    _nbd_out("%-20s%-15s%-25s", "NA", "NA", "NA");
+                    nbd_info("%-20s%-15s%-25s", "NA", "NA", "NA");
                     json_object_object_get_ex(devobj, "status", &obj);
                     tmp = json_object_get_string(obj);
                     if (!strcmp(tmp, "created"))
-                        _nbd_out("%-15s", "Created");
+                        nbd_info("%-15s", "Created");
                     else
-                        _nbd_out("%-15s", "NA");
-                    _nbd_out("%s\n", objkey);
+                        nbd_info("%-15s", "NA");
+                    nbd_info("%s\n", objkey);
                 }
             }
         }
@@ -1067,24 +1067,24 @@ static void list_info(const char *info, list_type ltype)
         while (g_hash_table_iter_next(&iter, &key, &value)) {
             status = *(int *)value;
             if (status) {
-                _nbd_out("%-20s%-15s", key, "Mapped");
+                nbd_info("%-20s%-15s", (char *)key, "Mapped");
                 if (json_object_object_get_ex(globalobj, key, &dobj)) {
                     json_object_object_get_ex(dobj, "maptime", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-25s", tmp ? tmp : "NA");
+                    nbd_info("%-25s", tmp ? tmp : "NA");
 
                     json_object_object_get_ex(dobj, "status", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%-15s", tmp ? tmp : "NA");
+                    nbd_info("%-15s", tmp ? tmp : "NA");
 
                     json_object_object_get_ex(dobj, "backstore", &obj);
                     tmp = json_object_get_string(obj);
-                    _nbd_out("%s\n", tmp ? tmp : "NA");
+                    nbd_info("%s\n", tmp ? tmp : "NA");
                 } else {
-                    _nbd_out("%-25s%-15s%s\n", "NA", "NA", "NA");
+                    nbd_info("%-25s%-15s%s\n", "NA", "NA", "NA");
                 }
             } else {
-                _nbd_out("%-20s%-15s%-25s%-15s%s\n", key, "Unmapped",
+                nbd_info("%-20s%-15s%-25s%-15s%s\n", (char *)key, "Unmapped",
                         "NA", "NA", "NA");
             }
         }

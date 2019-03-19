@@ -195,7 +195,7 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
                 json_object_object_del(globalobj, key);
             } else {
                 json_object_put(globalobj);
-                nbd_out("%s is already in the json conig file!\n", key);
+                nbd_info("%s is already in the json conig file!\n", key);
                 return 0;
             }
         }
@@ -290,7 +290,7 @@ static int nbd_parse_from_json_config_file(void)
 
             strcpy(dev->bstore, key);
 
-            nbd_out("key: %s, type: %d, nbd: %s, maptime: %s, size: %ld, blksize: %ld, prealloc: %d, readonly: %d\n",
+            nbd_dbg("key: %s, type: %d, nbd: %s, maptime: %s, size: %ld, blksize: %ld, prealloc: %d, readonly: %d\n",
                     key, dev->type, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
             handler = g_hash_table_lookup(nbd_handler_hash, &dev->type);
             if (!handler) {
@@ -457,7 +457,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
          * then we need to delete the backstore to alloc one
          * tmp new dev.
          */
-        nbd_out("%s is not in the hash table, will try to delete enforce!\n",
+        nbd_info("%s is not in the hash table, will try to delete enforce!\n",
                 delete->cfgstring);
         dev = calloc(1, sizeof(struct nbd_device));
         if (!dev) {
@@ -553,7 +553,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         * If so the device won't be insert to the hash table,
         * then we need to insert it here anyway.
         */
-        nbd_out("%s is not in the hash table, will try to map enforce!\n",
+        nbd_info("%s is not in the hash table, will try to map enforce!\n",
                 map->cfgstring);
         dev = calloc(1, sizeof(struct nbd_device));
         if (!dev) {

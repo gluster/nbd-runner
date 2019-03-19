@@ -25,15 +25,15 @@ static int gluster_help_routine(int count, char **options)
 {
     int i;
 
-    _nbd_out("Usage: \n\n");
+    nbd_info("Usage: \n\n");
     for (i = 0; gluster_cmds[i].pattern; i++) {
         if (gluster_cmds[i].disable)
             continue;
 
-        _nbd_out("\t%s\n", gluster_cmds[i].pattern);
-        _nbd_out("\t\t%s\n\n", gluster_cmds[i].desc);
+        nbd_info("\t%s\n", gluster_cmds[i].pattern);
+        nbd_info("\t\t%s\n\n", gluster_cmds[i].desc);
     }
-    _nbd_out("\n");
+    nbd_info("\n");
 
     return 0;
 }

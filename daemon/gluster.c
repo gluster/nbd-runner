@@ -35,8 +35,9 @@
 #include "utils.h"
 #include "strlcpy.h"
 #include "nbd-common.h"
+#include "nbd-sysconfig.h"
 
-#define NBD_GFAPI_LOG_FILE "/var/log/nbd-runner.log"
+#define NBD_GFAPI_LOG_FILE NBD_LOG_DIR_DEFAULT"/nbd-runner-glfs.log"
 #define NBD_GFAPI_LOG_LEVEL 7
 #define NBD_NL_VERSION 1
 
