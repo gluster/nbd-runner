@@ -692,14 +692,17 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     }
 
     dev = g_hash_table_lookup(nbd_nbds_hash, unmap->nbd);
-    if (!dev)
+    if (!dev) {
+        nbd_warn("There is no maping for '%s'!", unmap->nbd);
         return true;
+    }
 
     pthread_mutex_lock(&dev->lock);
     dev->status = NBD_DEV_CONN_ST_CREATED;
     dev->nbd[0] = '\0';
     dev->time[0] = '\0';
     nbd_update_json_config_file(dev, true);
+    g_hash_table_remove(nbd_nbds_hash, unmap->nbd);
     pthread_mutex_unlock(&dev->lock);
 
     return true;
