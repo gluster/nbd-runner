@@ -888,7 +888,7 @@ int nbd_unmap_device(int count, char **options, int type)
 
     ret = rep.exit;
     if (ret && rep.buf) {
-        nbd_err("Map failed: %s\n", rep.buf);
+        nbd_err("Unmap failed: %s\n", rep.buf);
         goto err;
     }
 
