@@ -33,6 +33,7 @@
 #include "rpc_nbd.h"
 #include "nbd-log.h"
 #include "utils.h"
+#include "strlcpy.h"
 #include "nbd-common.h"
 
 #define NBD_GFAPI_LOG_FILE "/var/log/nbd-runner.log"
@@ -200,8 +201,8 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
 
         *sep = '\0';
 
-        strncpy(info->volume, ptr, NAME_MAX);
-        strncpy(info->path, sep + 1, PATH_MAX);
+        strlcpy(info->volume, ptr, NAME_MAX);
+        strlcpy(info->path, sep + 1, PATH_MAX);
 
         if (sem)
             ptr = sem + 1;
