@@ -14,13 +14,15 @@ RPM_WITH_FLAGS = --with initd
 endif
 
 install-data-local:
-	$(MKDIR_P) $(DESTDIR)${sysconfigdir};        \
-	$(INSTALL_DATA) nbd-runner.sysconfig         \
-	$(DESTDIR)${sysconfigdir}/nbd-runner;
+	$(mkdir_p) $(DESTDIR)${sysconfigdir};
+	$(INSTALL_PROGRAM) nbd-runner.sysconfig $(DESTDIR)${sysconfigdir}/nbd-runner;
+	$(mkdir_p) $(DESTDIR)${systemddir};
+	$(INSTALL_PROGRAM) nbd-runner.service.in $(DESTDIR)$(systemddir)/nbd-runner.service;
+
 
 uninstall-local:
-	cd $(DESTDIR)$(bindir) && rm -f nbd-runner nbd-cli \
-	rm -f $(DESTDIR)${sysconfigdir}/nbd-runner
+	rm -f $(DESTDIR)${sysconfigdir}/nbd-runner;
+	rm -f $(DESTDIR)${systemddir}/nbd-runner.service
 
 gitclean: clean distclean
 	find . -path gnulib -prune -name Makefile.in -exec rm -f {} \;
