@@ -45,7 +45,7 @@ extern int iport;
 
 static void usage(void)
 {
-    _nbd_out("Usage:\n"
+    nbd_info("Usage:\n"
              "\tnbd-runner [<args>]\n\n"
              "Commands:\n"
              "\thelp\n"
@@ -130,8 +130,8 @@ again:
     sin.sin_port = htons(iport);
 
     if (bind(listenfd, (struct sockaddr*)&sin, sizeof(struct sockaddr)) < 0) {
-        nbd_out("bind on port %d failed, %s\n", iport, strerror(errno));
-        nbd_out("will try to use port %d!\n", ++iport);
+        nbd_warn("bind on port %d failed, %s\n", iport, strerror(errno));
+        nbd_warn("will try to use port %d!\n", ++iport);
         goto again;
     }
 
@@ -153,7 +153,7 @@ again:
     event_add(&listen_ev, NULL);
     event_base_dispatch(base);
 
-    nbd_out("nbd server exits!\n");
+    nbd_info("nbd server exits!\n");
 
     event_del(&listen_ev);
     event_base_free(base);
@@ -250,12 +250,6 @@ int main (int argc, char **argv)
         goto out;
     }
 
-    ret = nbd_log_init();
-    if (ret < 0) {
-        nbd_err("nbd_log_init failed!\n");
-        goto out;
-    }
-
     ind = 1;
     while (ind < argc) {
         if (!strcmp("ihost", argv[ind])) {
@@ -321,8 +315,8 @@ int main (int argc, char **argv)
 
             ind += 2;
         } else if (!strcmp("version", argv[ind])) {
-            _nbd_out("nbd-runner (%d.%d)\n\n", NBD_VERSION_MAJ, NBD_VERSION_MIN);
-            _nbd_out("%s\n", NBD_LICENSE_INFO);
+            nbd_info("nbd-runner (%d.%d)\n\n", NBD_VERSION_MAJ, NBD_VERSION_MIN);
+            nbd_info("%s\n", NBD_LICENSE_INFO);
             goto out;
         } else if (!strcmp("help", argv[ind])) {
             usage();
@@ -333,6 +327,11 @@ int main (int argc, char **argv)
             goto out;
         }
     }
+
+    if (nbd_setup_log(nbd_cfg->log_dir))
+        goto out;
+
+    nbd_crit("Starting...\n");
 
     /* make sure only one nbd-runner daemon is running */
     lockfd = creat(NBD_LOCK_FILE, S_IRUSR | S_IWUSR);
@@ -369,11 +368,14 @@ int main (int argc, char **argv)
     }
 
     ret = EXIT_SUCCESS;
+
 out:
+    nbd_free_config(nbd_cfg);
+
+    nbd_destroy_log();
+
     if (lockfd != -1)
         close(lockfd);
-    nbd_log_destroy();
     nbd_service_fini();
-    nbd_free_config(nbd_cfg);
     exit(ret);
 }

@@ -20,7 +20,7 @@
 #include <linux/limits.h>
 
 #include "rpc_nbd.h"
-#include "utils.h"
+#include "utils/utils.h"
 
 struct nbd_device {
     handler_t type;

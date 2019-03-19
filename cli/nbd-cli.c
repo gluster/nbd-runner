@@ -27,7 +27,7 @@
 
 static void usage(void)
 {
-    _nbd_out("Usage:\n\n"
+    nbd_info("Usage:\n\n"
             "\tgluster help\n\t\tDisplay help for gluster commands\n\n"
             "\tceph help [TODO]\n\t\tDisplay help for ceph commands\n\n"
             "\tglobal help [TODO]\n\t\tDisplay help for global commands\n\n"
@@ -88,13 +88,13 @@ static int load_our_module(void)
             if (uname(&u) < 0) {
                 nbd_err("uname() failed: %m\n");
             } else {
-                nbd_out("no modules dir '/lib/modules/%s', checking in '/sys/modules/'\n",
+                nbd_info("no modules dir '/lib/modules/%s', checking in '/sys/modules/'\n",
                         u.release);
                 ret = stat(CFGFS_NBD_MOD, &sb);
                 if (ret) {
                     nbd_err("stat() on '%s' failed: %m\n", CFGFS_NBD_MOD);
                 } else {
-                    nbd_out("Module nbd already loaded\n");
+                    nbd_info("Module nbd already loaded\n");
                 }
             }
         } else {
@@ -118,11 +118,11 @@ static int load_our_module(void)
         state = kmod_module_get_initstate(mod);
         switch (state) {
         case KMOD_MODULE_BUILTIN:
-            nbd_out("Module '%s' is builtin\n", kmod_module_get_name(mod));
+            nbd_dbg("Module '%s' is builtin\n", kmod_module_get_name(mod));
             break;
 
         case KMOD_MODULE_LIVE:
-            nbd_out("Module '%s' is already loaded\n", kmod_module_get_name(mod));
+            nbd_dbg("Module '%s' is already loaded\n", kmod_module_get_name(mod));
             break;
 
         default:
@@ -131,7 +131,7 @@ static int load_our_module(void)
                     NULL, NULL, NULL, NULL);
 
             if (err == 0) {
-                nbd_out("Inserted module '%s'\n", kmod_module_get_name(mod));
+                nbd_info("Inserted module '%s'\n", kmod_module_get_name(mod));
             } else if (err < 0) {
                 nbd_err("Failed to insert '%s': %s\n",
                         kmod_module_get_name(mod), strerror(-err));
@@ -168,8 +168,6 @@ int main(int argc, char *argv[])
     char *key = NULL;
     int len;
 
-    nbd_log_init();
-
     if (argc == 1) {
         usage();
         ret = EXIT_SUCCESS;
@@ -185,8 +183,8 @@ int main(int argc, char *argv[])
             usage();
             goto out;
         case NBD_OPT_VERSION:
-            _nbd_out("nbd-cli (%d.%d)\n\n", NBD_VERSION_MAJ, NBD_VERSION_MIN);
-            _nbd_out("%s\n", NBD_LICENSE_INFO);
+            nbd_info("nbd-cli (%d.%d)\n\n", NBD_VERSION_MAJ, NBD_VERSION_MIN);
+            nbd_info("%s\n", NBD_LICENSE_INFO);
             goto out;
         case NBD_OPT_MAX:
         default:
@@ -231,6 +229,5 @@ int main(int argc, char *argv[])
 out:
     free(key);
     nbd_unregister_backstores(cmds_hash);
-    nbd_log_destroy();
     exit(ret);
 }
