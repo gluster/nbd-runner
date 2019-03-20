@@ -420,17 +420,22 @@ err:
 }
 
 static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd, int type,
-                                         char *cfg, CLIENT *clnt)
+                                         char *cfg, CLIENT *clnt, int *ret)
 {
     struct map_args *args;
     int (*nl_callback_fn)(struct nl_msg *, void *);
     struct nl_sock *netfd;
 
-    if (!driver_id)
+    if (!driver_id) {
+        if (ret)
+            *ret = -EINVAL;
         return NULL;
+    }
 
     args = malloc(sizeof(struct map_args));
     if (!args) {
+        if (ret)
+            *ret = -ENOMEM;
         nbd_err("Couldn't alloc args, %s!\n", strerror(errno));
         return NULL;
     }
@@ -440,6 +445,8 @@ static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd, int type,
     args->clnt = clnt;
     netfd = nl_socket_alloc();
     if (!netfd) {
+        if (ret)
+            *ret = -errno;
         nbd_err("Couldn't alloc socket, %s!\n", strerror(errno));
         goto err;
     }
@@ -459,6 +466,8 @@ static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd, int type,
     nl_socket_modify_cb(netfd, NL_CB_VALID, NL_CB_CUSTOM, nl_callback_fn, args);
 
     if (genl_connect(netfd)) {
+        if (ret)
+            *ret = -errno;
         nbd_err("Couldn't connect to the nbd netlink socket, %s!\n",
                 strerror(errno));
         goto err;
@@ -466,6 +475,8 @@ static struct nl_sock *nbd_setup_netlink(int *driver_id, int cmd, int type,
 
     *driver_id = genl_ctrl_resolve(netfd, "nbd");
     if (*driver_id < 0) {
+        if (ret)
+            *ret = -errno;
         nbd_err("Couldn't resolve the nbd netlink family, %s!\n",
                 strerror(errno));
         goto err;
@@ -558,16 +569,17 @@ static int nbd_connect_to_server(char *host, int port)
 {
     struct sockaddr_in addr;
     int sock;
+    int ret;
 
     if (!host || port < 0) {
         nbd_err("Invalid host or port param!\n");
-        return -1;
+        return -EINVAL;
     }
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0){
         nbd_err("failed to create socket: %s\n", strerror(errno));
-        return -1;
+        return sock;
     }
 
     bzero(&addr, sizeof(addr));
@@ -576,6 +588,7 @@ static int nbd_connect_to_server(char *host, int port)
     addr.sin_port = htons(port);
 
     if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        ret = -errno;
         nbd_err("connect error: %s\n", strerror(errno));
         goto err;
     }
@@ -584,39 +597,33 @@ static int nbd_connect_to_server(char *host, int port)
 
 err:
     close(sock);
-    return -1;
+    return ret;
 }
 
-static int _nbd_map_device(char *cfg, struct nbd_response *rep, int dev_index,
-                           int timeout, bool readonly, int type, CLIENT *clnt)
+static int unmap_device(struct nl_sock *netfd, int driver_id, int index)
 {
-    struct nl_sock *netfd;
-    int driver_id;
-    int sockfd;
-    int ret;
+    struct nl_msg *msg;
+    int ret = 0;
 
-    /* Connect to server for IOs */
-    sockfd = nbd_connect_to_server(rep->host, atoi(rep->port));
-    if (sockfd < 0)
-        return -1;
+    msg = nlmsg_alloc();
+    if (!msg) {
+        nbd_err("Couldn't allocate netlink message!\n");
+        ret = -1;
+        goto nla_put_failure;
+    }
 
-    /* Setup netlink to configure the nbd device */
-    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_MAP, type, cfg, clnt);
-    if (!netfd)
-        goto err;
+    genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, driver_id, 0, 0,
+            NBD_CMD_DISCONNECT, 0);
+    NLA_PUT_U32(msg, NBD_ATTR_INDEX, index);
+    if (nl_send_sync(netfd, msg) < 0) {
+        nbd_err("Failed to disconnect device, check dmsg\n");
+        ret = -1;
+    }
 
+    nbd_info("Unmap '/dev/nbd%d' succeeded!\n", index);
 
-    /* Setup the IOs sock fd to nbd device to start IOs */
-    ret = nbd_device_connect(cfg, netfd, sockfd, driver_id, rep->size,
-                             rep->blksize, timeout, dev_index, readonly);
-
-    if (!ret)
-        return 0;
-
-err:
-    close(sockfd);
-    nl_socket_free(netfd);
-    return -1;
+nla_put_failure:
+    return ret;
 }
 
 int nbd_map_device(int count, char **options, int type)
@@ -628,12 +635,16 @@ int nbd_map_device(int count, char **options, int type)
     char *host = NULL;
     int sock = RPC_ANYSOCK;
     int dev_index = -1;
+    int tmp_index;
     int timeout = 0;
     bool readonly = false;
-    int ret = 0;
+    int ret = -EINVAL;
     int len;
     int ind;
     int max_len = 1024;
+    struct nl_sock *netfd = NULL;
+    int driver_id;
+    int sockfd;
 
     /* strict check */
     if (count < 1 || count > 7 ) {
@@ -732,6 +743,12 @@ int nbd_map_device(int count, char **options, int type)
         goto err;
     }
 
+    /* Setup netlink to configure the nbd device */
+    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_MAP, type, map->cfgstring,
+                              clnt, &ret);
+    if (!netfd)
+        goto err;
+
     if (nbd_premap_1(map, &rep, clnt) != RPC_SUCCESS) {
         ret = -errno;
         nbd_err("nbd_premap_1 failed!\n");
@@ -739,14 +756,36 @@ int nbd_map_device(int count, char **options, int type)
     }
 
     ret = rep.exit;
-    if (ret && rep.buf) {
+    if (ret == -EEXIST) {
+        if (sscanf(rep.buf, "/dev/nbd%d", &tmp_index) != 1) {
+            ret = -errno;
+            nbd_err("Invalid nbd-device returned from server side!\n");
+            goto err;
+        }
+
+        ret = unmap_device(netfd, driver_id, tmp_index);
+        if (ret) {
+            nbd_err("unmap /dev/nbd%d failed!\n", tmp_index);
+            goto err;
+        }
+    } else if (ret && rep.buf) {
         nbd_err("Map failed: %s\n", rep.buf);
         goto err;
     }
 
-    /* create the /dev/nbdX device */
-    ret = _nbd_map_device(map->cfgstring, &rep, dev_index, timeout, readonly,
-                          type, clnt);
+    nbd_dbg("The listen host is '%s' and the port is '%s'\n", rep.host,
+            rep.port);
+
+    /* Connect to server for IOs */
+    sockfd = nbd_connect_to_server(rep.host, atoi(rep.port));
+    if (sockfd < 0) {
+        ret = sockfd;
+        goto err;
+    }
+
+    /* Setup the IOs sock fd to nbd device to start IOs */
+    ret = nbd_device_connect(map->cfgstring, netfd, sockfd, driver_id, rep.size,
+                             rep.blksize, timeout, dev_index, readonly);
     if (ret < 0) {
         nbd_err("failed to init the /dev/nbd device!\n");
         goto err;
@@ -754,7 +793,14 @@ int nbd_map_device(int count, char **options, int type)
 
     nbd_info("Map succeeded!\n");
 
+    ret = 0;
 err:
+    /* We will keep the sockfd opened if succeeded */
+    if (ret)
+        close(sockfd);
+
+    nl_socket_free(netfd);
+
     if (clnt) {
         if (rep.buf && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
                                      (char *)&rep))
@@ -764,32 +810,6 @@ err:
 
     free(host);
     free(map);
-    return ret;
-}
-
-static int unmap_device(struct nl_sock *netfd, int driver_id, int index)
-{
-    struct nl_msg *msg;
-    int ret = 0;
-
-    msg = nlmsg_alloc();
-    if (!msg) {
-        nbd_err("Couldn't allocate netlink message!\n");
-        ret = -1;
-        goto nla_put_failure;
-    }
-
-    genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, driver_id, 0, 0,
-            NBD_CMD_DISCONNECT, 0);
-    NLA_PUT_U32(msg, NBD_ATTR_INDEX, index);
-    if (nl_send_sync(netfd, msg) < 0) {
-        nbd_err("Failed to disconnect device, check dmsg\n");
-        ret = -1;
-    }
-
-    nbd_info("Unmap succeeded!\n");
-
-nla_put_failure:
     return ret;
 }
 
@@ -892,11 +912,10 @@ int nbd_unmap_device(int count, char **options, int type)
         goto err;
     }
 
-    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_UNMAP, type, NULL, NULL);
-    if (!netfd) {
-        ret = -ENOMEM;
+    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_UNMAP, type, NULL, NULL,
+                              &ret);
+    if (!netfd)
         goto err;
-    }
 
     ret = unmap_device(netfd, driver_id, dev_index);
 
@@ -1213,11 +1232,9 @@ int nbd_list_devices(int count, char **options, int type)
         goto nla_put_failure;
     }
 
-    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST, type, NULL, NULL);
-    if (!netfd) {
-        ret = -ENOMEM;
+    netfd = nbd_setup_netlink(&driver_id, NBD_CLI_LIST, type, NULL, NULL, &ret);
+    if (!netfd)
         goto nla_put_failure;
-    }
 
     msg = nlmsg_alloc();
     if (!msg) {
