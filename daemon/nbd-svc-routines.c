@@ -539,11 +539,17 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     }
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
-    if (dev && dev->status == NBD_DEV_CONN_ST_MAPPED) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX, "%s already map to %s!", key, dev->nbd);
-        nbd_err("%s already map to %s!\n", key, dev->nbd);
-        goto err;
+    if (dev) {
+        if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
+            rep->exit = -EBUSY;
+            snprintf(rep->buf, NBD_EXIT_MAX, "%s already map to %s!", key, dev->nbd);
+            nbd_err("%s already map to %s!\n", key, dev->nbd);
+            goto err;
+        } else if (dev->status == NBD_DEV_CONN_ST_DEAD) {
+            rep->exit = -EEXIST;
+            snprintf(rep->buf, NBD_EXIT_MAX, "%s", dev->nbd);
+            goto map;
+        }
     }
 
     if (!dev) {
@@ -595,6 +601,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         inserted = true;
     }
 
+map:
     pthread_mutex_lock(&dev->lock);
     if (!handler->map(dev, rep)) {
         pthread_mutex_unlock(&dev->lock);
