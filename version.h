@@ -12,7 +12,7 @@
 #define __VERSION_H
 
 #define NBD_VERSION_MAJ 0
-#define NBD_VERSION_MIN 2
+#define NBD_VERSION_MIN 3
 
 #define NBD_LICENSE_INFO                                            \
 "Repository rev: https://github.com/gluster/nbd-runner.git\n"       \
