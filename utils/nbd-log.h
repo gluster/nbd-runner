@@ -1,12 +1,13 @@
 /*
-   Copyright (c) 2019 Red Hat, Inc. <http://www.redhat.com>
-   This file is part of nbd-runner.
-
-   This file is licensed to you under your choice of the GNU Lesser
-   General Public License, version 3 or any later version (LGPLv3 or
-   later), or the GNU General Public License, version 2 (GPLv2), in all
-   cases as published by the Free Software Foundation.
-*/
+ * Copyright (c) 2019 Red Hat, Inc. <http://www.redhat.com>
+ *
+ * This file is licensed to you under your choice of the GNU Lesser
+ * General Public License, version 3 or any later version (LGPLv3 or
+ * later), or the GNU General Public License, version 2 (GPLv2), in all
+ * cases as published by the Free Software Foundation.
+ *
+ * This file is part of nbd-runner.
+ */
 
 #ifndef __NBD_LOG_H
 #define __NBD_LOG_H
@@ -43,34 +44,34 @@ void nbd_destroy_log(void);
 void nbd_set_log_level(int level);
 
 __attribute__ ((format (printf, 4, 5)))
-void nbd_crit_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+void _nbd_crit_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 __attribute__ ((format (printf, 4, 5)))
-void nbd_err_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+void _nbd_err_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 __attribute__ ((format (printf, 4, 5)))
-void nbd_warn_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+void _nbd_warn_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 __attribute__ ((format (printf, 4, 5)))
-void nbd_info_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+void _nbd_info_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 __attribute__ ((format (printf, 4, 5)))
-void nbd_dbg_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+void _nbd_dbg_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 __attribute__ ((format (printf, 4, 5)))
-void nbd_dbg_io_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
+void _nbd_dbg_io_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 __attribute__ ((format (printf, 3, 4)))
-void nbd_fill_reply_message(struct nbd_response *rep, int exit, const char *fmt, ...);
+void _nbd_fill_reply_message(struct nbd_response *rep, int exit, const char *fmt, ...);
 
-#define nbd_dev_crit(dev, ...)  do { nbd_crit_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_dev_err(dev, ...)  do { nbd_err_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_dev_warn(dev, ...) do { nbd_warn_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_dev_info(dev, ...) do { nbd_info_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_dev_dbg(dev, ...)  do { nbd_dbg_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_dev_dbg_io(dev, ...)  do { nbd_dbg_io_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_crit(dev, ...)  do { _nbd_crit_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_err(dev, ...)  do { _nbd_err_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_warn(dev, ...) do { _nbd_warn_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_info(dev, ...) do { _nbd_info_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_dbg(dev, ...)  do { _nbd_dbg_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dev_dbg_io(dev, ...)  do { _nbd_dbg_io_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
 
-#define nbd_crit(...) do { nbd_crit_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_err(...)  do { nbd_err_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_warn(...) do { nbd_warn_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_info(...) do { nbd_info_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_dbg(...)  do { nbd_dbg_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
-#define nbd_dbg_io(...)  do { nbd_dbg_io_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_crit(...) do { _nbd_crit_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_err(...)  do { _nbd_err_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_warn(...) do { _nbd_warn_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_info(...) do { _nbd_info_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dbg(...)  do { _nbd_dbg_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+#define nbd_dbg_io(...)  do { _nbd_dbg_io_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
 
-#define nbd_fill_reply(rep, exit, ...)  do { nbd_fill_reply_message(rep, exit, __VA_ARGS__);} while (0)
+#define nbd_fill_reply(rep, exit, ...)  do { _nbd_fill_reply_message(rep, exit, __VA_ARGS__);} while (0)
 
 #endif /* __NBD_LOG_H */
