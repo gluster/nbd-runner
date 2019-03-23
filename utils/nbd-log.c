@@ -9,6 +9,7 @@
  */
 
 #define _GNU_SOURCE
+#include <stdio.h>
 #include <stdint.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -316,6 +317,30 @@ void nbd_dbg_nbd_message(struct nbd_device *dev, const char *funcname,
     va_start(args, fmt);
     log_internal(NBD_LOG_DEBUG_IO, dev, funcname, linenr, fmt,
             args);
+    va_end(args);
+}
+
+
+static void __nbd_fill_reply_message(struct nbd_response *rep, int exit,
+                                     const char *fmt, va_list args)
+{
+    if (!rep)
+        return;
+
+    rep->exit = exit;
+
+    if (!rep->buf)
+        return;
+
+    vsnprintf(rep->buf, NBD_EXIT_MAX, fmt, args);
+}
+
+void nbd_fill_reply_message(struct nbd_response *rep, int exit, const char *fmt, ...)
+{
+    va_list args;
+
+    va_start(args, fmt);
+    __nbd_fill_reply_message(rep, exit, fmt, args);
     va_end(args);
 }
 

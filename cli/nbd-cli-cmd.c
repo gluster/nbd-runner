@@ -616,8 +616,18 @@ static int unmap_device(struct nl_sock *netfd, int driver_id, int index)
             NBD_CMD_DISCONNECT, 0);
     NLA_PUT_U32(msg, NBD_ATTR_INDEX, index);
     if (nl_send_sync(netfd, msg) < 0) {
-        nbd_err("Failed to disconnect device, check dmsg\n");
-        ret = -1;
+        /*
+         * There will be 16 nbd device created when the nbd.ko
+         * is loading as default, if the dead backstore mapped
+         * to have higher number than 15 and after the client
+         * node is restart or the module is reloaded, the kernel
+         * will return ENOENT
+         */
+        if (errno != ENOENT) {
+            nbd_err("Failed to disconnect device, check dmsg, %d\n", errno);
+            ret = -1;
+            goto nla_put_failure;
+        }
     }
 
     nbd_info("Unmap '/dev/nbd%d' succeeded!\n", index);
@@ -1254,6 +1264,7 @@ int nbd_list_devices(int count, char **options, int type)
     if (nl_send_sync(netfd, msg) < 0) {
         ret = -errno;
         nbd_err("Failed to setup device, check dmesg\n");
+        goto nla_put_failure;
     }
 
     list_info(rep.buf, ltype);

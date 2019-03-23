@@ -27,6 +27,7 @@
 #include <inttypes.h>
 
 #include "nbd-sysconfig.h"
+#include "rpc_nbd.h"
 
 #define NBD_LOG_CRIT	LOG_CRIT	/* critical conditions */
 #define NBD_LOG_ERROR	LOG_ERR		/* error conditions */
@@ -53,7 +54,8 @@ __attribute__ ((format (printf, 4, 5)))
 void nbd_dbg_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 __attribute__ ((format (printf, 4, 5)))
 void nbd_dbg_io_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
-
+__attribute__ ((format (printf, 3, 4)))
+void nbd_fill_reply_message(struct nbd_response *rep, int exit, const char *fmt, ...);
 
 #define nbd_dev_crit(dev, ...)  do { nbd_crit_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
 #define nbd_dev_err(dev, ...)  do { nbd_err_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
@@ -68,5 +70,7 @@ void nbd_dbg_io_message(struct nbd_device *dev, const char *funcname, int linenr
 #define nbd_info(...) do { nbd_info_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
 #define nbd_dbg(...)  do { nbd_dbg_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
 #define nbd_dbg_io(...)  do { nbd_dbg_io_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
+
+#define nbd_fill_reply(rep, exit, ...)  do { nbd_fill_reply_message(rep, exit, __VA_ARGS__);} while (0)
 
 #endif /* __NBD_LOG_H */
