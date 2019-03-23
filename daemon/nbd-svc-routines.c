@@ -328,17 +328,15 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     rep->buf = malloc(NBD_EXIT_MAX);
     if (!rep->buf) {
-        rep->exit = -ENOMEM;
+        nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!");
         nbd_err("No memory for rep->buf!\n");
         return true;
     }
 
     handler = g_hash_table_lookup(nbd_handler_hash, &create->type);
     if (!handler) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %d!",
-                 create->type);
+        nbd_fill_reply(rep, -EINVAL, "Invalid handler or the handler is not loaded: %d!",
+                       create->type);
         nbd_err("Invalid handler or the handler is not loaded: %d!",
                 create->type);
         goto err;
@@ -346,16 +344,14 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     key = nbd_get_hash_key(create->cfgstring);
     if (!key) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX, "Invalid cfgstring %s!", create->cfgstring);
+        nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", create->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", create->cfgstring);
         goto err;
     }
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (dev) {
-        rep->exit = -EEXIST;
-        snprintf(rep->buf, NBD_EXIT_MAX, "%s is already exist!", create->cfgstring);
+        nbd_fill_reply(rep, -EEXIST, "%s is already exist!", create->cfgstring);
         nbd_err("%s is already exist!\n", create->cfgstring);
         free(key);
         goto err;
@@ -363,8 +359,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     dev = calloc(1, sizeof(struct nbd_device));
     if (!dev) {
-        rep->exit = -ENOMEM;
-        snprintf(rep->buf, NBD_EXIT_MAX, "No memory for nbd_device!");
+        nbd_fill_reply(rep, -ENOMEM, "No memory for nbd_device!");
         nbd_err("No memory for nbd_device!\n");
         goto err;
     }
@@ -424,17 +419,15 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
 
     rep->buf = malloc(NBD_EXIT_MAX);
     if (!rep->buf) {
-        rep->exit = -ENOMEM;
+        nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!\n");
         nbd_err("No memory for rep->buf!\n");
         return true;
     }
 
     handler = g_hash_table_lookup(nbd_handler_hash, &delete->type);
     if (!handler) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %d!",
-                 delete->type);
+        nbd_fill_reply(rep, -EINVAL, "Invalid handler or the handler is not loaded: %d!",
+                       delete->type);
         nbd_err("Invalid handler or the handler is not loaded: %d!",
                 delete->type);
         goto err;
@@ -442,8 +435,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
 
     key = nbd_get_hash_key(delete->cfgstring);
     if (!key) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX, "Invalid cfgstring %s!", delete->cfgstring);
+        nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", delete->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", delete->cfgstring);
         goto err;
     }
@@ -458,18 +450,16 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
          * tmp new dev.
          */
         nbd_info("%s is not in the hash table, will try to delete enforce!\n",
-                delete->cfgstring);
+                 delete->cfgstring);
         dev = calloc(1, sizeof(struct nbd_device));
         if (!dev) {
-            rep->exit = -ENOMEM;
-            snprintf(rep->buf, NBD_EXIT_MAX, "No memory for nbd_device!");
+            nbd_fill_reply(rep, -ENOMEM, "No memory for nbd_device!");
             nbd_err("No memory for nbd_device!\n");
             goto err;
         }
 
         if (!handler->cfg_parse(dev, delete->cfgstring, rep)) {
-            rep->exit = -EAGAIN;
-            snprintf(rep->buf, NBD_EXIT_MAX, "failed to delete %s!", delete->cfgstring);
+            nbd_fill_reply(rep, -EAGAIN, "failed to delete %s!", delete->cfgstring);
             nbd_err("failed to delete %s\n", delete->cfgstring);
             goto err;
         }
@@ -482,9 +472,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
 
     pthread_mutex_lock(&dev->lock);
     if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
-        rep->exit = -EPERM;
-        snprintf(rep->buf, NBD_EXIT_MAX,
-                 "Device %s is still mapped, please unmap it first!", key);
+        nbd_fill_reply(rep, -EPERM, "Device %s is still mapped, please unmap it first!", key);
         nbd_err("Device %s is still mapped, please unmap it first!\n", key);
         pthread_mutex_unlock(&dev->lock);
         goto err;
@@ -515,17 +503,15 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
     rep->buf = malloc(NBD_EXIT_MAX);
     if (!rep->buf) {
-        rep->exit = -ENOMEM;
+        nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!\n");
         nbd_err("No memory for rep->buf!\n");
         return true;
     }
 
     handler = g_hash_table_lookup(nbd_handler_hash, &map->type);
     if (!handler) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX,
-                 "Invalid handler or the handler is not loaded: %d!",
-                 map->type);
+        nbd_fill_reply(rep, -EINVAL, "Invalid handler or the handler is not loaded: %d!",
+                       map->type);
         nbd_err("Invalid handler or the handler is not loaded: %d!",
                 map->type);
         goto err;
@@ -533,8 +519,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
     key = nbd_get_hash_key(map->cfgstring);
     if (!key) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX, "Invalid cfgstring %s!", map->cfgstring);
+        nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", map->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", map->cfgstring);
         goto err;
     }
@@ -542,13 +527,11 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (dev) {
         if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
-            rep->exit = -EBUSY;
-            snprintf(rep->buf, NBD_EXIT_MAX, "%s already map to %s!", key, dev->nbd);
+            nbd_fill_reply(rep, -EBUSY, "%s already map to %s!", key, dev->nbd);
             nbd_err("%s already map to %s!\n", key, dev->nbd);
             goto err;
         } else if (dev->status == NBD_DEV_CONN_ST_DEAD) {
-            rep->exit = -EEXIST;
-            snprintf(rep->buf, NBD_EXIT_MAX, "%s", dev->nbd);
+            nbd_fill_reply(rep, -EEXIST, "%s", dev->nbd);
             goto map;
         }
     }
@@ -564,15 +547,13 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
                 map->cfgstring);
         dev = calloc(1, sizeof(struct nbd_device));
         if (!dev) {
-            rep->exit = -ENOMEM;
-            snprintf(rep->buf, NBD_EXIT_MAX, "No memory for nbd_device!");
+            nbd_fill_reply(rep, -ENOMEM, "No memory for nbd_device!");
             nbd_err("No memory for nbd_device!\n");
             goto err;
         }
 
         if (!handler->cfg_parse(dev, map->cfgstring, rep)) {
-            rep->exit = -EAGAIN;
-            snprintf(rep->buf, NBD_EXIT_MAX, "failed to parse %s!", map->cfgstring);
+            nbd_fill_reply(rep, -EAGAIN, "failed to parse %s!", map->cfgstring);
             nbd_err("failed to parse %s\n", map->cfgstring);
             free(dev);
             goto err;
@@ -638,23 +619,21 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
 
     rep->buf = calloc(1, NBD_EXIT_MAX);
     if (!rep->buf) {
-        rep->exit = -ENOMEM;
+        nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!\n");
         nbd_err("No memory for rep->buf!\n");
         return true;
     }
 
     key = nbd_get_hash_key(cfg);
     if (!key) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX, "Invalid cfgstring %s!", cfg);
+        nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", cfg);
         nbd_err("Invalid cfgstring %s!\n", cfg);
         return true;
     }
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (!dev) {
-        rep->exit = -ENOENT;
-        snprintf(rep->buf, NBD_EXIT_MAX, "Device is none exist!");
+        nbd_fill_reply(rep, -ENOENT, "Device is none exist!");
         nbd_err("Device is none exist!\n");
         return true;
     }
@@ -674,27 +653,48 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
 bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
 {
     struct nbd_device *dev;
+    char *key = NULL;
 
     rep->exit = 0;
 
     rep->buf = calloc(1, NBD_EXIT_MAX);
     if (!rep->buf) {
-        rep->exit = -ENOMEM;
+        nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!\n");
         nbd_err("No memory for rep->buf!\n");
         return true;
     }
 
-    if (!unmap->nbd[0]) {
-        rep->exit = -EINVAL;
-        snprintf(rep->buf, NBD_EXIT_MAX, "Invalid nbd device, it shouldn't be null!");
-        nbd_err("Invalid nbd device, it shouldn't be null!\n");
-        return true;
+    if (!unmap->nbd[0] && !unmap->cfgstring[0]) {
+        nbd_fill_reply(rep, -EINVAL,
+                       "Invalid nbd device and cfgstring, they shouldn't be null at the same time!");
+        nbd_err("Invalid nbd device and cfgstring, they shouldn't be null at the same time!\n");
+        goto out;
     }
 
-    dev = g_hash_table_lookup(nbd_nbds_hash, unmap->nbd);
-    if (!dev) {
-        nbd_warn("There is no maping for '%s'!", unmap->nbd);
-        return true;
+    if (unmap->nbd[0]) {
+        dev = g_hash_table_lookup(nbd_nbds_hash, unmap->nbd);
+        if (!dev) {
+            nbd_fill_reply(rep, -errno, "There is no maping for '%s'!",
+                           unmap->nbd);
+            nbd_warn("There is no maping for '%s'!", unmap->nbd);
+            goto out;
+        }
+    } else {
+        key = nbd_get_hash_key(unmap->cfgstring);
+        if (!key) {
+            nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", unmap->cfgstring);
+            nbd_err("Invalid cfgstring %s!\n", unmap->cfgstring);
+            goto out;
+        }
+
+        dev = g_hash_table_lookup(nbd_devices_hash, key);
+        if (!dev) {
+            nbd_fill_reply(rep, -ENODEV, "There is no maping for '%s'!", key);
+            nbd_warn("There is no maping for '%s'!", key);
+            goto out;
+        }
+
+        nbd_fill_reply(rep, 0, "%s", dev->nbd);
     }
 
     pthread_mutex_lock(&dev->lock);
@@ -705,6 +705,8 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     g_hash_table_remove(nbd_nbds_hash, unmap->nbd);
     pthread_mutex_unlock(&dev->lock);
 
+out:
+    free(key);
     return true;
 }
 
@@ -726,23 +728,21 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
 
     rep->buf = calloc(1, len);
     if (!rep->buf) {
-        rep->exit = -ENOMEM;
+        nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!\n");
         nbd_err("No memory for rep->buf!\n");
         return true;
     }
 
     globalobj = json_object_new_object();
     if (!globalobj) {
-        rep->exit = -ENOMEM;
-        snprintf(rep->buf, NBD_EXIT_MAX, "No memory for the gloablobj!");
+        nbd_fill_reply(rep, -ENOMEM, "No memory for the gloablobj!");
         nbd_err("No memory for globalobj!\n");
         return true;
     }
 
     tmp = malloc(max);
     if (!tmp) {
-        rep->exit = -ENOMEM;
-        snprintf(rep->buf, NBD_EXIT_MAX, "No memory for the tmp buf!");
+        nbd_fill_reply(rep, -ENOMEM, "No memory for the tmp buf!");
         nbd_err("No memory for tmp buf!\n");
         goto err;
     }
@@ -785,8 +785,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
 
         devobj = json_object_new_object();
         if (!devobj) {
-            rep->exit = -ENOMEM;
-            snprintf(rep->buf, NBD_EXIT_MAX, "No memory for the devobj!");
+            nbd_fill_reply(rep, -ENOMEM, "No memory for the devobj!");
             nbd_err("No memory for devobj!\n");
             pthread_mutex_unlock(&dev->lock);
             goto err;
@@ -807,8 +806,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     if (l > len) {
         out = realloc(rep->buf, l);
         if (!out) {
-            rep->exit = -ENOMEM;
-            snprintf(rep->buf, NBD_EXIT_MAX, "No memory for the list buffer!");
+            nbd_fill_reply(rep, -ENOMEM, "No memory for the list buffer!");
             nbd_err("No memory for the list buffer!\n");
             goto err;
         }

@@ -1,5 +1,6 @@
 /*
  * Copyright 2016-2019 China Mobile, Inc.
+ * Copyright (c) 2019 Red Hat, Inc. <http://www.redhat.com>
  *
  * This file is licensed to you under your choice of the GNU Lesser
  * General Public License, version 2.1 or any later version (LGPLv2.1 or
@@ -9,6 +10,7 @@
  */
 
 #define _GNU_SOURCE
+#include <stdio.h>
 #include <stdint.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -34,7 +36,7 @@
 #define NBD_LOG_FILENAME    "nbd-runner.log"
 
 typedef int (*log_output_fn_t)(int priority, const char *timestamp,
-                                const char *str, void *data);
+                               const char *str, void *data);
 typedef void (*log_close_fn_t)(void *data);
 
 static int nbd_make_absolute_logfile(char *path, const char *filename);
@@ -71,18 +73,18 @@ static pthread_mutex_t nbd_log_dir_lock = PTHREAD_MUTEX_INITIALIZER;
 static inline int to_syslog_level(int level)
 {
     switch (level) {
-        case NBD_CONF_LOG_CRIT:
-            return NBD_LOG_CRIT;
-        case NBD_CONF_LOG_ERROR:
-            return NBD_LOG_ERROR;
-        case NBD_CONF_LOG_WARN:
-            return NBD_LOG_WARN;
-        case NBD_CONF_LOG_INFO:
-            return NBD_LOG_INFO;
-        case NBD_CONF_LOG_DEBUG:
-            return NBD_LOG_DEBUG;
-        default:
-            return NBD_LOG_INFO;
+    case NBD_CONF_LOG_CRIT:
+        return NBD_LOG_CRIT;
+    case NBD_CONF_LOG_ERROR:
+        return NBD_LOG_ERROR;
+    case NBD_CONF_LOG_WARN:
+        return NBD_LOG_WARN;
+    case NBD_CONF_LOG_INFO:
+        return NBD_LOG_INFO;
+    case NBD_CONF_LOG_DEBUG:
+        return NBD_LOG_DEBUG;
+    default:
+        return NBD_LOG_INFO;
     }
 }
 
@@ -93,6 +95,7 @@ void nbd_set_log_level(int level)
                 log_level_lookup[level]);
         return;
     }
+
     if (level > NBD_CONF_LOG_LEVEL_MAX)
         level = NBD_CONF_LOG_LEVEL_MAX;
     else if (level < NBD_CONF_LOG_LEVEL_MIN)
@@ -107,7 +110,8 @@ static inline uint8_t rb_get_pri(struct log_buf *logbuf, unsigned int cur)
     return logbuf->buf[cur][0];
 }
 
-static inline void rb_set_pri(struct log_buf *logbuf, unsigned int cur, uint8_t pri)
+static inline void rb_set_pri(struct log_buf *logbuf, unsigned int cur,
+                              uint8_t pri)
 {
     logbuf->buf[cur][0] = (char)pri;
 }
@@ -212,7 +216,7 @@ static void cleanup_file_out_lock(void *arg)
 
 static void
 log_internal(int pri, struct nbd_device *dev, const char *funcname,
-        int linenr, const char *fmt, va_list args)
+             int linenr, const char *fmt, va_list args)
 {
     char buf[LOG_MSG_LEN];
     int n;
@@ -258,8 +262,8 @@ log_internal(int pri, struct nbd_device *dev, const char *funcname,
     pthread_cleanup_pop(0);
 }
 
-void nbd_crit_message(struct nbd_device *dev, const char *funcname,
-        int linenr, const char *fmt, ...)
+void _nbd_crit_message(struct nbd_device *dev, const char *funcname,
+                       int linenr, const char *fmt, ...)
 {
     va_list args;
 
@@ -268,8 +272,8 @@ void nbd_crit_message(struct nbd_device *dev, const char *funcname,
     va_end(args);
 }
 
-void nbd_err_message(struct nbd_device *dev, const char *funcname,
-        int linenr, const char *fmt, ...)
+void _nbd_err_message(struct nbd_device *dev, const char *funcname,
+                      int linenr, const char *fmt, ...)
 {
     va_list args;
 
@@ -278,8 +282,8 @@ void nbd_err_message(struct nbd_device *dev, const char *funcname,
     va_end(args);
 }
 
-void nbd_warn_message(struct nbd_device *dev, const char *funcname,
-        int linenr, const char *fmt, ...)
+void _nbd_warn_message(struct nbd_device *dev, const char *funcname,
+                       int linenr, const char *fmt, ...)
 {
     va_list args;
 
@@ -288,8 +292,8 @@ void nbd_warn_message(struct nbd_device *dev, const char *funcname,
     va_end(args);
 }
 
-void nbd_info_message(struct nbd_device *dev, const char *funcname,
-        int linenr, const char *fmt, ...)
+void _nbd_info_message(struct nbd_device *dev, const char *funcname,
+                       int linenr, const char *fmt, ...)
 {
     va_list args;
 
@@ -298,8 +302,8 @@ void nbd_info_message(struct nbd_device *dev, const char *funcname,
     va_end(args);
 }
 
-void nbd_dbg_message(struct nbd_device *dev, const char *funcname,
-        int linenr, const char *fmt, ...)
+void _nbd_dbg_message(struct nbd_device *dev, const char *funcname,
+                      int linenr, const char *fmt, ...)
 {
     va_list args;
 
@@ -308,8 +312,8 @@ void nbd_dbg_message(struct nbd_device *dev, const char *funcname,
     va_end(args);
 }
 
-void nbd_dbg_nbd_message(struct nbd_device *dev, const char *funcname,
-        int linenr, const char *fmt, ...)
+void _nbd_dbg_nbd_message(struct nbd_device *dev, const char *funcname,
+                          int linenr, const char *fmt, ...)
 {
     va_list args;
 
@@ -319,9 +323,34 @@ void nbd_dbg_nbd_message(struct nbd_device *dev, const char *funcname,
     va_end(args);
 }
 
+
+static void __nbd_fill_reply_message(struct nbd_response *rep, int exit,
+                                     const char *fmt, va_list args)
+{
+    if (!rep)
+        return;
+
+    rep->exit = exit;
+
+    if (!rep->buf)
+        return;
+
+    vsnprintf(rep->buf, NBD_EXIT_MAX, fmt, args);
+}
+
+void _nbd_fill_reply_message(struct nbd_response *rep, int exit,
+                             const char *fmt, ...)
+{
+    va_list args;
+
+    va_start(args, fmt);
+    __nbd_fill_reply_message(rep, exit, fmt, args);
+    va_end(args);
+}
+
 static struct log_output *
 create_output(log_output_fn_t output_fn, log_close_fn_t close_fn, void *data,
-        int pri)
+              int pri)
 {
     struct log_output *output;
 
@@ -338,7 +367,7 @@ create_output(log_output_fn_t output_fn, log_close_fn_t close_fn, void *data,
 }
 
 static int output_to_syslog(int pri, const char *timestamp,
-        const char *str, void *data)
+                            const char *str, void *data)
 {
     /* convert nbd-runner private level to system level */
     if (pri > NBD_LOG_DEBUG)
@@ -359,7 +388,7 @@ static void close_fd(void *data)
 }
 
 static int create_syslog_output(struct log_buf *logbuf, int pri,
-        const char *ident)
+                                const char *ident)
 {
     openlog(ident, 0 ,0);
     logbuf->syslog_out = create_output(output_to_syslog, close_syslog, NULL,
@@ -374,24 +403,24 @@ static int create_syslog_output(struct log_buf *logbuf, int pri,
 static const char *loglevel_string(int priority)
 {
     switch (priority) {
-        case NBD_LOG_CRIT:
-            return "CRIT";
-        case NBD_LOG_ERROR:
-            return "ERROR";
-        case NBD_LOG_WARN:
-            return "WARN";
-        case NBD_LOG_INFO:
-            return "INFO";
-        case NBD_LOG_DEBUG:
-            return "DEBUG";
-        case NBD_LOG_DEBUG_IO:
-            return "DEBUG_IO";
+    case NBD_LOG_CRIT:
+        return "CRIT";
+    case NBD_LOG_ERROR:
+        return "ERROR";
+    case NBD_LOG_WARN:
+        return "WARN";
+    case NBD_LOG_INFO:
+        return "INFO";
+    case NBD_LOG_DEBUG:
+        return "DEBUG";
+    case NBD_LOG_DEBUG_IO:
+        return "DEBUG_IO";
     }
     return "UNKONWN";
 }
 
 static int output_to_fd(int pri, const char *timestamp,
-        const char *str,void *data)
+                        const char *str,void *data)
 {
     int fd = (intptr_t) data;
     char *buf, *msg;
@@ -407,7 +436,8 @@ static int output_to_fd(int pri, const char *timestamp,
     /*
      * format: timestamp pid [loglevel] msg
      */
-    ret = asprintf(&msg, "%s %d [%s] %s", timestamp, pid, loglevel_string(pri), str);
+    ret = asprintf(&msg, "%s %d [%s] %s", timestamp, pid, loglevel_string(pri),
+                   str);
     if (ret < 0)
         return -1;
 
@@ -435,7 +465,7 @@ out:
 }
 
 static int create_file_output(struct log_buf *logbuf, int pri,
-        const char *filename)
+                              const char *filename)
 {
     char log_file_path[PATH_MAX];
     struct log_output *output;
