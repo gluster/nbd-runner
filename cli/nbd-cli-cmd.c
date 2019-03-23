@@ -92,7 +92,7 @@ int nbd_create_backstore(int count, char **options, int type)
 
     len = snprintf(create->cfgstring, max_len, "key=%s", options[0]);
     if (len < 0) {
-        nbd_err("snprintf error for volinfo, %s!\n", strerror(errno));
+        nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
         ret = -errno;
         goto err;
     }
@@ -229,7 +229,7 @@ int nbd_delete_backstore(int count, char **options, int type)
     len = snprintf(delete->cfgstring, max_len, "key=%s", options[0]);
     if (len < 0) {
         ret = -errno;
-        nbd_err("snprintf error for volinfo, %s!\n", strerror(errno));
+        nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
         goto err;
     }
 
@@ -673,7 +673,7 @@ int nbd_map_device(int count, char **options, int type)
     len = snprintf(map->cfgstring, max_len, "key=%s", options[0]);
     if (len < 0) {
         ret = -errno;
-        nbd_err("snprintf error for volinfo, %s!\n", strerror(errno));
+        nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
         goto err;
     }
 
@@ -830,11 +830,13 @@ int nbd_unmap_device(int count, char **options, int type)
     struct addrinfo *res;
     char *host = NULL;
     int sock = RPC_ANYSOCK;
-    struct nbd_unmap unmap = {.type = type};
-    struct nl_sock *netfd;
+    struct nbd_unmap *unmap = NULL;
+    struct nl_sock *netfd = NULL;
+    int dev_index = -1;
+    int max_len = 1024;
     int driver_id;
-    int dev_index;
     int ind;
+    int len;
     int ret;;
 
     /* strict check */
@@ -843,19 +845,37 @@ int nbd_unmap_device(int count, char **options, int type)
          return -EINVAL;
     }
 
-    dev_index = -1;
-    ind = 0;
-    while (ind < count) {
-        if (!strncmp("/dev/nbd", options[ind], strlen("/dev/nbd"))) {
-            if (sscanf(options[ind], "/dev/nbd%d", &dev_index) != 1) {
-                ret = -errno;
-                nbd_err("Invalid nbd-device!\n");
-                goto err;
-            }
+    unmap = calloc(1, sizeof(struct nbd_unmap));
+    if (!unmap) {
+        nbd_err("No memory for nbd_map!\n");
+        return -ENOMEM;
+    }
 
-            strcpy(unmap.nbd, options[ind]);
-            ind += 1;
-        } else if (!strcmp("host", options[ind])) {
+    unmap->type = type;
+
+    ind = 0;
+    if (!strncmp("/dev/nbd", options[ind], strlen("/dev/nbd"))) {
+        if (sscanf(options[ind], "/dev/nbd%d", &dev_index) != 1) {
+            ret = -errno;
+            nbd_err("Invalid nbd-device!\n");
+            goto err;
+        }
+
+        strcpy(unmap->nbd, options[ind]);
+    } else {
+        len = snprintf(unmap->cfgstring, max_len, "key=%s", options[ind]);
+        if (len < 0) {
+            ret = -errno;
+            nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
+            goto err;
+        }
+
+        unmap->cfgstring[len++] = ';';
+    }
+
+    ind = 1;
+    while (ind < count) {
+        if (!strcmp("host", options[ind])) {
             if (ind + 1 >= count) {
                 ret = -EINVAL;
                 nbd_err("Invalid argument '<host RUNNER_HOST>'!\n\n");
@@ -889,12 +909,6 @@ int nbd_unmap_device(int count, char **options, int type)
         goto err;
     }
 
-    if (dev_index < 0) {
-        ret = -EINVAL;
-        nbd_err("Invalid nbd device target!\n");
-        goto err;
-    }
-
     res = nbd_get_sock_addr(host);
     if (!res) {
         ret = -ENOMEM;
@@ -910,7 +924,7 @@ int nbd_unmap_device(int count, char **options, int type)
         goto err;
     }
 
-    if (nbd_unmap_1(&unmap, &rep, clnt) != RPC_SUCCESS) {
+    if (nbd_unmap_1(unmap, &rep, clnt) != RPC_SUCCESS) {
         ret = -errno;
         nbd_err("nbd_premap_1 failed!\n");
         goto err;
@@ -922,6 +936,20 @@ int nbd_unmap_device(int count, char **options, int type)
         goto err;
     }
 
+    /* We will get the nbd device from the server side */
+    if (dev_index < 0 && rep.buf) {
+        sscanf(rep.buf, "/dev/nbd%d", &dev_index);
+
+        /*
+         * If it is NULL, that means the backstore is not
+         * mapped or already unmapped
+         */
+        if (dev_index < 0) {
+            nbd_info("%s is not mapped!\n", unmap->cfgstring + strlen("key="));
+            goto err;
+        }
+    }
+
     netfd = nbd_setup_netlink(&driver_id, NBD_CLI_UNMAP, type, NULL, NULL,
                               &ret);
     if (!netfd)
@@ -930,7 +958,16 @@ int nbd_unmap_device(int count, char **options, int type)
     ret = unmap_device(netfd, driver_id, dev_index);
 
 err:
+    nl_socket_free(netfd);
+    if (clnt) {
+        if (rep.buf && !clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response,
+                    (char *)&rep))
+            nbd_err("clnt_freeres failed!\n");
+        clnt_destroy(clnt);
+    }
+
     free(host);
+    free(unmap);
     return ret;
 }
 

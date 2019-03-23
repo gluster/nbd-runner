@@ -653,6 +653,7 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
 bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
 {
     struct nbd_device *dev;
+    char *key = NULL;
 
     rep->exit = 0;
 
@@ -663,17 +664,37 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
         return true;
     }
 
-    if (!unmap->nbd[0]) {
-        nbd_fill_reply(rep, -EINVAL, "Invalid nbd device, it shouldn't be null!");
-        nbd_err("Invalid nbd device, it shouldn't be null!\n");
-        return true;
+    if (!unmap->nbd[0] && !unmap->cfgstring[0]) {
+        nbd_fill_reply(rep, -EINVAL,
+                       "Invalid nbd device and cfgstring, they shouldn't be null at the same time!");
+        nbd_err("Invalid nbd device and cfgstring, they shouldn't be null at the same time!\n");
+        goto out;
     }
 
-    dev = g_hash_table_lookup(nbd_nbds_hash, unmap->nbd);
-    if (!dev) {
-        nbd_fill_reply(rep, -errno, "There is no maping for '%s'!", unmap->nbd);
-        nbd_warn("There is no maping for '%s'!", unmap->nbd);
-        return true;
+    if (unmap->nbd[0]) {
+        dev = g_hash_table_lookup(nbd_nbds_hash, unmap->nbd);
+        if (!dev) {
+            nbd_fill_reply(rep, -errno, "There is no maping for '%s'!",
+                           unmap->nbd);
+            nbd_warn("There is no maping for '%s'!", unmap->nbd);
+            goto out;
+        }
+    } else {
+        key = nbd_get_hash_key(unmap->cfgstring);
+        if (!key) {
+            nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", unmap->cfgstring);
+            nbd_err("Invalid cfgstring %s!\n", unmap->cfgstring);
+            goto out;
+        }
+
+        dev = g_hash_table_lookup(nbd_devices_hash, key);
+        if (!dev) {
+            nbd_fill_reply(rep, -ENODEV, "There is no maping for '%s'!", key);
+            nbd_warn("There is no maping for '%s'!", key);
+            goto out;
+        }
+
+        nbd_fill_reply(rep, 0, "%s", dev->nbd);
     }
 
     pthread_mutex_lock(&dev->lock);
@@ -684,6 +705,8 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     g_hash_table_remove(nbd_nbds_hash, unmap->nbd);
     pthread_mutex_unlock(&dev->lock);
 
+out:
+    free(key);
     return true;
 }
 

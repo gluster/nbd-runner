@@ -161,8 +161,8 @@ Usage:
 		Map FILEPATH to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST
 		will be 'localhost' as default
 
-	gluster unmap <nbd-device> [host RUNNER_HOST]
-		Unmap the nbd device, RUNNER_HOST will be 'localhost' as default
+	gluster unmap <nbd-device|VOLUME/FILEPATH> [host RUNNER_HOST]
+		Unmap the nbd device or VOLUME/FILEPATH, RUNNER_HOST will be 'localhost' as default
 
 	gluster list [map|unmap|create|dead|live|all] [host RUNNER_HOST]
 		List the mapped|unmapped NBD devices or the created|dead|live backstores, all as

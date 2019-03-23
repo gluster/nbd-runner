@@ -44,6 +44,7 @@ struct nbd_postmap {
 struct nbd_unmap {
     handler_t     type;
     char          nbd[DLEN_MAX];
+    char          cfgstring[CFGS_MAX];
 };
 
 struct nbd_list {
