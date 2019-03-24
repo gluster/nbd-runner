@@ -1,7 +1,7 @@
 noinst_LTLIBRARIES = libutils.la
 
 libutils_la_SOURCES = utils.c time.c nbd-sysconfig.c strlcpy.c \
-                      nbd-log.c
+                      nbd-log.c socket.c
 
 noinst_HEADERS = utils.h nbd-log.h nbd-sysconfig.h strlcpy.h
 

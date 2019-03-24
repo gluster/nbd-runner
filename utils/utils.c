@@ -131,42 +131,6 @@ ssize_t nbd_parse_size(const char *value, int sector_size)
     return sizef;
 }
 
-int nbd_socket_read(int fd, void *buf, size_t count)
-{
-    size_t cnt = 0;
-
-    while (cnt < count) {
-        ssize_t r = read(fd, buf, count - cnt);
-        if (r <= 0) {
-            if (errno == EINTR || errno == EAGAIN)
-                continue;
-            if (r == 0) {
-                /* EOF */
-                return cnt;
-            }
-            return -errno;
-        }
-        cnt += r;
-        buf = (char *)buf + r;
-    }
-    return cnt;
-}
-
-int nbd_socket_write(int fd, void *buf, size_t count)
-{
-    while (count > 0) {
-        ssize_t r = write(fd, buf, count);
-        if (r < 0) {
-            if (errno == EINTR)
-                continue;
-            return -errno;
-        }
-        count -= r;
-        buf = (char *)buf + r;
-    }
-    return 0;
-}
-
 #define VERNUM_BUFLEN  8
 #define MIN_KERNEL_VERSION "4.12.0"  /* Minimum recommended kernel version */
 
