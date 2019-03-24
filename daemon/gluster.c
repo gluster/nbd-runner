@@ -511,29 +511,29 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
 
     switch (req->cmd) {
     case NBD_CMD_WRITE:
-        nbd_dbg("NBD_CMD_WRITE: offset: %ld len: %ld\n", req->offset,
-                req->len);
+        nbd_dbg_io("NBD_CMD_WRITE: offset: %ld len: %ld\n", req->offset,
+                   req->len);
         glfs_pwrite_async(info->gfd, req->rwbuf, req->len, req->offset,
                           ALLOWED_BSOFLAGS, glfs_async_cbk, req);
         break;
     case NBD_CMD_READ:
-        nbd_dbg("NBD_CMD_READ: offset: %ld, len: %ld\n", req->offset,
-                req->len);
+        nbd_dbg_io("NBD_CMD_READ: offset: %ld, len: %ld\n", req->offset,
+                   req->len);
         glfs_pread_async(info->gfd, req->rwbuf, req->len, req->offset, SEEK_SET,
                          glfs_async_cbk, req);
         break;
     case NBD_CMD_FLUSH:
-        nbd_dbg("NBD_CMD_FLUSH");
+        nbd_dbg_io("NBD_CMD_FLUSH");
         glfs_fdatasync_async(info->gfd, glfs_async_cbk, req);
         break;
     case NBD_CMD_TRIM:
-        nbd_dbg("NBD_CMD_TRIM: offset: %ld, len: %ld\n", req->offset,
-                req->len);
+        nbd_dbg_io("NBD_CMD_TRIM: offset: %ld, len: %ld\n", req->offset,
+                   req->len);
         glfs_discard_async(info->gfd, req->offset, req->len,
                 glfs_async_cbk, req);
         break;
     default:
-        fprintf(stderr,"Invalid request command\n");
+        nbd_err("Invalid request command: %d\n", req->cmd);
         return;
     }
 }

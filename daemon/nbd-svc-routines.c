@@ -940,7 +940,6 @@ int nbd_handle_request(int sock, int threads)
             nbd_socket_write(sock, &reply, sizeof(struct nbd_reply));
             pthread_mutex_unlock(&dev->sock_lock);
 
-            printf("cmd : %d\n", cmd);
             continue;
         }
 

@@ -30,12 +30,12 @@
 #include "nbd-sysconfig.h"
 #include "rpc_nbd.h"
 
-#define NBD_LOG_CRIT	LOG_CRIT	/* critical conditions */
-#define NBD_LOG_ERROR	LOG_ERR		/* error conditions */
-#define NBD_LOG_WARN	LOG_WARNING	/* warning conditions */
-#define NBD_LOG_INFO	LOG_INFO	/* informational */
-#define NBD_LOG_DEBUG	LOG_DEBUG	/* debug-level messages */
-#define NBD_LOG_DEBUG_IO   (LOG_DEBUG + 1)	/* nbd io messages */
+#define NBD_LOG_CRIT        LOG_CRIT	/* critical conditions */
+#define NBD_LOG_ERROR       LOG_ERR		/* error conditions */
+#define NBD_LOG_WARN        LOG_WARNING	/* warning conditions */
+#define NBD_LOG_INFO        LOG_INFO	/* informational */
+#define NBD_LOG_DEBUG       LOG_DEBUG	/* debug-level messages */
+#define NBD_LOG_DEBUG_IO    (LOG_DEBUG + 1)	/* nbd io messages */
 
 struct nbd_device;
 

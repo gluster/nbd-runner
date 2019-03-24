@@ -312,7 +312,7 @@ void _nbd_dbg_message(struct nbd_device *dev, const char *funcname,
     va_end(args);
 }
 
-void _nbd_dbg_nbd_message(struct nbd_device *dev, const char *funcname,
+void _nbd_dbg_io_message(struct nbd_device *dev, const char *funcname,
                           int linenr, const char *fmt, ...)
 {
     va_list args;
