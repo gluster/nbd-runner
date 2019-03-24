@@ -103,7 +103,6 @@ struct nego_reply {
 
 const char *nbd_dev_status_lookup_str(dev_status_t st);
 dev_status_t nbd_dev_status_lookup(const char *st);
-GPtrArray *nbd_get_local_iohost(unsigned int family);
 bool nbd_valid_size(const char *value);
 ssize_t nbd_parse_size(const char *value, int sector_size);
 int nbd_socket_write(int fd, void *buf, size_t count);

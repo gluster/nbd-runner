@@ -8,7 +8,7 @@
  * cases as published by the Free Software Foundation.
 */
 
-#define   _GNU_SOURCE
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <string.h>
@@ -33,8 +33,6 @@
 
 #include "utils.h"
 #include "nbd-log.h"
-
-#define NBD_DISTRO_CHECK  "grep -P '(^ID=)' /etc/os-release"
 
 bool nbd_valid_size(const char *value)
 {
