@@ -14,7 +14,6 @@
 #define _GNU_SOURCE
 
 #include <stdio.h>
-
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -30,6 +29,9 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <gmodule.h>
+#include <time.h>
+#include <uv.h>
+
 #include "config.h"
 
 #define NBD_RPC_SVC_PORT     24110
@@ -101,6 +103,19 @@ struct nego_reply {
     __u8  error[0];
 };
 
+typedef struct nbd_timer nbd_timer_t;
+typedef void (*nbd_timer_cbk_t)(nbd_timer_t *timer);
+struct nbd_timer {
+    /* Do not touch this */
+    uv_timer_t uv_timer;
+
+    /* The precision is in millisecond */
+    __u64 timeout;
+    __u64 repeat;
+
+    nbd_timer_cbk_t cbk;
+};
+
 const char *nbd_dev_status_lookup_str(dev_status_t st);
 dev_status_t nbd_dev_status_lookup(const char *st);
 bool nbd_valid_size(const char *value);
@@ -112,4 +127,17 @@ bool nbd_minimal_kernel_version_check(void);
 bool nbd_is_valid_host(const char *host);
 
 int time_string_now(char* buf);
+
+/* The timer helpers */
+void nbd_timer_base_init(void);
+void nbd_timer_base_fini(void);
+/*
+ * timeout: all the entries will time out after 'timeout' milliseconds.
+ * repeat: repeat the timer for every 'repeat' milliseconds after 'timeout'.
+ */
+void nbd_init_timer(nbd_timer_t *timer, __u64 timeout, __u64 repeat, nbd_timer_cbk_t cbk);
+void nbd_add_timer(nbd_timer_t *timer);
+void nbd_del_timer(nbd_timer_t *timer);
+void nbd_reset_timer(nbd_timer_t *timer);
+
 #endif /* __UTILS_H */

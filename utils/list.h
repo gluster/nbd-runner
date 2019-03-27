@@ -221,6 +221,9 @@ list_rotate_left(struct list_head *head)
     }
 }
 
+#define container_of(ptr, type, member)                                        \
+    ((type *)((char *)(ptr) - (unsigned long)(&((type *)0)->member)))
+
 #define list_entry(ptr, type, member)                                          \
     ((type *)((char *)(ptr) - (unsigned long)(&((type *)0)->member)))
 

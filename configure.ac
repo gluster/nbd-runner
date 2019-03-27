@@ -48,6 +48,11 @@ PKG_CHECK_MODULES(KMOD, [libkmod],,
 AC_SUBST(KMOD_CFLAGS)
 AC_SUBST(KMOD_LIBS)
 
+PKG_CHECK_MODULES(LIBUV, [libuv],,
+                  [AC_MSG_ERROR([libuv library is required to build nbd-runner])])
+AC_SUBST(LIBUV_CFLAGS)
+AC_SUBST(LIBUV_LIBS)
+
 PKG_CHECK_MODULES(EVENT, [libevent],,
                   [AC_MSG_ERROR([libevent library is required to build nbd-runner])])
 AC_SUBST(EVENT_CFLAGS)
