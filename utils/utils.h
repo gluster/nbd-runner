@@ -33,6 +33,7 @@
 #include <uv.h>
 
 #include "config.h"
+#include "list.h"
 
 #define NBD_RPC_SVC_PORT     24110
 #define NBD_MAP_SVC_PORT     24111
@@ -116,6 +117,17 @@ struct nbd_timer {
     nbd_timer_cbk_t cbk;
 };
 
+typedef bool (*lru_release_t)(void *value);
+struct nbd_lru {
+    int timeout;
+    int lru_max;
+    int lru_cnt;
+    lru_release_t release;
+
+    GHashTable *hash;
+    struct list_head head;
+};
+
 const char *nbd_dev_status_lookup_str(dev_status_t st);
 dev_status_t nbd_dev_status_lookup(const char *st);
 bool nbd_valid_size(const char *value);
@@ -139,5 +151,21 @@ void nbd_init_timer(nbd_timer_t *timer, __u64 timeout, __u64 repeat, nbd_timer_c
 void nbd_add_timer(nbd_timer_t *timer);
 void nbd_del_timer(nbd_timer_t *timer);
 void nbd_reset_timer(nbd_timer_t *timer);
+
+/* The lru helpers */
+/*
+ * lru_max: the max count of entries will be hosted in LRU cache
+ * timeout: all the entries will time out after 'timeout' seconds.
+ * fn: call back to release the user specified LRU entries
+ */
+struct nbd_lru *nbd_lru_init(int lru_max, int timeout, lru_release_t fn);
+void nbd_lru_fini(struct nbd_lru *lru);
+void *nbd_lru_get(struct nbd_lru *lru, char *key);
+/*
+ * key: please release the 'key' memory manually after update done
+ * data: we will host this and will release via lru_release_t call back
+ *
+ */
+int nbd_lru_update(struct nbd_lru *lru, char *key, void *data);
 
 #endif /* __UTILS_H */
