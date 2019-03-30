@@ -337,7 +337,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     if (!handler) {
         nbd_fill_reply(rep, -EINVAL, "Invalid handler or the handler is not loaded: %d!",
                        create->type);
-        nbd_err("Invalid handler or the handler is not loaded: %d!",
+        nbd_err("Invalid handler or the handler is not loaded: %d!\n",
                 create->type);
         goto err;
     }
@@ -428,7 +428,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     if (!handler) {
         nbd_fill_reply(rep, -EINVAL, "Invalid handler or the handler is not loaded: %d!",
                        delete->type);
-        nbd_err("Invalid handler or the handler is not loaded: %d!",
+        nbd_err("Invalid handler or the handler is not loaded: %d!\n",
                 delete->type);
         goto err;
     }
@@ -676,7 +676,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
         if (!dev) {
             nbd_fill_reply(rep, -errno, "There is no maping for '%s'!",
                            unmap->nbd);
-            nbd_warn("There is no maping for '%s'!", unmap->nbd);
+            nbd_warn("There is no maping for '%s'!\n", unmap->nbd);
             goto out;
         }
     } else {
@@ -690,7 +690,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
         dev = g_hash_table_lookup(nbd_devices_hash, key);
         if (!dev) {
             nbd_fill_reply(rep, -ENODEV, "There is no maping for '%s'!", key);
-            nbd_warn("There is no maping for '%s'!", key);
+            nbd_warn("There is no maping for '%s'!\n", key);
             goto out;
         }
 
