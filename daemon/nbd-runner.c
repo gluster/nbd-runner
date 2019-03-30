@@ -244,6 +244,8 @@ int main (int argc, char **argv)
     int ret = EXIT_FAILURE;
     int ind;
 
+    nbd_timer_base_init();
+
     nbd_cfg = nbd_load_config();
     if (!nbd_cfg) {
         nbd_err("nbd_initialize_config failed!\n");
@@ -370,6 +372,7 @@ int main (int argc, char **argv)
     ret = EXIT_SUCCESS;
 
 out:
+    nbd_timer_base_fini();
     nbd_free_config(nbd_cfg);
 
     nbd_destroy_log();

@@ -41,35 +41,70 @@
 #define NBD_GFAPI_LOG_LEVEL 7
 #define NBD_NL_VERSION 1
 
+struct glfs_container {
+    struct glfs *glfs;
+    unsigned long ref_count;
+};
+
 struct glfs_info {
     char volume[NAME_MAX];
     char path[PATH_MAX];
-    struct glfs *glfs;
+
+    struct glfs_container *container;
     glfs_fd_t *gfd;
 };
 
 static char *glfs_host;
+static struct nbd_lru *nbd_lru;
 
-static GHashTable *glfs_volume_hash;
+static pthread_rwlock_t lru_lock = PTHREAD_RWLOCK_INITIALIZER;
 
-static struct glfs *nbd_volume_init(char *volume)
+static bool glfs_lru_release(void *value)
 {
-    struct glfs *glfs;
+    struct glfs_container *container = value;
+    bool ret = true;
+
+    pthread_rwlock_wrlock(&lru_lock);
+    if (container && container->ref_count) {
+        ret = false;
+        goto unlock;
+    }
+
+    if (container->glfs)
+        glfs_fini(container->glfs);
+
+    free(container);
+
+unlock:
+    pthread_rwlock_unlock(&lru_lock);
+
+    return ret;
+}
+
+static struct glfs_container *nbd_volume_init(char *volume)
+{
+    struct glfs_container *container;
+    struct glfs *glfs = NULL;
     char *key;
     int ret;
 
     if (!volume)
         return NULL;
 
-    key = strdup(volume);
-    if (!key) {
-        nbd_err("No memory for buf!\n");
-        return NULL;
+    key = volume;
+
+    if (!nbd_lru) {
+        nbd_lru = nbd_lru_init(32, 36000, glfs_lru_release);
+        if (!nbd_lru) {
+            nbd_err("Failed to init nbd_lru!\n");
+            return NULL;
+        }
     }
 
-    glfs = g_hash_table_lookup(glfs_volume_hash, key);
-    if (glfs)
-        return glfs;
+    container = nbd_lru_get(nbd_lru, key);
+    if (container) {
+        return container;
+    }
 
     glfs = glfs_new(volume);
     if (!glfs) {
@@ -106,12 +141,21 @@ static struct glfs *nbd_volume_init(char *volume)
         goto out;
     }
 
-    g_hash_table_insert(glfs_volume_hash, key, glfs);
-    return glfs;
+    container = malloc(sizeof(*container));
+    if (!container) {
+        nbd_err("No memory for conatiner!\n");
+        goto out;
+    }
+
+    container->glfs = glfs;
+    container->ref_count = 0;
+
+    nbd_lru_update(nbd_lru, key, container);
+    return container;
 
 out:
-    glfs_fini(glfs);
-    free(key);
+    if (glfs)
+        glfs_fini(glfs);
     return NULL;
 }
 
@@ -210,21 +254,23 @@ err:
 static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
 {
     struct glfs_info *info =dev->priv;
-    struct glfs *glfs = NULL;
+    struct glfs_container *container = NULL;
     struct glfs_fd *fd = NULL;
     struct stat st;
     bool ret = false;
 
-    rep->exit = 0;
+    if (rep)
+        rep->exit = 0;
 
-    glfs = nbd_volume_init(info->volume);
-    if (!glfs) {
+    pthread_rwlock_wrlock(&lru_lock);
+    container = nbd_volume_init(info->volume);
+    if (!container) {
         nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         goto err;
     }
 
-    if (!glfs_access(glfs, info->path, F_OK)) {
+    if (!glfs_access(container->glfs, info->path, F_OK)) {
         nbd_fill_reply(rep, -EEXIST, "file %s is already exist in volume %s!",
                        info->path, info->volume);
         nbd_err("file %s is already exist in volume %s!\n",
@@ -232,7 +278,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
-    if (!nbd_check_available_space(glfs, info->volume, dev->size)) {
+    if (!nbd_check_available_space(container->glfs, info->volume, dev->size)) {
         nbd_fill_reply(rep, -ENOSPC, "No enough space in volume %s, require %ld!",
                        info->volume, dev->size);
         nbd_err("No enough space in volume %s, require %ld!\n", info->volume,
@@ -240,7 +286,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
-    fd = glfs_creat(glfs, info->path, O_WRONLY | O_CREAT | O_EXCL | O_SYNC,
+    fd = glfs_creat(container->glfs, info->path, O_WRONLY | O_CREAT | O_EXCL | O_SYNC,
                     S_IRUSR | S_IWUSR);
     if (!fd) {
         nbd_fill_reply(rep, -errno, "Failed to create file %s on volume %s!",
@@ -262,7 +308,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
-    if (glfs_lstat(glfs, info->path, &st) < 0) {
+    if (glfs_lstat(container->glfs, info->path, &st) < 0) {
         nbd_fill_reply(rep, -errno, "failed to lstat file %s in volume: %s!",
                        info->path, info->volume);
         nbd_err("failed to lstat file %s in volume: %s!\n",
@@ -279,10 +325,14 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
+    container->ref_count++;
+    info->container = container;
+
     ret = true;
 
 err:
     glfs_close(fd);
+    pthread_rwlock_unlock(&lru_lock);
 
     return ret;
 }
@@ -290,19 +340,25 @@ err:
 static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
 {
     struct glfs_info *info = dev->priv;
-    struct glfs *glfs = NULL;
-    bool ret = false;
+    struct glfs_container *container = info->container;
 
-    rep->exit = 0;
+    if (rep)
+        rep->exit = 0;
 
-    glfs = nbd_volume_init(info->volume);
-    if (!glfs) {
-        nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
-        nbd_err("Init volume %s failed!\n", info->volume);
-        goto err;
+    pthread_rwlock_wrlock(&lru_lock);
+
+    if (!container) {
+        container = nbd_volume_init(info->volume);
+        if (!container) {
+            nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
+            nbd_err("Init volume %s failed!\n", info->volume);
+            goto err;
+        }
+
+        info->container = container;
     }
 
-    if (glfs_access(glfs, info->path, F_OK)) {
+    if (glfs_access(container->glfs, info->path, F_OK)) {
         nbd_fill_reply(rep, -ENOENT, "file %s is not exist in volume %s!",
                        info->path, info->volume);
         nbd_err("file %s is not exist in volume %s!\n",
@@ -310,7 +366,7 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
-    if (glfs_unlink(glfs, info->path) < 0) {
+    if (glfs_unlink(container->glfs, info->path) < 0) {
         nbd_fill_reply(rep, -errno, "failed to delete file %s in volume %s!",
                        info->path, info->volume);
         nbd_err("failed to delete file %s in volume %s!",
@@ -318,33 +374,45 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
-    ret = true;
+    container->ref_count--;
 
-err:
     free(info);
     dev->priv = NULL;
-    return ret;
+
+    pthread_rwlock_unlock(&lru_lock);
+
+    return true;
+
+err:
+    pthread_rwlock_unlock(&lru_lock);
+    return false;
 }
 
 static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
 {
     struct glfs_info *info = dev->priv;
-    struct glfs *glfs = NULL;
+    struct glfs_container *container = info->container;
     glfs_fd_t *gfd = NULL;
     struct stat st;
     bool ret = false;
 
-    rep->exit = 0;
+    if (rep)
+        rep->exit = 0;
 
-    /* To check whether the file is exist */
-    glfs = nbd_volume_init(info->volume);
-    if (!glfs) {
-        nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
-        nbd_err("Init volume %s failed!\n", info->volume);
-        goto err;
+    pthread_rwlock_wrlock(&lru_lock);
+
+    if (!container) {
+        container = nbd_volume_init(info->volume);
+        if (!container) {
+            nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
+            nbd_err("Init volume %s failed!\n", info->volume);
+            goto err;
+        }
+
+        info->container = container;
     }
 
-    if (glfs_access(glfs, info->path, F_OK)) {
+    if (glfs_access(container->glfs, info->path, F_OK)) {
         nbd_fill_reply(rep, -ENOENT, "file %s is not exist in volume %s!",
                        info->path, info->volume);
         nbd_err("file %s is not exist in volume %s!\n",
@@ -353,7 +421,7 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
     }
 
     if (!dev->size || !dev->blksize) {
-        if (glfs_lstat(glfs, info->path, &st) < 0) {
+        if (glfs_lstat(container->glfs, info->path, &st) < 0) {
             nbd_fill_reply(rep, -errno, "failed to lstat file %s in volume: %s!",
                            info->path, info->volume);
             nbd_err("failed to lstat file %s in volume: %s!\n",
@@ -365,31 +433,48 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
         dev->blksize = st.st_blksize;
     }
 
-    gfd = glfs_open(glfs, info->path, ALLOWED_BSOFLAGS);
+    gfd = glfs_open(container->glfs, info->path, ALLOWED_BSOFLAGS);
     if (!gfd) {
         nbd_fill_reply(rep, -errno, "failed to open file %s in volume: %s!",
                        info->path, info->volume);
         nbd_err("Failed to open file %s, %s\n", info->path, strerror(errno));
         goto err;
     }
-
-    info->glfs = glfs;
     info->gfd = gfd;
+
+    container->ref_count++;
 
     ret = true;
 
 err:
+    pthread_rwlock_unlock(&lru_lock);
     return ret;
 }
 
 static bool glfs_unmap(struct nbd_device *dev)
 {
     struct glfs_info *info = dev->priv;
+    struct glfs_container *container = info->container;
+
+    pthread_rwlock_wrlock(&lru_lock);
+
+    if (!container) {
+        container = nbd_volume_init(info->volume);
+        if (!container) {
+            nbd_err("Init volume %s failed!\n", info->volume);
+            pthread_rwlock_unlock(&lru_lock);
+            return false;
+        }
+
+        info->container = container;
+    }
 
     glfs_close(info->gfd);
+    container->ref_count--;
 
     info->gfd = NULL;
-    info->glfs = NULL;
+
+    pthread_rwlock_unlock(&lru_lock);
 
     return true;
 }
@@ -397,14 +482,16 @@ static bool glfs_unmap(struct nbd_device *dev)
 static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
 {
     struct glfs_info *info = dev->priv;
-    struct glfs *glfs = NULL;
+    struct glfs_container *container = info->container;
     struct stat st;
     ssize_t ret = -1;
 
-    rep->exit = 0;
+    if (rep)
+        rep->exit = 0;
 
-    if (info->glfs) {
-        if (glfs_lstat(glfs, info->path, &st) < 0) {
+    pthread_rwlock_rdlock(&lru_lock);
+    if (container && container->glfs) {
+        if (glfs_lstat(container->glfs, info->path, &st) < 0) {
             nbd_fill_reply(rep, -errno, "failed to lstat file %s in volume: %s!",
                            info->path, info->volume);
             nbd_err("failed to lstat file %s in volume: %s!\n",
@@ -415,14 +502,16 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
         return st.st_size;
     }
 
-    glfs = nbd_volume_init(info->volume);
-    if (!glfs) {
+    container = nbd_volume_init(info->volume);
+    if (!container) {
         nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         return -1;
     }
 
-    if (glfs_lstat(glfs, info->path, &st) < 0) {
+    info->container = container;
+
+    if (glfs_lstat(container->glfs, info->path, &st) < 0) {
         nbd_fill_reply(rep, -errno, "failed to lstat file %s in volume: %s!",
                        info->path, info->volume);
         nbd_err("failed to lstat file %s in volume: %s!\n",
@@ -433,21 +522,23 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
 
     ret = st.st_size;
 err:
+    pthread_rwlock_unlock(&lru_lock);
     return ret;
 }
 
 static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
 {
     struct glfs_info *info = dev->priv;
-    struct glfs *glfs = NULL;
+    struct glfs_container *container = info->container;
     struct stat st;
     ssize_t ret = -1;
 
     if (rep)
         rep->exit = 0;
 
-    if (info->glfs) {
-        if (glfs_lstat(glfs, info->path, &st) < 0) {
+    pthread_rwlock_rdlock(&lru_lock);
+    if (container && container->glfs) {
+        if (glfs_lstat(container->glfs, info->path, &st) < 0) {
             nbd_fill_reply(rep, -errno, "failed to lstat file %s in volume: %s!",
                            info->path, info->volume);
             nbd_err("failed to lstat file %s in volume: %s!\n",
@@ -458,14 +549,16 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
         return st.st_blksize;
     }
 
-    glfs = nbd_volume_init(info->volume);
-    if (!glfs) {
+    container = nbd_volume_init(info->volume);
+    if (!container) {
         nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         return -1;
     }
 
-    if (glfs_lstat(glfs, info->path, &st) < 0) {
+    info->container = container;
+
+    if (glfs_lstat(container->glfs, info->path, &st) < 0) {
         nbd_fill_reply(rep, -errno, "failed to lstat file %s in volume: %s!",
                        info->path, info->volume);
         nbd_err("failed to lstat file %s in volume: %s, %s!\n",
@@ -476,6 +569,7 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
 
     ret = st.st_blksize;
 err:
+    pthread_rwlock_unlock(&lru_lock);
     return ret;
 }
 
@@ -509,6 +603,13 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
 
     info = req->dev->priv;
 
+    pthread_rwlock_rdlock(&lru_lock);
+    if (!info->gfd) {
+        nbd_err("%s/%s is unmapped, fails current cmd %d\n",
+                info->volume, info->path, req->cmd);
+        goto unlock;
+    }
+
     switch (req->cmd) {
     case NBD_CMD_WRITE:
         nbd_dbg_io("NBD_CMD_WRITE: offset: %ld len: %ld\n", req->offset,
@@ -534,20 +635,10 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
         break;
     default:
         nbd_err("Invalid request command: %d\n", req->cmd);
-        return;
     }
-}
 
-static void free_key(gpointer key)
-{
-    free(key);
-}
-
-static void free_value(gpointer value)
-{
-    struct glfs *glfs = value;
-
-    glfs_fini(glfs);
+unlock:
+    pthread_rwlock_unlock(&lru_lock);
 }
 
 struct nbd_handler glfs_handler = {
@@ -567,13 +658,6 @@ struct nbd_handler glfs_handler = {
 /* Entry point must be named "handler_init". */
 int gluster_handler_init(const char *host)
 {
-    glfs_volume_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
-                                             free_value);
-    if (!glfs_volume_hash) {
-        nbd_err("failed to create glfs_volume_hash hash table!\n");
-        return -1;
-    }
-
     if (!host)
         glfs_host = strdup("localhost");
     else
