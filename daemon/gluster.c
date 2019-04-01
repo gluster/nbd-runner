@@ -52,20 +52,19 @@ static char *glfs_host;
 
 static GHashTable *glfs_volume_hash;
 
-static struct glfs *nbd_volume_init(char *volume)
+static struct glfs *nbd_volume_init(char *volume, nbd_response *rep)
 {
     struct glfs *glfs;
     char *key;
     int ret;
 
+    if (rep)
+        rep->exit = 0;
+
     if (!volume)
         return NULL;
 
-    key = strdup(volume);
-    if (!key) {
-        nbd_err("No memory for buf!\n");
-        return NULL;
-    }
+    key = volume;
 
     glfs = g_hash_table_lookup(glfs_volume_hash, key);
     if (glfs)
@@ -73,6 +72,8 @@ static struct glfs *nbd_volume_init(char *volume)
 
     glfs = glfs_new(volume);
     if (!glfs) {
+        nbd_fill_reply(rep, -errno, "Not able to Initialize volume %s, %s",
+                       volume, strerror(errno));
         nbd_err("Not able to Initialize volume %s, %s\n",
                 volume, strerror(errno));
         goto out;
@@ -80,6 +81,9 @@ static struct glfs *nbd_volume_init(char *volume)
 
     ret = glfs_set_volfile_server(glfs, "tcp", glfs_host, 24007);
     if (ret) {
+        nbd_fill_reply(rep, -errno,
+                       "Not able to add Volfile server for volume %s, %s",
+                       volume, strerror(errno));
         nbd_err("Not able to add Volfile server for volume %s, %s\n",
                 volume, strerror(errno));
         goto out;
@@ -87,6 +91,8 @@ static struct glfs *nbd_volume_init(char *volume)
 
     ret = glfs_set_logging(glfs, NBD_GFAPI_LOG_FILE, NBD_GFAPI_LOG_LEVEL);
     if (ret) {
+        nbd_fill_reply(rep, -errno, "Not able to add logging for volume %s, %s",
+                       volume, strerror(errno));
         nbd_err("Not able to add logging for volume %s, %s\n",
                 volume, strerror(errno));
         goto out;
@@ -95,11 +101,17 @@ static struct glfs *nbd_volume_init(char *volume)
     ret = glfs_init(glfs);
     if (ret) {
         if (errno == ENOENT) {
+            nbd_fill_reply(rep, -errno, "Volume %s does not exist",
+                           volume);
             nbd_err("Volume %s does not exist\n", volume);
         } else if (errno == EIO) {
+            nbd_fill_reply(rep, -errno, "Check if volume %s is operational",
+                           volume);
             nbd_err("Check if volume %s is operational\n",
                     volume);
         } else {
+            nbd_fill_reply(rep, -errno, "Not able to initialize volume %s, %s",
+                           volume, strerror(errno));
             nbd_err("Not able to initialize volume %s, %s\n",
                     volume, strerror(errno));
         }
@@ -111,7 +123,6 @@ static struct glfs *nbd_volume_init(char *volume)
 
 out:
     glfs_fini(glfs);
-    free(key);
     return NULL;
 }
 
@@ -215,11 +226,11 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
     struct stat st;
     bool ret = false;
 
-    rep->exit = 0;
+    if (rep)
+        rep->exit = 0;
 
-    glfs = nbd_volume_init(info->volume);
+    glfs = nbd_volume_init(info->volume, rep);
     if (!glfs) {
-        nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         goto err;
     }
@@ -293,11 +304,11 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
     struct glfs *glfs = NULL;
     bool ret = false;
 
-    rep->exit = 0;
+    if (rep)
+        rep->exit = 0;
 
-    glfs = nbd_volume_init(info->volume);
+    glfs = nbd_volume_init(info->volume, rep);
     if (!glfs) {
-        nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         goto err;
     }
@@ -334,12 +345,12 @@ static bool glfs_map(struct nbd_device *dev, nbd_response *rep)
     struct stat st;
     bool ret = false;
 
-    rep->exit = 0;
+    if (rep)
+        rep->exit = 0;
 
     /* To check whether the file is exist */
-    glfs = nbd_volume_init(info->volume);
+    glfs = nbd_volume_init(info->volume, rep);
     if (!glfs) {
-        nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         goto err;
     }
@@ -401,7 +412,8 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
     struct stat st;
     ssize_t ret = -1;
 
-    rep->exit = 0;
+    if (rep)
+        rep->exit = 0;
 
     if (info->glfs) {
         if (glfs_lstat(glfs, info->path, &st) < 0) {
@@ -415,9 +427,8 @@ static ssize_t glfs_get_size(struct nbd_device *dev, nbd_response *rep)
         return st.st_size;
     }
 
-    glfs = nbd_volume_init(info->volume);
+    glfs = nbd_volume_init(info->volume, rep);
     if (!glfs) {
-        nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         return -1;
     }
@@ -458,9 +469,8 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
         return st.st_blksize;
     }
 
-    glfs = nbd_volume_init(info->volume);
+    glfs = nbd_volume_init(info->volume, rep);
     if (!glfs) {
-        nbd_fill_reply(rep, -EINVAL, "Init volume %s failed!", info->volume);
         nbd_err("Init volume %s failed!\n", info->volume);
         return -1;
     }
