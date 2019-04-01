@@ -478,7 +478,19 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         goto err;
     }
 
-    handler->delete(dev, rep);
+    /*
+     * If the handler return -ENOENT, that means there is no need
+     * to do the deletion in the hanler backend, then we will delete
+     * the device from the hash table by default.
+     */
+    if (!handler->delete(dev, rep)) {
+        if (rep->exit != -ENOENT) {
+            nbd_err("Failed to delete device %s!\n", key);
+            goto err;
+        }
+
+        rep->exit = 0;
+    }
 
     nbd_config_delete_backstore(dev, key);
     pthread_mutex_unlock(&dev->lock);
