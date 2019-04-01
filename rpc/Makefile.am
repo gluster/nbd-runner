@@ -20,13 +20,13 @@ rpc_nbd_xdr.c: rpc_nbd.x
 
 rpc_nbd_clnt.c: rpc_nbd.x
 	rpcgen -lM -o $(top_builddir)/rpc/$@ $^
-	$(SED) -i 's|TIMEOUT = { 25, 0 }|TIMEOUT = { 300, 0 }|'       \
+	$(SED) -i 's|TIMEOUT = { 25, 0 }|TIMEOUT = { 300, 0 }|'  \
 		$(top_builddir)/rpc/$@
 
 rpc_nbd_svc.c: rpc_nbd.x
 	rpcgen -mM -o $(top_builddir)/rpc/$@ $^
 
 dist-hook:
-	find $(distdir) -type f                                        \
-		-not -name 'rpc_nbd.x' -not -name 'rpc-pragmas.h'          \
-		-not -name 'rpc_nbd_svc.h' -not -name 'Makefile.*' -delete
+	find $(distdir) -type f -not -name 'rpc_nbd.x'            \
+		-not -name 'rpc-pragmas.h' -not -name 'rpc_nbd_svc.h' \
+		-not -name 'Makefile.*' -delete
