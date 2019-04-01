@@ -14,12 +14,6 @@ AC_INIT([nbd-runner],
 
 AC_SUBST([PACKAGE_RELEASE], 1)
 
-m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES(yes)])
-if make --help 2>&1 | grep -q no-print-directory; then
-    AM_MAKEFLAGS="$AM_MAKEFLAGS --no-print-directory"
-fi
-AC_SUBST(AM_MAKEFLAGS)
-
 CFLAGS="${CLFAGS} -Werror -Wall -Wdeclaration-after-statement"
 
 AC_ARG_WITH(systemddir,
@@ -125,7 +119,14 @@ AC_CHECK_LIB([pthread], [pthread_mutex_init],[PTHREAD="-lpthread"],
              AC_MSG_ERROR([Posix threads library is required to build nbd-runner]))
 AC_SUBST(PTHREAD)
 
-AM_INIT_AUTOMAKE([-Wall -Werror foreign nostdinc silent-rules])
+AM_INIT_AUTOMAKE([-Wall -Werror foreign nostdinc])
+
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES(yes)])
+if make --help 2>&1 | grep -q no-print-directory; then
+    AM_MAKEFLAGS="$AM_MAKEFLAGS --no-print-directory"
+fi
+AC_SUBST(AM_MAKEFLAGS)
+
 AC_CONFIG_HEADERS([config.h])
 
 AC_CONFIG_FILES([Makefile
