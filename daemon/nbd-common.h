@@ -56,7 +56,7 @@ struct nbd_device {
     char time[NBD_TLEN_MAX];
 
     /*
-     * Private date pointer for each device
+     * Private data pointer for each device
      *
      * This will also host the options parsed from
      * handler->cfg_parse() if there has.
@@ -72,8 +72,12 @@ struct nbd_handler {
     void *data;		/* Handler private data. */
 
     /*
-     * Parse the handler's private options and save
-     * it into its own dev->priv data
+     * Parse the device's private extra options and save it
+     * into dev->priv, the cfgstring format will be like;
+     *
+     * "key=volume/filepath;dummy1=value1;dummy2;dummy3=value3;".
+     *
+     * Please fill the nbd_response if there has any errors
      */
     bool (*cfg_parse)(struct nbd_device *, const char *, nbd_response *);
 
@@ -88,6 +92,8 @@ struct nbd_handler {
      * Or you must use the utils privided by the backstore, and
      * when mapping the backstores, the map core code will add
      * the backstore info into the cache and backup json file.
+     *
+     * Please fill the nbd_response if there has any errors
      */
     bool (*create)(struct nbd_device *, nbd_response *);
 
@@ -101,6 +107,8 @@ struct nbd_handler {
      * Or you must use the utils privided by the backstore, and
      * the delete option in the core code will only delete the
      * backstore info from the cache and backup json file.
+     *
+     * Please fill the nbd_response if there has any errors
      */
     bool (*delete)(struct nbd_device *, nbd_response *);
 
@@ -111,23 +119,33 @@ struct nbd_handler {
      * If the backstore is not created by using the 'nbd-cli create'
      * then the map core code will add the backstore info into
      * the cache and backup json file.
+     *
+     * Please fill the nbd_response if there has any errors
      */
     bool (*map)(struct nbd_device *, nbd_response *);
 
     /* Unmap the backstore storage from the NBD device. */
     bool (*unmap)(struct nbd_device *);
 
-    /* Get the backstore size */
+    /*
+     * Get the backstore size
+     *
+     * Please fill the nbd_response if there has any errors
+     */
     ssize_t (*get_size)(struct nbd_device *, nbd_response *);
 
     /*
      * Get the optiomal block size from the handler,
      * if no please return 0.
+     *
+     * Please fill the nbd_response if there has any errors
      */
     ssize_t (*get_blksize)(struct nbd_device *, nbd_response *);
 
     /*
-     * Handle the IO request from the NBD device socket.
+     * Handle the IO requests from the NBD device socket.
+     *
+     * Curently we will only use the first parameter
      */
     void (*handle_request)(gpointer, gpointer);
 };
