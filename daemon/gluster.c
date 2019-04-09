@@ -30,7 +30,6 @@
 #include <glusterfs/api/glfs.h>
 #include <glib.h>
 
-#include "rpc_nbd.h"
 #include "nbd-log.h"
 #include "utils.h"
 #include "strlcpy.h"
@@ -575,7 +574,7 @@ static void free_value(gpointer value)
     glfs_fini(glfs);
 }
 
-struct nbd_handler glfs_handler = {
+static struct nbd_handler glfs_handler = {
     .name           = "Gluster gfapi handler",
     .subtype        = NBD_BACKSTORE_GLUSTER,
 
@@ -592,19 +591,19 @@ struct nbd_handler glfs_handler = {
 };
 
 /* Entry point must be named "handler_init". */
-int gluster_handler_init(const char *host)
+struct nbd_handler *handler_init(const struct nbd_config *cfg)
 {
     glfs_volume_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
                                              free_value);
     if (!glfs_volume_hash) {
         nbd_err("failed to create glfs_volume_hash hash table!\n");
-        return -1;
+        return NULL;
     }
 
-    if (!host)
+    if (!cfg || cfg->ghost)
         glfs_host = strdup("localhost");
     else
-        glfs_host = strdup(host);
+        glfs_host = strdup(cfg->ghost);
 
-    return nbd_register_handler(&glfs_handler);
+    return &glfs_handler;
 }

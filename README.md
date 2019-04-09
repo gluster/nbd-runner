@@ -6,7 +6,7 @@ A daemon that handles the userspace side of the NBD(Network Block Device) backst
 
 A cli utility, which aims at making backstore creation/deletion/mapping/unmaping/listing.
 
-# one simple graph:
+# One simple graph:
 
 ```script
                          nbd-runner                                   nbd-cli
@@ -36,10 +36,10 @@ A cli utility, which aims at making backstore creation/deletion/mapping/unmaping
 ```
 <b>NOTE:</b> The 'RUNNER HOST IP' and the 'IO HOST IP' could be same or different, and the 'nbd-runner' and 'nbd-cli' could run on the same node or in different nodes, both are up to your use case. And please make sure that the 'nbd-runner' runs on one of the gluster/ceph server nodes.
 
-## License
+# License
 nbd-runner is licensed to you under your choice of the GNU Lesser General Public License, version 3 or any later version ([LGPLv3](https://opensource.org/licenses/lgpl-3.0.html) or later), or the GNU General Public License, version 2 ([GPLv2](https://opensource.org/licenses/GPL-2.0)), in all cases as published by the Free Software Foundation.
 
-### Install
+# Install
 ------
 <pre>
 # git clone https://github.com/gluster/nbd-runner.git
@@ -54,7 +54,7 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 
 <b>NOTE:</b> Glibc has removed the rpc functions from the [2.26 release](https://sourceware.org/ml/libc-alpha/2017-08/msg00010.html). Instead of relying on glibc providing these, the modern libtirpc library should be used instead. For the old glibc version or some distribute Linux we will still use the glibc instead to privide the RPC library.
 
-### Usage
+# Usage
 ------
 **Prerequisites:** *this guide assumes that the following are already present*
 - [x] *The kernel or the nbd.ko module must be new enough, which have add the netlink feature supported*
@@ -107,7 +107,73 @@ Usage:
 		Display the version of nbd-cli
 ```
 
-## Gluster
+# Writing a new nbd handler
+
+### Hanler library name:
+
+The handler library name must be "libXXX_handler.so".
+
+### Define your own struct nbd_handler like:
+
+    struct nbd_handler dummy_handler = {
+        .name           = "Dummy handler",
+        .subtype        = NBD_BACKSTORE_DUMMY,
+
+        .cfg_parse      = dummy_cfg_parse,
+        .create         = dummy_create,
+        .delete         = dummy_delete,
+        .map            = dummy_map,
+        .unmap          = dummy_unmap,
+        .get_size       = dummy_get_size,
+        .get_blksize    = dummy_get_blksize,
+        .handle_request = dummy_handle_request,
+
+        .load_json      = dummy_load_json,
+        .update_json    = dummy_update_json,
+
+    }
+
+**.name:** The name of your handler.
+
+**.subtype:** You should append a new backstore type in enum handler_t {} in ./rpc/rpc_nbd.x file.
+
+**.cfg_parse:** This helper should help you to parse the cfgstring received from the nbd-cli command, and setup the dev->priv if needed.
+
+**.create:** Create one new bacostore storage device/file.
+
+**.delete:** Delete the backstore storage device/file.
+
+**.map:** This is called by "nbd-cli map" command, the "nbd-cli map" will map the backstore storage device/file to the NBD device(/dev/nbdX), here you need to make sure that the backstore storage device/file is exist and then open it.
+
+**.unmap:** When unmapping, you should close the backstore storage device/file.
+
+**.get_size:** Will get the backstore storage device/file size.
+
+**.get_blksize:** Will get the backstore storage device/file blksize, you can just return 0 then it will be set as default 512.
+
+**.handle_request:** This will be called to do the actual IOs, such as READ/WRITE/FLUSH...
+
+**.load_json:** When the nbd-runner service is starting, it will reload the /etc/nbd-runner/saveconfig.json to setup the device info, you should privide one method to restore the dev->priv private data if needed.
+
+**.update_json:** All the backstore storage device/file info will be saved to the /etc/nbd-runner/saveconfig.json file, you should privide one method to save this for the dev->priv private data if needed.
+
+**NOTE:** the create/delete helpers are not must, you can use other tools to create/delete the backstore storage devices/files, and then use the map/unmap to map/unmap them to the NBD devices.
+
+
+### Define handler_init callout:
+
+There must have one entry point named "handler_init", it will be:
+
+    struct nbd_handler *handler_init(const struct nbd_config *cfg)
+    {
+        /* Add your init code here*/
+
+        [...]
+
+        return &dummy_handler;
+    }
+
+# Gluster
 [Gluster](http://gluster.readthedocs.io/en/latest/) is a well known scale-out distributed storage system, flexible in its design and easy to use. One of its key goals is to provide high availability of data. Gluster is very easy to setup and use. Addition and removal of storage servers from a Gluster cluster is intuitive. These capabilities along with other data services that Gluster provides makes it a reliable software defined storage platform.
 
 > A unique distributed storage solution build on traditional filesystems
