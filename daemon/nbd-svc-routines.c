@@ -125,6 +125,17 @@ static void nbd_fini_iohost(GPtrArray *iohost)
     g_ptr_array_free(iohost, true);
 }
 
+/*
+ * Prase the key from the cfgstring.
+ *
+ * For exmaple, with extra private options it will be like:
+ * "key=myvolume/myfile;option1;option2"
+ *
+ * Or if there is no any extra private option it will be like:
+ * "key=myvolume/myfile"
+ *
+ * And the hash key "myvolume/myfile" will be returned.
+ */
 static char *nbd_get_hash_key(const char *cfgstring)
 {
     char *sep;

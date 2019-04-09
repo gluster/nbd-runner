@@ -90,6 +90,16 @@ int nbd_create_backstore(int count, char **options, int type)
 
     create->type = type;
 
+    /*
+     * It won't touch the cfgstring from the command line, except
+     * adding the "key=" prefix and ';' at the end.
+     *
+     * After this the cfgsting will be like:
+     * "key=volume/filepath;dummy1=value1;dummy2;dummy3=value3;"
+     *
+     * And the dummy1, dummy2 and dummy3 will be the handler's private
+     * extra options.
+     */
     len = snprintf(create->cfgstring, max_len, "key=%s", options[0]);
     if (len < 0) {
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
