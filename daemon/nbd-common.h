@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <glib.h>
 #include <linux/limits.h>
+#include <json-c/json.h>
 
 #include "rpc_nbd.h"
 #include "utils/utils.h"
@@ -148,6 +149,51 @@ struct nbd_handler {
      * Curently we will only use the first parameter
      */
     void (*handle_request)(gpointer, gpointer);
+
+    /*
+     * Update the private extra options to the json file.
+     *
+     * For string type options please do it like:
+     * json_object_object_add(devobj, "dummy1", json_object_new_string(priv->dummy1));
+     *
+     * For int type options please do it like:
+     * json_object_object_add(devobj, "dummy2", json_object_new_int(dev->dummy2));
+     *
+     * For boolean type options please do it like:
+     * json_object_object_add(devobj, "dummy3", json_object_new_boolean(dev->dummy3));
+     */
+    bool (*update_json)(json_object *devobj);
+
+    /*
+     * Load the cfgstring and private extra options from the json file
+     *
+     * For string type options please do it like:
+     * json_object *obj;
+     * char *tmp;
+     * priv = malloc();
+     * dev->priv = priv;
+     *
+     * json_object_object_get_ex(devobj, "dummy1", &obj);
+     * tmp = json_object_get_string(obj);
+     * if (tmp)
+     *    strlcpy(priv->dummy1, tmp, NBD_DLEN_MAX);
+     *
+     * For int type options please do it like:
+     * json_object_object_get_ex(devobj, "dummy2", &obj);
+     * dev->dummy2 = json_object_get_int(obj);
+     *
+     * For boolean type options please do it like:
+     * json_object_object_get_ex(devobj, "dummy3", &obj);
+     * dev->dummy3 = json_object_get_boolean(obj);
+     *
+     * NOTE: the third parameter is the hash key parsed from the cfgsting
+     * when creating or mapping the backstore, for example for Gluster
+     * handler, it will be:
+     *   "key=myvolume/myfilepath"
+     *
+     * If needed please parse the key to the priv too.
+     */
+    bool (*load_json)(struct nbd_device *dev, json_object *devobj, char *key);
 };
 
 struct nbd_handler_request;

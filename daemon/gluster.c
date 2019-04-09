@@ -548,6 +548,21 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
     }
 }
 
+static bool glfs_load_json(struct nbd_device *dev, json_object *devobj, char *key)
+{
+    if (!dev || !key) {
+        nbd_err("Invalid dev or key!\n");
+        return false;
+    }
+
+    if (!glfs_cfg_parse(dev, key, NULL)) {
+        nbd_err("Failed to load json!\n");
+       return false;
+    }
+
+    return true;
+}
+
 static void free_key(gpointer key)
 {
     free(key);
@@ -572,6 +587,8 @@ struct nbd_handler glfs_handler = {
     .get_size       = glfs_get_size,
     .get_blksize    = glfs_get_blksize,
     .handle_request = glfs_handle_request,
+
+    .load_json      = glfs_load_json,
 };
 
 /* Entry point must be named "handler_init". */

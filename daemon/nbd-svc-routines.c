@@ -153,6 +153,9 @@ static char *nbd_get_hash_key(const char *cfgstring)
     return strndup(cfgstring + 4, len);
 }
 
+/*
+ * Delete the device config from the config json file
+ */
 static int nbd_config_delete_backstore(struct nbd_device *dev, const char *key)
 {
     json_object *globalobj = NULL;
@@ -184,6 +187,9 @@ static int nbd_config_delete_backstore(struct nbd_device *dev, const char *key)
     return 0;
 }
 
+/*
+ * Update the device config to the config json file
+ */
 static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
 {
     json_object *globalobj = NULL;
@@ -226,6 +232,25 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
         goto err;
     }
 
+    /*
+     * It will be like:
+     *
+     * "myvolume\/myfilepath":{
+     *   "type":0,
+     *   "nbd":"/dev/nbd3",
+     *   "maptime":"2019-04-01 15:53:13",
+     *   "size":104857600,
+     *   "blksize":0,
+     *   "readonly":false,
+     *   "prealloc":false,
+     *   "dummy1":"value"
+     *   "dummy2":true
+     *   "dummy3":0
+     *   "status":"mapped"
+     * },
+     *
+     * NOTE: the dummy options are private extra ones
+     */
     json_object_object_add(devobj, "type", json_object_new_int(dev->type));
     json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
     json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
@@ -233,8 +258,13 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
     json_object_object_add(devobj, "blksize", json_object_new_int(dev->blksize));
     json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
     json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
+
+    if (dev->handler && dev->handler->update_json)
+	    dev->handler->update_json(devobj);
+
     st = nbd_dev_status_lookup_str(dev->status);
     json_object_object_add(devobj, "status", json_object_new_string(st));
+
 
     json_object_object_add(globalobj, key, devobj);
     json_object_to_file_ext(NBD_SAVE_CONFIG_FILE, globalobj, JSON_C_TO_STRING_PRETTY);
@@ -245,6 +275,9 @@ err:
     return ret;
 }
 
+/*
+ * Prase the saved config from the json file
+ */
 static int nbd_parse_from_json_config_file(void)
 {
     json_object *globalobj = NULL;
@@ -309,10 +342,14 @@ static int nbd_parse_from_json_config_file(void)
                 free(dev);
             } else {
                 dev->handler = handler;
-                ktmp = malloc(NBD_CFGS_MAX);
-                snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
-                handler->cfg_parse(dev, ktmp, NULL);
-                free(ktmp);
+
+                if (handler->load_json) {
+                    ktmp = malloc(NBD_CFGS_MAX);
+                    snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
+                    handler->load_json(dev, devobj, key);
+                    free(ktmp);
+                }
+
                 nbd_update_json_config_file(dev, true);
                 ktmp = strdup(key);
                 g_hash_table_insert(nbd_devices_hash, ktmp, dev);
