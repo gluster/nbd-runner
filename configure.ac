@@ -6,13 +6,13 @@ dnl  General Public License, version 3 or any later version (LGPLv3 or
 dnl  later), or the GNU General Public License, version 2 (GPLv2), in all
 dnl  cases as published by the Free Software Foundation.
 
-AC_PREREQ([2.69])
 AC_INIT([nbd-runner],
-        m4_esyscmd(echo -n $(cat VERSION 2>/dev/null || git describe --always --tags | cut -f2 -d'v' | cut -f1 -d'-')),
+        [m4_esyscmd([build-aux/pkg-version --version])],
         [xiubli@redhat.com],,
         [https://github.com/gluster/nbd-runner.git])
 
-AC_SUBST([PACKAGE_RELEASE], 1)
+AC_SUBST([PACKAGE_RELEASE],
+         [m4_esyscmd([build-aux/pkg-version --release])])
 
 CFLAGS="${CLFAGS} -Werror -Wall -Wdeclaration-after-statement"
 
@@ -68,7 +68,7 @@ AC_ARG_WITH([clang],
     [with_clang=$withval],
     [with_clang=missing])
 
-if test "x$with_clang" == "xyes"; then
+if test "x$with_clang" = "xyes"; then
     AC_CHECK_PROG(CLANG, clang, yes, no)
     if test "x$CLANG" = "xno"; then
         AC_MSG_ERROR([clang not found, needed for building])
@@ -82,7 +82,7 @@ AC_ARG_WITH([tirpc],
     [with_tirpc=$withval],
     [with_tirpc=missing])
 
-if test "x$with_tirpc" == "xyes" || test "x$with_tirpc" == "xmissing"; then
+if test "x$with_tirpc" = "xyes" || test "x$with_tirpc" = "xmissing"; then
     PKG_CHECK_MODULES(TIRPC, [libtirpc >= 1.0.0],
         [with_tirpc="yes" AC_DEFINE(HAVE_TIRPC, 1, [Define to 1 if we have tirpc support])],
         [with_tirpc="no" AC_DEFINE(HAVE_TIRPC, 0)
@@ -101,7 +101,7 @@ AC_ARG_WITH([gfapi6],
     [with_gfapi6=$withval],
     [with_gfapi6=missing])
 
-if test "x$with_gfapi6" == "xyes" || test "x$with_gfapi6" == "xmissing"; then
+if test "x$with_gfapi6" = "xyes" || test "x$with_gfapi6" = "xmissing"; then
     # glusterfs-api versions have a prefix of "7."
     PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.6],
         [with_gfapi6="yes" AC_DEFINE(GFAPI_VER6, 1, [Define to 1 if we have gfapi library >= 6.0 support])],
@@ -160,27 +160,14 @@ AC_CHECK_HEADERS([stdio.h stdlib.h string.h stdbool.h stddef.h libkmod.h \
                   netdb.h netinet/in.h sys/socket.h sys/socket.h netinet/in.h \
                   pthread.h sys/utsname.h glusterfs/api/glfs.h netlink/netlink.h \
                   rpc/pmap_clnt.h inttypes.h fcntl.h linux/nbd.h signal.h glib.h \
-		  rpc/rpc.h])
+                  rpc/rpc.h])
 
-# Dirty hacky stuff to make STATEDIR work
-if test "x$prefix" = xNONE; then
-   test $localstatedir = '${prefix}/var' && localstatedir=$ac_default_prefix/var
-   localstatedir=/var
+libdir=$ac_default_prefix/lib64/nbd-runner
+if test "x$prefix" != xNONE; then
+    libdir=$prefix/lib64/nbd-runner
 fi
-
-localstatedir="$(eval echo ${localstatedir})"
-LOCALSTATEDIR=${localstatedir}
-
-GLUSTER_BLOCKD_WORKDIR="${LOCALSTATEDIR}/lib/nbd-runner"
-AC_SUBST(GLUSTER_BLOCKD_WORKDIR)
-
-if test "x$prefix" = xNONE; then
-   test $libexecdir = '${prefix}/libexec' && localstatedir=$ac_default_prefix/libexec
-   libexecdir=/usr/libexec
-fi
-
-GLUSTER_BLOCKD_LIBEXECDIR="$(eval echo ${libexecdir}/nbd-runner)"
-AC_SUBST(GLUSTER_BLOCKD_LIBEXECDIR)
+NBD_RUNNER_LIBDIR="$(eval echo ${libdir})"
+AC_SUBST(NBD_RUNNER_LIBDIR)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
@@ -197,6 +184,8 @@ cat <<EOF
 ------------------ Summary ------------------
   $PACKAGE_NAME version $PACKAGE_VERSION
   Prefix.........: $prefix
+  ExecPrefix.....: $exec_prefix
+  Lidir..........: $libdir
   Use TIRPC......: $with_tirpc
   Use GFAPI6.....: $with_gfapi6
   C Compiler.....: $CC $CFLAGS $CPPFLAGS

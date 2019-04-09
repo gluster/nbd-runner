@@ -18,6 +18,7 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <dlfcn.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <linux/types.h>
@@ -1063,6 +1064,103 @@ static void free_value(gpointer value)
     free(dev);
 }
 
+static int nbd_register_handler(struct nbd_handler *handler)
+{
+    if (!handler) {
+        nbd_err("handler is NULL!\n");
+        return -1;
+    }
+
+    if (g_hash_table_lookup(nbd_handler_hash, &handler->subtype)) {
+        nbd_err("handler %s is already registered!\n", handler->name);
+        return -1;
+    }
+
+    g_hash_table_insert(nbd_handler_hash, &handler->subtype, handler);
+
+    return 0;
+}
+
+static int is_handler(const struct dirent *dirent)
+{
+    char *p;
+
+    p = strstr(dirent->d_name, "_handler.so");
+    if (!p)
+        return 0;
+
+    if (strlen(p) == strlen("_handler.so")) {
+        nbd_dbg("Find handler %s...\n", dirent->d_name);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int nbd_open_handlers(const struct nbd_config *cfg)
+{
+    struct nbd_handler *handler;
+    struct dirent **dirent_list;
+    int num_handlers;
+    int num_good = 0;
+    char *error;
+    int i;
+
+    nbd_dbg("Handler paths is %s\n", NBD_RUNNER_LIBDIR);
+    num_handlers = scandir(NBD_RUNNER_LIBDIR, &dirent_list, is_handler, alphasort);
+
+    nbd_err("num_handlers: %d\n", num_handlers);
+    if (num_handlers == -1)
+        return -1;
+
+    for (i = 0; i < num_handlers; i++) {
+        char *path;
+        void *handle;
+        handler_init_fn_t handler_init;
+        int ret;
+
+        ret = asprintf(&path, "%s/%s", NBD_RUNNER_LIBDIR, dirent_list[i]->d_name);
+        if (ret == -1) {
+            nbd_err("ENOMEM\n");
+            continue;
+        }
+
+        handle = dlopen(path, RTLD_NOW|RTLD_LOCAL);
+        if (!handle) {
+            nbd_err("Could not open handler at %s: %s\n", path, dlerror());
+            free(path);
+            continue;
+        }
+
+        dlerror();
+        handler_init = dlsym(handle, "handler_init");
+        if ((error = dlerror())) {
+            nbd_err("dlsym failure on %s: (%s)\n", path, error);
+            free(path);
+            continue;
+        }
+
+        handler = handler_init(cfg);
+        if (!handler) {
+            nbd_err("handler init failed on path %s\n", path);
+            free(path);
+            continue;
+        }
+        nbd_register_handler(handler);
+
+        free(path);
+
+        if (ret == 0)
+            num_good++;
+    }
+
+    for (i = 0; i < num_handlers; i++)
+        free(dirent_list[i]);
+    free(dirent_list);
+
+    return num_good;
+}
+
 bool nbd_service_init(struct nbd_config *cfg)
 {
     GPtrArray *iohost = NULL;
@@ -1097,7 +1195,7 @@ bool nbd_service_init(struct nbd_config *cfg)
         }
     }
 
-    gluster_handler_init(cfg->ghost);
+    nbd_open_handlers(cfg);
 
     nbd_devices_hash = g_hash_table_new_full(g_str_hash, g_str_equal, free_key,
                                              free_value);
@@ -1133,21 +1231,4 @@ void nbd_service_fini(void)
 
     if (nbd_nbds_hash)
         g_hash_table_destroy(nbd_nbds_hash);
-}
-
-int nbd_register_handler(struct nbd_handler *handler)
-{
-    if (!handler) {
-        nbd_err("handler is NULL!\n");
-        return -1;
-    }
-
-    if (g_hash_table_lookup(nbd_handler_hash, &handler->subtype)) {
-        nbd_err("handler %s is already registered!\n", handler->name);
-        return -1;
-    }
-
-    g_hash_table_insert(nbd_handler_hash, &handler->subtype, handler);
-
-    return 0;
 }

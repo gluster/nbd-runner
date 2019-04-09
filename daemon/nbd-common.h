@@ -214,8 +214,12 @@ struct nbd_handler_request {
     void *rwbuf;
 };
 
-int nbd_register_handler(struct nbd_handler *handler);
-int gluster_handler_init(const char *host);
+/*
+ * For each handler library's entry point must be named "handler_init".
+ *
+ * And the handler library name must be "libXXX_handler.so"
+ */
+typedef struct nbd_handler *(*handler_init_fn_t)(const struct nbd_config *);
 bool nbd_service_init(struct nbd_config *cfg);
 void nbd_service_fini(void);
 
