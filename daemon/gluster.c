@@ -260,7 +260,7 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
-#if GFAPI_VER6
+#if GFAPI_VERSION760
     if (glfs_ftruncate(fd, dev->size, NULL, NULL) < 0) {
 #else
     if (glfs_ftruncate(fd, dev->size) < 0) {
@@ -488,7 +488,7 @@ err:
     return ret;
 }
 
-#if GFAPI_VER6
+#if GFAPI_VERSION760
 static void glfs_async_cbk(glfs_fd_t *gfd, ssize_t ret,
                            struct glfs_stat *prestat,
                            struct glfs_stat *poststat,
@@ -600,7 +600,7 @@ struct nbd_handler *handler_init(const struct nbd_config *cfg)
         return NULL;
     }
 
-    if (!cfg || cfg->ghost)
+    if (!cfg)
         glfs_host = strdup("localhost");
     else
         glfs_host = strdup(cfg->ghost);
