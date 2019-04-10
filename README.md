@@ -47,7 +47,7 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 # dnf install autoconf automake libtool glusterfs-api-devel kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
 # dnf install libtirpc-devel rpcgen # only in Fedora or some other Distributions that the glibc version >= 2.26
 # ./autogen.sh
-# ./configure # '--with-tirpc=no' means try to use legacy glibc, otherwise use libtirpc by default, '--with-gfapi6' means use GFAPI version >= 6.0
+# ./configure # '--with-tirpc=no' means try to use legacy glibc, yes by default; --with-gluster means enable the gluster handler, yes by default.
 # make -j
 # make install
 </pre>
