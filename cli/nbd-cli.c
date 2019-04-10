@@ -23,7 +23,7 @@
 #include "utils.h"
 #include "nbd-log.h"
 #include "nbd-cli-cmd.h"
-#include "version.h"
+#include "config.h"
 
 static void usage(void)
 {
@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
             usage();
             goto out;
         case NBD_OPT_VERSION:
-            nbd_info("nbd-cli (%d.%d)\n\n", NBD_VERSION_MAJ, NBD_VERSION_MIN);
+            nbd_info("nbd-cli (%s)\n\n", VERSION);
             nbd_info("%s\n", NBD_LICENSE_INFO);
             goto out;
         case NBD_OPT_MAX:
