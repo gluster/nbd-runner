@@ -22,7 +22,7 @@
 #include <arpa/inet.h>
 
 #include "utils.h"
-#include "version.h"
+#include "config.h"
 #include "nbd-log.h"
 #include "rpc_nbd.h"
 #include "rpc_nbd_svc.h"
@@ -315,7 +315,7 @@ int main (int argc, char **argv)
 
             ind += 2;
         } else if (!strcmp("version", argv[ind])) {
-            nbd_info("nbd-runner (%d.%d)\n\n", NBD_VERSION_MAJ, NBD_VERSION_MIN);
+            nbd_info("nbd-runner (%s)\n\n", VERSION);
             nbd_info("%s\n", NBD_LICENSE_INFO);
             goto out;
         } else if (!strcmp("help", argv[ind])) {
