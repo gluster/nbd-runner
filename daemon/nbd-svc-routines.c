@@ -346,7 +346,7 @@ static int nbd_parse_from_json_config_file(void)
                 if (handler->load_json) {
                     ktmp = malloc(NBD_CFGS_MAX);
                     snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
-                    handler->load_json(dev, devobj, key);
+                    handler->load_json(dev, devobj, ktmp);
                     free(ktmp);
                 }
 
