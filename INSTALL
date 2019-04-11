@@ -5,24 +5,30 @@ Installation Instructions:
 Install from Source:
 -------------------
 
-1. nbd-runner's nbd-cli command is based the netlink feature in nbd.ko. So, make sure the kernel version >= 4.12.0.
+1. nbd-cli command is based the netlink feature in nbd.ko. So, make sure the kernel version >= 4.12.0.
 
 2. $ git clone https://github.com/gluster/nbd-runner.git
 
 3. Run ./autogen.sh.
 
-4. Run ./configure.
+4. Run ./configure [options].
 
- $ ./configure
+ $ ./configure [--with-gluster=no, default is yes] [--with-tirpc=no, default is yes] [--with-clang=yes, default is no] [--disable-silent-rules]
  [...]
  ------------------ Summary ------------------
-   nbd-runner version 0.1
-   Prefix.........: /usr/local
-   C Compiler.....: gcc -g -O2
-   Linker.........: /usr/bin/ld -m elf_x86_64
+ nbd-runner version 0.3
+ Prefix............: /usr/local
+ Gluster handler...: no
+ Use TIRPC.........: no
+ C Compiler........: clang  -Werror -Wall -Wdeclaration-after-statement 
+ Linker............: /usr/bin/ld -m elf_x86_64  
  ---------------------------------------------
 
  In case if you notice failures, install the dependencies suggested by configure.
+
+ $ dnf install autoconf automake libtool kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
+ $ dnf install libtirpc-devel rpcgen # only in Fedora or some other Distributions that the glibc version >= 2.26
+ $ dnf install glusterfs-api-devel # only when the --with-gluster=yes or absent you need to install this
 
 5. Now just run 'make' and later run 'make install' to install the package.
 
