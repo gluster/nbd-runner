@@ -42,14 +42,15 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 # Install
 ------
 <pre>
-# git clone https://github.com/gluster/nbd-runner.git
-# cd nbd-runner/
-# dnf install autoconf automake libtool glusterfs-api-devel kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
-# dnf install libtirpc-devel rpcgen # only in Fedora or some other Distributions that the glibc version >= 2.26
-# ./autogen.sh
-# ./configure # '--with-tirpc=no' means try to use legacy glibc, yes by default; --with-gluster means enable the gluster handler, yes by default.
-# make -j
-# make install
+$ git clone https://github.com/gluster/nbd-runner.git
+$ cd nbd-runner/
+$ dnf install autoconf automake libtool kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
+$ dnf install libtirpc-devel rpcgen # only in Fedora or some other Distributions that the glibc version >= 2.26
+$ dnf install glusterfs-api-devel # only when the --with-gluster=yes or absent you need to install this
+$ ./autogen.sh
+$ ./configure # '--with-tirpc=no' means try to use legacy glibc, yes by default; --with-gluster means enable the gluster handler, yes by default.
+$ make -j
+$ make install
 </pre>
 
 <b>NOTE:</b> Glibc has removed the rpc functions from the [2.26 release](https://sourceware.org/ml/libc-alpha/2017-08/msg00010.html). Instead of relying on glibc providing these, the modern libtirpc library should be used instead. For the old glibc version or some distribute Linux we will still use the glibc instead to privide the RPC library.
@@ -62,7 +63,7 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 
 <b>Daemon</b>: run nbd-runner on the node where you can access the gluster through gfapi
 ```script
-# nbd-runner help
+$ nbd-runner help
 Usage:
 	nbd-runner [<args>]
 
@@ -91,7 +92,7 @@ Commands:
 
 <b>CLI</b>: you can choose to run nbd-cli from any node where the newer nbd.ko module is availible
 ```script
-# nbd-cli help
+$ nbd-cli help
 Usage:
 
 	gluster help
@@ -187,29 +188,29 @@ There must have one entry point named "handler_init", it will be:
 1. Create a volume in the gluster stoarge cluster.
 2. Run the nbd-runner daemon in any of the gluster storage cluster node, or any other node that can access the gluster volume via the gfapi library.
    
-    `# nbd-runner [<args>]`
+    `$ nbd-runner [<args>]`
 
 3. Create one file in the volume by using the gluster cli tool or just use the 'nbd-cli gluster create' tool.
 
-    `# mount.glusterfs HOST:/VOLUME /mnt && fallocate -l 1G /mnt/FILEPATH`
+    `$ mount.glusterfs HOST:/VOLUME /mnt && fallocate -l 1G /mnt/FILEPATH`
 
    or
 
-    `# nbd-cli gluster create <VOLUME/FILEPATH> [prealloc] <size SIZE> <host RUNNER_HOST>`
+    `$ nbd-cli gluster create <VOLUME/FILEPATH> [prealloc] <size SIZE> <host RUNNER_HOST>`
 
 4. Map the file created in backstore gluster volume to the NBD device(in local host), you can specify one unmapped /dev/nbdXX or just omit it and then the NBD kernel module will allocate one for you.
 
-    `# nbd-cli gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host RUNNER_HOST>`
+    `$ nbd-cli gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] <host RUNNER_HOST>`
 
 5. You will see the mapped NBD device returned and displayed, or you can check the mapped device info by:
 
-    `# nbd-cli gluster list <map|unmap|create|dead|live|all> <host RUNNER_HOST>`
+    `$ nbd-cli gluster list <map|unmap|create|dead|live|all> <host RUNNER_HOST>`
 
 6. We expose the file in the gluster volume as NBD device using nbd-runner, exporting the target file as block device via /dev/nbdXX
 
 <b> Gluster CLI</b>: the gluster specified cli commands
 ```script
-# nbd-cli gluster help
+$ nbd-cli gluster help
 Usage: 
 
 	gluster help
