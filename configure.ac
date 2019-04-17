@@ -64,7 +64,7 @@ AC_SUBST(LIBNL3_CFLAGS)
 AC_SUBST(LIBNL3_LIBS)
 
 AC_ARG_WITH([clang],
-    [AS_HELP_STRING([--with-clang], [do use clang, default no])],
+    [AS_HELP_STRING([--with-clang=ARG], [do use clang, default ARG=no])],
     [with_clang=$withval],
     [with_clang=no])
 
@@ -78,7 +78,7 @@ if test "x$with_clang" = "xyes"; then
 fi
 
 AC_ARG_WITH([tirpc],
-    [AS_HELP_STRING([--with-tirpc], [do use tirpc, default yes])],
+    [AS_HELP_STRING([--with-tirpc=ARG], [do use tirpc, default ARG=yes])],
     [with_tirpc=$withval],
     [with_tirpc=yes])
 
@@ -100,7 +100,7 @@ AC_SUBST(LIB_DL)
 
 # Checks for libraries.
 AC_ARG_WITH([gluster],
-            [AS_HELP_STRING([--with-gluster], [Enable/Disable gluster handler, default yes])],
+            [AS_HELP_STRING([--with-gluster=ARG], [Enable/Disable gluster handler, default ARG=yes])],
             [with_gluster=$withval],
             [with_gluster=yes])
 
