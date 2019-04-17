@@ -1,11 +1,11 @@
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = rpc utils cli daemon
+SUBDIRS = rpc utils cli daemon handlers
 
 DISTCLEANFILES = Makefile.in autom4te.cache
 
 EXTRA_DIST = autogen.sh README.md COPYING-GPLV2 COPYING-LGPLV3 \
-			 INSTALL nbd-runner.sysconfig
+			 INSTALL nbd-runner.sysconfig.in nbd-runner.service.in
 
 if USE_SYSTEMD
 RPM_WITH_FLAGS = --with systemd
@@ -15,7 +15,7 @@ endif
 
 install-data-local:
 	$(mkdir_p) $(DESTDIR)${sysconfigdir};
-	$(INSTALL_PROGRAM) nbd-runner.sysconfig $(DESTDIR)${sysconfigdir}/nbd-runner;
+	$(INSTALL_PROGRAM) nbd-runner.sysconfig.in $(DESTDIR)${sysconfigdir}/nbd-runner;
 	$(mkdir_p) $(DESTDIR)${systemddir};
 	$(INSTALL_PROGRAM) nbd-runner.service.in $(DESTDIR)$(systemddir)/nbd-runner.service;
 

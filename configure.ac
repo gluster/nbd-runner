@@ -134,6 +134,7 @@ AC_CONFIG_FILES([Makefile
                  rpc/Makefile
                  cli/Makefile
                  daemon/Makefile
+                 handlers/Makefile
                  utils/Makefile])
 
 AC_CONFIG_MACRO_DIR([m4])
