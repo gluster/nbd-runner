@@ -154,13 +154,13 @@ struct nbd_handler {
      * Update the private extra options to the json file.
      *
      * For string type options please do it like:
-     * json_object_object_add(devobj, "dummy1", json_object_new_string(priv->dummy1));
+     * json_object_object_add(devobj, "dummy1", json_object_new_string(dev->priv->dummy1));
      *
      * For int type options please do it like:
-     * json_object_object_add(devobj, "dummy2", json_object_new_int(dev->dummy2));
+     * json_object_object_add(devobj, "dummy2", json_object_new_int(dev->priv->dummy2));
      *
      * For boolean type options please do it like:
-     * json_object_object_add(devobj, "dummy3", json_object_new_boolean(dev->dummy3));
+     * json_object_object_add(devobj, "dummy3", json_object_new_boolean(dev->priv->dummy3));
      */
     bool (*update_json)(json_object *devobj);
 
@@ -176,15 +176,15 @@ struct nbd_handler {
      * json_object_object_get_ex(devobj, "dummy1", &obj);
      * tmp = json_object_get_string(obj);
      * if (tmp)
-     *    strlcpy(priv->dummy1, tmp, NBD_DLEN_MAX);
+     *    strlcpy(dev->priv->dummy1, tmp, NBD_DLEN_MAX);
      *
      * For int type options please do it like:
      * json_object_object_get_ex(devobj, "dummy2", &obj);
-     * dev->dummy2 = json_object_get_int(obj);
+     * dev->priv->dummy2 = json_object_get_int(obj);
      *
      * For boolean type options please do it like:
      * json_object_object_get_ex(devobj, "dummy3", &obj);
-     * dev->dummy3 = json_object_get_boolean(obj);
+     * dev->priv->dummy3 = json_object_get_boolean(obj);
      *
      * NOTE: the third parameter is the hash key parsed from the cfgsting
      * when creating or mapping the backstore, for example for Gluster

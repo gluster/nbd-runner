@@ -556,7 +556,7 @@ static bool glfs_load_json(struct nbd_device *dev, json_object *devobj, char *ke
 
     if (!glfs_cfg_parse(dev, key, NULL)) {
         nbd_err("Failed to load json!\n");
-       return false;
+        return false;
     }
 
     return true;
