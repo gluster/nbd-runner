@@ -14,8 +14,6 @@ AC_INIT([nbd-runner],
 AC_SUBST([PACKAGE_RELEASE],
          [m4_esyscmd([build-aux/pkg-version --release])])
 
-CFLAGS="${CLFAGS} -Werror -Wall -Wdeclaration-after-statement"
-
 AC_ARG_WITH(systemddir,
             AC_HELP_STRING([--with-systemddir=DIR],
                            [systemd service files in DIR @<:@PREFIX/lib/systemd/system@:>@]),
@@ -120,7 +118,7 @@ AC_CHECK_LIB([pthread], [pthread_mutex_init],[PTHREAD="-lpthread"],
              AC_MSG_ERROR([Posix threads library is required to build nbd-runner]))
 AC_SUBST(PTHREAD)
 
-AM_INIT_AUTOMAKE([-Wall -Werror foreign nostdinc])
+AM_INIT_AUTOMAKE([tar-pax foreign -Werror -Wall -Wno-portability])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES(yes)])
 if make --help 2>&1 | grep -q no-print-directory; then
@@ -140,16 +138,11 @@ AC_CONFIG_FILES([Makefile
 AC_CONFIG_MACRO_DIR([m4])
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
-AM_MAINTAINER_MODE
-
-# Configure libtool
 LT_INIT
-
-# Checks for programs.
 AC_PROG_CC
-
-# For legacy reasons.
 AM_PROG_CC_C_O
+AC_DISABLE_STATIC
+AC_PROG_LIBTOOL
 
 AC_CHECK_PROG(RPCGEN, rpcgen, yes, no)
 if test "x$RPCGEN" = "xno"; then
@@ -158,7 +151,7 @@ fi
 
 # Checks for header files.
 AC_CHECK_HEADERS([stdio.h stdlib.h string.h stdbool.h stddef.h libkmod.h \
-                  unistd.h errno.h memory.h time.hnetdb.h sys/utsname.h  \
+                  unistd.h errno.h memory.h time.h netdb.h sys/utsname.h  \
                   netdb.h netinet/in.h sys/socket.h sys/socket.h netinet/in.h \
                   pthread.h sys/utsname.h glusterfs/api/glfs.h netlink/netlink.h \
                   rpc/pmap_clnt.h inttypes.h fcntl.h linux/nbd.h signal.h glib.h \
@@ -171,14 +164,6 @@ fi
 NBD_RUNNER_LIBDIR="$(eval echo ${libdir})"
 AC_SUBST(NBD_RUNNER_LIBDIR)
 
-# Checks for typedefs, structures, and compiler characteristics.
-AC_CHECK_HEADER_STDBOOL
-AC_TYPE_SIZE_T
-AC_TYPE_SSIZE_T
-
-# Checks for library functions.
-AC_FUNC_STRTOD
-AC_CHECK_FUNCS([gethostbyname memset socket strchr strdup strerror])
 AC_OUTPUT
 
 cat <<EOF

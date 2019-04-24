@@ -2,6 +2,8 @@ sbin_PROGRAMS = nbd-runner
 
 nbd_runner_SOURCES = nbd-runner.c nbd-svc-routines.c
 
+noinst_HEADERS = nbd-common.h
+
 nbd_runner_CFLAGS = $(GFAPI_CFLAGS) $(EVENT_CFLAGS) $(GLIB2_CFLAGS)     \
 					$(TIRPC_CFLAGS) $(JSONC_CFLAGS)	-I$(top_srcdir)/rpc \
                     -DNBD_RUNNER_LIBDIR=\"$(NBD_RUNNER_LIBDIR)\"        \

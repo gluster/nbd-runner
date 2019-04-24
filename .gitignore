@@ -20,10 +20,12 @@ m4/
 *.la
 stamp-h1
 .deps
-*.spec
 *.tar.gz
 *.swp
 VERSION
+extra/rpmbuild/
+extra/*rpm
+*.patch
 
 cli/nbd-cli
 daemon/nbd-runner

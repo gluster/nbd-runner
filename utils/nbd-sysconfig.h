@@ -18,6 +18,7 @@
 
 #include "utils.h"
 #include "nbd-log.h"
+#include "list.h"
 
 #define NBD_CONFIG_DIR_DEFAULT "/etc/sysconfig"
 #define NBD_CONFIG_FILE_DEFAULT NBD_CONFIG_DIR_DEFAULT"/nbd-runner"

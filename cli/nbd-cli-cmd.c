@@ -664,7 +664,7 @@ int nbd_map_device(int count, char **options, int type)
     int max_len = 1024;
     struct nl_sock *netfd = NULL;
     int driver_id;
-    int sockfd;
+    int sockfd = -1;
 
     /* strict check */
     if (count < 1 || count > 7 ) {
@@ -816,7 +816,7 @@ int nbd_map_device(int count, char **options, int type)
     ret = 0;
 err:
     /* We will keep the sockfd opened if succeeded */
-    if (ret)
+    if (sockfd >= 0)
         close(sockfd);
 
     nl_socket_free(netfd);

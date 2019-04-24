@@ -2,6 +2,8 @@ sbin_PROGRAMS = nbd-cli
 
 nbd_cli_SOURCES = nbd-cli.c nbd-cli-cmd.c nbd-cli-gluster.c
 
+noinst_HEADERS = nbd-cli-cmd.h
+
 nbd_cli_CFLAGS = $(KMOD_CFLAGS) $(LIBNL3_CFLAGS) $(TIRPC_CFLAGS)        \
                  $(GLIB2_CFLAGS) $(JSONC_CFLAGS)                        \
 				 -DDATADIR=\"$(localstatedir)\" -I$(top_builddir)/      \

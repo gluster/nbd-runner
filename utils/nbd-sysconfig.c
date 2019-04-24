@@ -26,8 +26,6 @@
 #include "nbd-sysconfig.h"
 #include "nbd-log.h"
 
-#include "list.h"
-
 typedef enum {
 	NBD_OPT_NONE = 0,
 	NBD_OPT_INT, /* type int */
