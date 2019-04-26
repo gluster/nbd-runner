@@ -41,7 +41,7 @@ mkdir -p $rpmbuild_path/RPMS
 mkdir -p $rpmbuild_path/SRPMS
 mkdir -p $rpmbuild_path/SOURCES
 
-cp $TOPDIR/nbd-runner.spec.in $rpmbuild_path/SPECS/nbd-runner.spec
+cp $TOPDIR/nbd-runner.spec $rpmbuild_path/SPECS/nbd-runner.spec
 SPEC=$rpmbuild_path/SPECS/nbd-runner.spec
 
 # Replace the Version

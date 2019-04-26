@@ -18,10 +18,10 @@ Name:          nbd-runner
 Summary:       A daemon that handles the NBD device's IO requests in server side
 Group:         System Environment/Daemons
 License:       ASL 2.0 or LGPLv2+
-Version:       0.4
+Version:       0.3
 URL:           https://github.com/gluster/nbd-runner.git
 
-Release:       %{?dist}
+Release:       rc1%{?dist}
 BuildRoot:     %(mktemp -udp %{_tmppath}/%{name}-%{version}%)
 Source:        %{name}-%{version}.tar.gz
 ExclusiveOS:   Linux
