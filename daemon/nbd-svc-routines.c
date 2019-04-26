@@ -388,14 +388,14 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
                        create->type);
         nbd_err("Invalid handler or the handler is not loaded: %d!\n",
                 create->type);
-        goto err;
+        return true;
     }
 
     key = nbd_get_hash_key(create->cfgstring);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", create->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", create->cfgstring);
-        goto err;
+        return true;
     }
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
@@ -403,19 +403,19 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
         nbd_fill_reply(rep, -EEXIST, "%s is already exist!", create->cfgstring);
         nbd_err("%s is already exist!\n", create->cfgstring);
         free(key);
-        goto err;
+        return true;
     }
 
     dev = calloc(1, sizeof(struct nbd_device));
     if (!dev) {
         nbd_fill_reply(rep, -ENOMEM, "No memory for nbd_device!");
         nbd_err("No memory for nbd_device!\n");
-        goto err;
+        goto err_key;
     }
 
     if (!handler->cfg_parse(dev, create->cfgstring, rep)) {
         nbd_err("failed to parse cfgstring: %s\n", create->cfgstring);
-        goto err;
+        goto err_dev;
     }
 
     pthread_mutex_init(&dev->sock_lock, NULL);
@@ -434,26 +434,29 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
      */
     if (!handler->create(dev, rep) && rep->exit != -EEXIST) {
         nbd_err("failed to create backstore: %s\n", create->cfgstring);
-        goto err;
+        goto err_create;
     }
 
     dev->blksize = handler->get_blksize(dev, NULL);
     if (dev->blksize < 0)
-        goto err;
+        dev->blksize = 0;
 
     strcpy(dev->bstore, key);
 
     nbd_update_json_config_file(dev, false);
     g_hash_table_insert(nbd_devices_hash, key, dev);
 
-err:
-    if (rep->exit && rep->exit != -EEXIST) {
-        free(key);
-        handler->delete(dev, rep);
-        pthread_mutex_destroy(&dev->sock_lock);
-        pthread_mutex_destroy(&dev->lock);
-        free(dev);
-    }
+    return true;
+
+err_create:
+    pthread_mutex_destroy(&dev->sock_lock);
+    pthread_mutex_destroy(&dev->lock);
+err_dev:
+    if (dev && dev->priv)
+        free(dev->priv);
+    free(dev);
+err_key:
+    free(key);
     return true;
 }
 
