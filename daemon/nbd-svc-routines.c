@@ -351,7 +351,6 @@ static int nbd_parse_from_json_config_file(void)
                     free(ktmp);
                 }
 
-                nbd_update_json_config_file(dev, true);
                 ktmp = strdup(key);
                 g_hash_table_insert(nbd_devices_hash, ktmp, dev);
                 if (dev->nbd[0]) {
