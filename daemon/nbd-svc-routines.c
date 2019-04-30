@@ -1111,7 +1111,7 @@ static int nbd_open_handlers(const struct nbd_config *cfg)
     nbd_dbg("Handler paths is %s\n", NBD_RUNNER_LIBDIR);
     num_handlers = scandir(NBD_RUNNER_LIBDIR, &dirent_list, is_handler, alphasort);
 
-    nbd_err("num_handlers: %d\n", num_handlers);
+    nbd_info("num_handlers: %d\n", num_handlers);
     if (num_handlers == -1)
         return -1;
 

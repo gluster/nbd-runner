@@ -83,6 +83,8 @@ static inline int to_syslog_level(int level)
         return NBD_LOG_INFO;
     case NBD_CONF_LOG_DEBUG:
         return NBD_LOG_DEBUG;
+    case NBD_CONF_LOG_DEBUG_IO:
+        return NBD_LOG_DEBUG_IO;
     default:
         return NBD_LOG_INFO;
     }
@@ -178,14 +180,15 @@ static void log_cleanup(void *arg)
 }
 
 static void log_output(struct log_buf *logbuf, int pri, const char *msg,
-        struct log_output *output)
+                       struct log_output *output)
 {
     char timestamp[NBD_TLEN_MAX] = {0, };
 
     if (time_string_now(timestamp) < 0)
         return;
 
-    output->output_fn(pri, timestamp, msg, output->data);
+    if (output && output->output_fn)
+        output->output_fn(pri, timestamp, msg, output->data);
 }
 
 static void log_queue_msg(struct log_buf *logbuf, int pri, char *buf)
