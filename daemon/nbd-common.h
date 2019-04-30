@@ -157,7 +157,7 @@ struct nbd_handler {
      * json_object_object_add(devobj, "dummy1", json_object_new_string(dev->priv->dummy1));
      *
      * For int type options please do it like:
-     * json_object_object_add(devobj, "dummy2", json_object_new_int(dev->priv->dummy2));
+     * json_object_object_add(devobj, "dummy2", json_object_new_int64(dev->priv->dummy2));
      *
      * For boolean type options please do it like:
      * json_object_object_add(devobj, "dummy3", json_object_new_boolean(dev->priv->dummy3));
@@ -180,7 +180,7 @@ struct nbd_handler {
      *
      * For int type options please do it like:
      * json_object_object_get_ex(devobj, "dummy2", &obj);
-     * dev->priv->dummy2 = json_object_get_int(obj);
+     * dev->priv->dummy2 = json_object_get_int64(obj);
      *
      * For boolean type options please do it like:
      * json_object_object_get_ex(devobj, "dummy3", &obj);

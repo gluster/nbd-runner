@@ -252,11 +252,11 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
      *
      * NOTE: the dummy options are private extra ones
      */
-    json_object_object_add(devobj, "type", json_object_new_int(dev->type));
+    json_object_object_add(devobj, "type", json_object_new_int64(dev->type));
     json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
     json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
-    json_object_object_add(devobj, "size", json_object_new_int(dev->size));
-    json_object_object_add(devobj, "blksize", json_object_new_int(dev->blksize));
+    json_object_object_add(devobj, "size", json_object_new_int64(dev->size));
+    json_object_object_add(devobj, "blksize", json_object_new_int64(dev->blksize));
     json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
     json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
 
@@ -303,7 +303,7 @@ static int nbd_parse_from_json_config_file(void)
             }
 
             json_object_object_get_ex(devobj, "type", &obj);
-            dev->type = json_object_get_int(obj);
+            dev->type = json_object_get_int64(obj);
 
             json_object_object_get_ex(devobj, "nbd", &obj);
             tmp = json_object_get_string(obj);
@@ -316,10 +316,10 @@ static int nbd_parse_from_json_config_file(void)
                 strlcpy(dev->time, tmp, NBD_TLEN_MAX);
 
             json_object_object_get_ex(devobj, "size", &obj);
-            dev->size = json_object_get_int(obj);
+            dev->size = json_object_get_int64(obj);
 
             json_object_object_get_ex(devobj, "blksize", &obj);
-            dev->blksize = json_object_get_int(obj);
+            dev->blksize = json_object_get_int64(obj);
 
             json_object_object_get_ex(devobj, "prealloc", &obj);
             dev->prealloc = json_object_get_boolean(obj);
@@ -855,11 +855,11 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
             goto err;
         }
 
-        json_object_object_add(devobj, "type", json_object_new_int(dev->type));
+        json_object_object_add(devobj, "type", json_object_new_int64(dev->type));
         json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
         json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
-        json_object_object_add(devobj, "size", json_object_new_int(dev->size));
-        json_object_object_add(devobj, "blksize", json_object_new_int(dev->blksize));
+        json_object_object_add(devobj, "size", json_object_new_int64(dev->size));
+        json_object_object_add(devobj, "blksize", json_object_new_int64(dev->blksize));
         json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
         json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
         json_object_object_add(devobj, "status", json_object_new_string(st));
