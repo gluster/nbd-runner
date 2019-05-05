@@ -1,4 +1,4 @@
-%global _hardened_build 1
+%define _unpackaged_files_terminate_build 0
 
 # without glusterfs dependency
 # if you wish to exclude gluster handler in RPM, use below command
@@ -16,27 +16,36 @@
 
 Name:          nbd-runner
 Summary:       A daemon that handles the NBD device's IO requests in server side
-Group:         System Environment/Daemons
-License:       ASL 2.0 or LGPLv2+
+License:       LGPLv2+
 Version:       0.3
+Release:       1%{?dist}
 URL:           https://github.com/gluster/nbd-runner.git
 
-Release:       rc1%{?dist}
-BuildRoot:     %(mktemp -udp %{_tmppath}/%{name}-%{version}%)
-Source:        %{name}-%{version}.tar.gz
-ExclusiveOS:   Linux
+Source:        https://github.com/gluster/nbd-runner/archive/v%{version}/%{name}-%{version}.tar.gz
 
-BuildRequires: autoconf automake libtool kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
+BuildRequires: gcc
+BuildRequires: autoconf
+BuildRequires: automake
+BuildRequires: libtool
+BuildRequires: kmod-devel
+BuildRequires: libnl3-devel
+BuildRequires: libevent-devel
+BuildRequires: glib2-devel
+BuildRequires: json-c-devel
 
 %if ( 0%{!?_without_tirpc:1} )
-BuildRequires: libtirpc-devel rpcgen
+BuildRequires: libtirpc-devel
+BuildRequires: rpcgen
 Requires:      libtirpc
 %endif
 
-Requires:      kmod, libevent, libnl3, glib2, json-c, rsyslog
+Requires:      kmod
+Requires:      json-c
+Requires:      rsyslog
 
 %description
-A daemon that handles the userspace side of the NBD(Network Block Device) backstore.
+A daemon that handles the userspace side of the NBD(Network Block Device)
+backstore.
 
 %if ( 0%{!?_without_gluster:1} )
 %package gluster-handler
@@ -49,31 +58,32 @@ Requires:      %{name} = %{version}-%{release}
 Gluster backend handler for processing IO requests from the NBD device.
 %endif
 
-%global debug_package %{nil}
-
 %prep
 %setup -q -n %{name}-%{version}
 
 %build
 ./autogen.sh
 %configure %{?_without_tirpc} %{?_without_gluster}
+%make_build
 
 %install
-%{__make} DESTDIR=%{buildroot} install
+%make_install
 
 %files
 %{_sbindir}/nbd-runner
 %{_sbindir}/nbd-cli
 %{_unitdir}/nbd-runner.service
-%doc README.md COPYING-GPLV2 COPYING-LGPLV3
+%{_mandir}/man8/nbd-*.8.*
+%doc README.md
+%license COPYING-GPLV2 COPYING-LGPLV3
 %config(noreplace) %{_sysconfdir}/sysconfig/nbd-runner
 
 %if ( 0%{!?_without_gluster:1} )
 %files gluster-handler
 %dir %{_libdir}/nbd-runner/
-%{_libdir}/nbd-runner/libgluster_handler.*
+%{_libdir}/nbd-runner/libgluster_handler.so
 %endif
 
 %changelog
-* Wed Apr 24 2019 Xiubo Li <xiubli@redhat.com> - 0.3
-- Initial spec file
+* Wed Apr 24 2019 Xiubo Li <xiubli@redhat.com> - 0.3-1
+- Initial package

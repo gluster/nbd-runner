@@ -1,0 +1,76 @@
+.TH nbd-cli 8
+.SH NAME
+.B nbd-cli
+.SH DESCRIPTION
+.B nbd-cli
+is a cli utility, which aims at making backstore creation/deletion/mapping/
+unmaping/listing.
+
+.SH SYNOPSIS
+.B nbd-cli [OPTION] [COMMAND [OPTIONS]]
+
+.SH NBD-CLI OPTIONS
+
+.TP
+.B gluster help
+Display help for gluster commands
+
+.TP
+.B ceph help [TODO]
+Display help for ceph commands
+
+.TP
+.B global help [TODO]
+Display help for global commands
+
+.TP
+.B version
+Display the version of nbd-cli
+
+
+.SH NBD-CLI GLUSTER COMMANDS
+.TP
+.B gluster help
+Display help for gluster commands
+
+.TP
+.B gluster create <VOLUME/FILEPATH> [prealloc] <size SIZE> [host RUNNER_HOST]
+Create FILEPATH in the VOLUME, prealloc is false as default, and the SIZE is valid
+with B, K(iB), M(iB), G(iB), T(iB), P(iB), E(iB), Z(iB), Y(iB), RUNNER_HOST will
+be 'localhost' as default
+
+.TP
+.B gluster delete <VOLUME/FILEPATH> [host RUNNER_HOST]
+Delete FILEPATH from the VOLUME, RUNNER_HOST will be 'localhost' as default
+
+.TP
+.B
+gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]
+Map FILEPATH to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST
+will be 'localhost' as default
+
+.TP
+.B
+gluster unmap <nbd-device|VOLUME/FILEPATH> [host RUNNER_HOST]
+Unmap the nbd device or VOLUME/FILEPATH, RUNNER_HOST will be 'localhost' as default
+
+.TP
+.B
+gluster list [map|unmap|create|dead|live|all] [host RUNNER_HOST]
+List the mapped|unmapped NBD devices or the created|dead|live backstores, all as
+default. 'create' means the backstores are just created or unmapped. 'dead' means
+the IO connection is lost, this is mainly due to the nbd-runner service is restart
+without unmapping. 'live' means everything is okay for both mapped and IO connection,
+RUNNER_HOST will be 'localhost' as default
+
+
+.SH SEE ALSO
+.BR gluster (8),
+.BR nbd-runner (8),
+
+.SH AUTHOR
+Xiubo Li <xiubli@redhat.com>
+.SH REPORTING BUGS
+Report bugs via gluster-devel <gluster-devel@gluster.org>
+.br
+or <https://github.com/gluster/nbd-runner/issues>

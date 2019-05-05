@@ -1,0 +1,57 @@
+.TH nbd-runner 8
+.SH NAME
+.B nbd-runner
+.SH DESCRIPTION
+.B nbd-runner
+is a daemon that handles the userspace side of the NBD(Network Block Device)
+backstore.
+
+.SH SYNOPSIS
+.B nbd-runner [OPTION]
+
+.SH OPTIONS
+.TP
+.B help
+Display help for nbd-runner command
+
+.TP
+.B threads <NUMBER>
+Specify the IO thread number for each mapped backstore, 1 as default
+
+.TP
+.B rhost <RUNNER_HOST>
+Specify the listenning IP for the nbd-runner server to receive/reply the control
+commands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default
+
+.TP
+.B ihost <IO_HOST>
+Specify the listenning IP for the nbd-runner server to receive/reply the NBD device's
+IO operations(WRITE/READ/FLUSH/TRIM, etc), INADDR_ANY as default
+
+.TP
+.B ghost <IO_HOST>
+Specify the Gluster server IP for the volume to connect to, 'localhost' as default
+
+.TP
+.B version
+Show version info and exit
+
+.TP
+.B NOTE:
+The RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands
+route different from the IOs route via different NICs, or just omit them as default
+
+
+
+
+
+.SH SEE ALSO
+.BR gluster (8),
+.BR nbd-cli (8),
+
+.SH AUTHOR
+Xiubo Li <xiubli@redhat.com>
+.SH REPORTING BUGS
+Report bugs via gluster-devel <gluster-devel@gluster.org>
+.br
+or <https://github.com/gluster/nbd-runner/issues>

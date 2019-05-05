@@ -6,19 +6,15 @@ DISTCLEANFILES = Makefile.in autom4te.cache
 
 EXTRA_DIST = autogen.sh README.md COPYING-GPLV2 COPYING-LGPLV3     \
 			 INSTALL nbd-runner.sysconfig.in nbd-runner.service.in \
-			 build-aux/pkg-version
+			 build-aux/pkg-version nbd-runner.8 nbd-cli.8
 
-if USE_SYSTEMD
-RPM_WITH_FLAGS = --with systemd
-else
-RPM_WITH_FLAGS = --with initd
-endif
+man8_MANS = nbd-runner.8 nbd-cli.8
 
 install-data-local:
 	$(mkdir_p) $(DESTDIR)${sysconfigdir};
-	$(INSTALL_PROGRAM) nbd-runner.sysconfig.in $(DESTDIR)${sysconfigdir}/nbd-runner;
+	$(INSTALL_DATA) nbd-runner.sysconfig.in $(DESTDIR)${sysconfigdir}/nbd-runner;
 	$(mkdir_p) $(DESTDIR)${systemddir};
-	$(INSTALL_PROGRAM) nbd-runner.service.in $(DESTDIR)$(systemddir)/nbd-runner.service;
+	$(INSTALL_DATA) nbd-runner.service.in $(DESTDIR)$(systemddir)/nbd-runner.service;
 
 
 uninstall-local:
