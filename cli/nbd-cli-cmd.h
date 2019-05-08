@@ -40,8 +40,9 @@ int nbd_register_cmds(GHashTable *cmds_hash, struct cli_cmd *cmds);
 GHashTable *nbd_register_backstores(void);
 void nbd_unregister_backstores(GHashTable *cmds_hash);
 
-/* This is used to register the gluster backstore */
+/* This is used to register the backstores */
 int cli_cmd_gluster_register(GHashTable *cmds_hash);
+int cli_cmd_azblk_register(GHashTable *cmds_hash);
 
 int nbd_create_backstore(int count, char **options, int type);
 int nbd_delete_backstore(int count, char **options, int type);

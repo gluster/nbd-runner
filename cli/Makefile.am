@@ -1,6 +1,6 @@
 sbin_PROGRAMS = nbd-cli
 
-nbd_cli_SOURCES = nbd-cli.c nbd-cli-cmd.c nbd-cli-gluster.c
+nbd_cli_SOURCES = nbd-cli.c nbd-cli-cmd.c nbd-cli-gluster.c nbd-cli-azblk.c
 
 noinst_HEADERS = nbd-cli-cmd.h
 

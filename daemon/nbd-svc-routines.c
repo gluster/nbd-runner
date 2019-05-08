@@ -261,7 +261,7 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
     json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
 
     if (dev->handler && dev->handler->update_json)
-	    dev->handler->update_json(devobj);
+	    dev->handler->update_json(dev, devobj);
 
     st = nbd_dev_status_lookup_str(dev->status);
     json_object_object_add(devobj, "status", json_object_new_string(st));
@@ -1163,6 +1163,14 @@ static int nbd_open_handlers(const struct nbd_config *cfg)
     return num_good;
 }
 
+static void free_handler(gpointer value)
+{
+    struct nbd_handler *handler = value;
+
+    if (!handler && handler->destroy)
+        handler->destroy();
+}
+
 bool nbd_service_init(struct nbd_config *cfg)
 {
     GPtrArray *iohost = NULL;
@@ -1170,7 +1178,7 @@ bool nbd_service_init(struct nbd_config *cfg)
     mkdir(NBD_SAVE_CONFIG_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     open(NBD_SAVE_CONFIG_FILE, O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
-    nbd_handler_hash = g_hash_table_new(g_int_hash, g_int_equal);
+    nbd_handler_hash = g_hash_table_new_full(g_int_hash, g_int_equal, NULL, free_handler);
     if (!nbd_handler_hash) {
         nbd_err("failed to create nbd_handler_hash hash table!\n");
         return false;

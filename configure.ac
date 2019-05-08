@@ -14,6 +14,8 @@ AC_INIT([nbd-runner],
 AC_SUBST([PACKAGE_RELEASE],
          [m4_esyscmd([build-aux/pkg-version --release])])
 
+CFLAGS="${CLFAGS} -Werror -Wall -Wdeclaration-after-statement"
+
 AC_ARG_WITH(systemddir,
             AC_HELP_STRING([--with-systemddir=DIR],
                            [systemd service files in DIR @<:@PREFIX/lib/systemd/system@:>@]),
@@ -60,6 +62,25 @@ PKG_CHECK_MODULES(LIBNL3, [libnl-genl-3.0 >= 3.1],,
                   AC_MSG_ERROR([libnl3 library is required to build nbd-runner]))
 AC_SUBST(LIBNL3_CFLAGS)
 AC_SUBST(LIBNL3_LIBS)
+
+AC_ARG_WITH([azblk],
+            [AS_HELP_STRING([--with-azblk=ARG], [Enable/Disable azblk handler, default ARG=yes])],
+            [with_azblk=$withval],
+            [with_azblk=yes])
+
+AM_CONDITIONAL([WITH_AZBLK], [test x$with_azblk = xyes])
+
+if test "x$with_azblk" = "xyes"; then
+    PKG_CHECK_MODULES(CURL, [libcurl],,
+                  [AC_MSG_ERROR([libcurl library is required to build nbd-runner])])
+    AC_SUBST(CURL_CFLAGS)
+    AC_SUBST(CURL_LIBS)
+
+    PKG_CHECK_MODULES(UV, [libuv],,
+                  [AC_MSG_ERROR([libuv library is required to build nbd-runner])])
+    AC_SUBST(UV_CFLAGS)
+    AC_SUBST(UV_LIBS)
+    fi
 
 AC_ARG_WITH([clang],
     [AS_HELP_STRING([--with-clang=ARG], [do use clang, default ARG=no])],
@@ -172,6 +193,7 @@ cat <<EOF
   $PACKAGE_NAME version $PACKAGE_VERSION
   Prefix............: $prefix
   Gluster handler...: $with_gluster
+  Azblk handler.....: $with_azblk
   Use TIRPC.........: $with_tirpc
   C Compiler........: $CC $CFLAGS $CPPFLAGS
   Linker............: $LD $LDFLAGS $LIBS

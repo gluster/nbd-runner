@@ -1,7 +1,8 @@
 [Unit]
 Description=Network Block Device For Distributed Storages
 Requires=rpcbind.service
-After=network.target rpcbind.service
+Wants=network-online.target
+After=network-online.target rpcbind.service
 
 [Service]
 Type=simple

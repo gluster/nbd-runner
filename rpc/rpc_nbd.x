@@ -6,6 +6,7 @@
 enum handler_t {
     NBD_BACKSTORE_GLUSTER,
     NBD_BACKSTORE_CEPH,
+    NBD_BACKSTORE_AZBLK,
 
     NBD_BACKSTORE_MAX
 };
