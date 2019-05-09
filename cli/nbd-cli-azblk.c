@@ -63,7 +63,6 @@ static int azblk_list_routine(int count, char **options)
     return nbd_list_devices(count, options, NBD_BACKSTORE_AZBLK);
 }
 
-
 struct cli_cmd azblk_cmds[] = {
     {.pattern = "azblk",
      .call    = azblk_help_routine,
@@ -88,7 +87,7 @@ struct cli_cmd azblk_cmds[] = {
     },
     {.pattern = "azblk unmap <nbd-device|<account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]",
      .call    = azblk_unmap_routine,
-     .desc    = "Unmap the nbd device or VOLUME/FILEPATH, RUNNER_HOST will be 'localhost' as default",
+     .desc    = "Unmap the nbd device or account/container/vhd, RUNNER_HOST will be 'localhost' as default",
     },
     {.pattern = "azblk list [map|unmap|create|dead|live|all] [host RUNNER_HOST]",
      .call    = azblk_list_routine,

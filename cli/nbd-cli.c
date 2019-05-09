@@ -29,6 +29,7 @@ static void usage(void)
 {
     nbd_info("Usage:\n\n"
              "\tgluster help\n\t\tDisplay help for gluster commands\n\n"
+             "\tazblk help\n\t\tDisplay help for azblk commands\n\n"
              "\tceph help [TODO]\n\t\tDisplay help for ceph commands\n\n"
              "\tglobal help [TODO]\n\t\tDisplay help for global commands\n\n"
              "\tversion\n\t\tDisplay the version of nbd-cli\n\n"

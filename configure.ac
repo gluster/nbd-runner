@@ -80,7 +80,7 @@ if test "x$with_azblk" = "xyes"; then
                   [AC_MSG_ERROR([libuv library is required to build nbd-runner])])
     AC_SUBST(UV_CFLAGS)
     AC_SUBST(UV_LIBS)
-    fi
+fi
 
 AC_ARG_WITH([clang],
     [AS_HELP_STRING([--with-clang=ARG], [do use clang, default ARG=no])],

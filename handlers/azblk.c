@@ -263,8 +263,6 @@ done:
     curl_slist_free_all(io_cb->headers);
     curl_easy_cleanup(curl_ezh);
 
-    // nbd_err("NBD_CMD_DONE: req: %p, req->offset: %ld len: %ld\n", io_cb->nbd_req, io_cb->nbd_req->offset, io_cb->nbd_req->len);
-
     io_cb->nbd_req->done(io_cb->nbd_req, ret);
 
     free(io_cb);
@@ -320,8 +318,7 @@ static int azblk_start_timeout(CURLM *curl_multi, long timeout_ms, void *userp)
 }
 
 static struct azblk_socket_context *
-    azblk_create_socket_context(curl_socket_t sockfd,
-        struct azblk_dev *azdev)
+azblk_create_socket_context(curl_socket_t sockfd, struct azblk_dev *azdev)
 {
     struct azblk_socket_context *context;
 
@@ -359,7 +356,7 @@ static void azblk_curl_perform(uv_poll_t *req, int status, int events)
     if (status < 0) {
         flags = CURL_CSELECT_ERR;
         nbd_dev_err(context->azdev->dev, "CURL_CSELECT_ERR %s.\n",
-                 uv_err_name(status));
+                    uv_err_name(status));
     }
     if (!status && events & UV_READABLE)
         flags |= CURL_CSELECT_IN;
@@ -367,13 +364,13 @@ static void azblk_curl_perform(uv_poll_t *req, int status, int events)
         flags |= CURL_CSELECT_OUT;
 
     curl_multi_socket_action(context->azdev->curl_multi, context->sockfd,
-                 flags, &running_handles);
+                             flags, &running_handles);
 
     azblk_multi_check_completion(context->azdev->curl_multi);
 }
 
 static int azblk_handle_socket(CURL *curl_ezh, curl_socket_t s, int action,
-                   void *userp, void *socketp)
+                               void *userp, void *socketp)
 {
     struct azblk_socket_context *context;
     struct azblk_dev *azdev = (struct azblk_dev *)userp;
@@ -536,15 +533,18 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
     if (str_end == NULL) {
         nbd_fill_reply(rep, -ENOMEM, "Invalid url argument.");
         nbd_err("Invalid url argument.\n");
-        goto error;
+        azdev_free(azdev);
+        return false;
     }
 
     url_len = str_end - str;
 
     if ( url_len >= AZ_BLOB_URL_LEN) {
+        asprintf(&err_msg, "Invalid argument %s", str);
         nbd_fill_reply(rep, -EINVAL, "Url too long.");
         nbd_err("Invalid url argument.\n");
-        goto error;
+        azdev_free(azdev);
+        return false;
     }
 
     url = str;
@@ -592,7 +592,7 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
 
 error:
 
-    nbd_fill_reply(rep, -EINVAL, err_msg);
+    nbd_fill_reply(rep, -EINVAL, "%s", err_msg);
     nbd_err("%s \n", err_msg);
     free(err_msg);
     azdev_free(azdev);
@@ -667,7 +667,7 @@ done:
     return ret;
 }
 
-size_t get_blob_prop_headers(void *data, size_t size, size_t nitems, void *userp)
+static size_t get_blob_prop_headers(void *data, size_t size, size_t nitems, void *userp)
 {
     struct azblk_blob_props *azprop = (struct azblk_blob_props *)userp;
     size_t data_size = size * nitems;
@@ -1052,7 +1052,7 @@ static bool azblk_unmap(struct nbd_device *dev)
     return true;
 }
 
-size_t get_callback(void *data, size_t size, size_t nmemb, void *userp)
+static size_t get_callback(void *data, size_t size, size_t nmemb, void *userp)
 {
     struct curl_callback *ctx = (struct curl_callback *)userp;
     size_t data_size = size * nmemb;
@@ -1080,15 +1080,13 @@ static struct azblk_io_cb *alloc_iocb(struct nbd_handler_request *req)
     return io_cb;
 }
 
-static int azblk_read(struct nbd_handler_request *req)
+static void azblk_read(struct nbd_handler_request *req)
 {
     struct azblk_dev *azdev = req->dev->priv;
     struct azblk_io_cb *io_cb = NULL;
     char buf[128];
     int len;
     int ret;
-
-    // nbd_err("NBD_CMD_READ: req: %p, req->offset: %ld len: %ld\n", req, req->offset, req->len);
 
     io_cb = alloc_iocb(req);
     if (!io_cb) {
@@ -1141,7 +1139,7 @@ static int azblk_read(struct nbd_handler_request *req)
 
     azblk_kick_start(azdev, io_cb);
 
-    return 0;
+    return;
 
 error:
 
@@ -1154,19 +1152,15 @@ error:
     free(io_cb);
 
     req->done(req, ret);
-
-    return 0;
 }
 
-static int azblk_write(struct nbd_handler_request *req)
+static void azblk_write(struct nbd_handler_request *req)
 {
     struct azblk_dev *azdev = req->dev->priv;
     int len;
     int ret;
     struct azblk_io_cb *io_cb = NULL;
     char buf[128];
-
-    // nbd_err("NBD_CMD_WRITE: req: %p, req->offset: %ld len: %ld\n", req, req->offset, req->len);
 
     io_cb = alloc_iocb(req);
     if (!io_cb) {
@@ -1221,7 +1215,7 @@ static int azblk_write(struct nbd_handler_request *req)
 
     azblk_kick_start(azdev, io_cb);
 
-    return 0;
+    return;
 
 error:
 
@@ -1234,19 +1228,15 @@ error:
     free(io_cb);
 
     req->done(req, ret);
-
-    return 0;
 }
 
-static int azblk_discard(struct nbd_handler_request *req)
+static void azblk_discard(struct nbd_handler_request *req)
 {
     struct azblk_dev *azdev = req->dev->priv;
     struct azblk_io_cb *io_cb = NULL;
     char buf[128];
     int len;
     int ret;
-
-    // nbd_err("NBD_CMD_DISCARD: req: %p, req->offset: %ld len: %ld\n", req, req->offset, req->len);
 
     io_cb = alloc_iocb(req);
     if (!io_cb) {
@@ -1295,7 +1285,7 @@ static int azblk_discard(struct nbd_handler_request *req)
 
     azblk_kick_start(azdev, io_cb);
 
-    return 0;
+    return;
 
 error:
 
@@ -1308,8 +1298,6 @@ error:
     free(io_cb);
 
     req->done(req, ret);
-
-    return 0;
 }
 
 static void azblk_handle_request(gpointer data, gpointer user_data)
@@ -1363,7 +1351,7 @@ static ssize_t azblk_get_blksize(struct nbd_device *dev, nbd_response *rep)
     if (rep)
         rep->exit = 0;
 
-    return 512;
+    return 0;
 }
 
 static bool azblk_load_json(struct nbd_device *dev, json_object *devobj, char *key)

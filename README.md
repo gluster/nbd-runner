@@ -98,6 +98,9 @@ Usage:
 	gluster help
 		Display help for gluster commands
 
+	azblk help
+		Display help for azblk commands
+
 	ceph help [TODO]
 		Display help for ceph commands
 
@@ -187,7 +190,7 @@ There must have one entry point named "handler_init", it will be:
 
 1. Create a volume in the gluster stoarge cluster.
 2. Run the nbd-runner daemon in any of the gluster storage cluster node, or any other node that can access the gluster volume via the gfapi library.
-   
+
     `$ nbd-runner [<args>]`
 
 3. Create one file in the volume by using the gluster cli tool or just use the 'nbd-cli gluster create' tool.
@@ -232,6 +235,76 @@ Usage:
 		Unmap the nbd device or VOLUME/FILEPATH, RUNNER_HOST will be 'localhost' as default
 
 	gluster list [map|unmap|create|dead|live|all] [host RUNNER_HOST]
+		List the mapped|unmapped NBD devices or the created|dead|live backstores, all as
+		default. 'create' means the backstores are just created or unmapped. 'dead' means
+		the IO connection is lost, this is mainly due to the nbd-runner service is restart
+		without unmapping. 'live' means everything is okay for both mapped and IO connection,
+		RUNNER_HOST will be 'localhost' as default
+```
+
+# Azblk
+The Azure block driver allows the creation, deletion, and mapping of an NBD device device to an Azure page blob located in an Azure storage account. For more information on Azure page blobs please read https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-pageblob-overview.
+
+### Enabling block storage for Azure
+
+**Prerequisites:*
+- [x] *You must have the appropriate permissions to access an Azure storage account, container, or individual page blob through a SAS string. If the page blob is not restricted then no SAS string is required. For more information on SAS strings please read https://docs.microsoft.com/en-us/azure/storage/common/storage-dotnet-shared-access-signature-part-1*
+- [x] *Azblk assumes that any page blob is or will be located in a pre-existing container. Azblk does not create containers at this time*
+
+1. Run the nbd-runner daemon on a host with network access to the Azure cloud.
+   
+    `$ nbd-runner [<args>]`
+
+2. Create a new page blob in Azure or add an existing blob by using the 'nbd-cli azblk create' tool. Note when adding an existing blob to the backstore the size indicated on the command line and the actual size of the blob must match.
+
+    `$ nbd-cli azblk create azblk create <'account.blob.core.windows.net/container/vhd[;option1][;option2']> [prealloc] <size SIZE> [host RUNNER_HOST] [prealloc] <size SIZE> <host RUNNER_HOST>`
+
+   The options are:
+
+   - sas=sas_string &emsp; *If a SAS string is required the entire url and options should be enclosed with single quotes.*
+   - lease=lease_id &nbsp;&nbsp;&nbsp; *Create a lease for a new page blob or use an existing one if the page blob is pre-existing. A lease id must be in a GUID string format. Leases for pre-existing page blobs must be of an infinite duration.*
+   - http &emsp; &emsp; &emsp; &emsp; &nbsp; *The page blob url is accessed with https by default.*
+
+   Example:
+
+    ` nbd-cli azblk create 'azure-storage-acct.blob.core.windows.net/test/test.vhd;sas=sv=2018-03-28&ss=bfqt&srt=sco&sp=rwdlacup&se=2019-07-31T22:20:06Z&st=2019-04-17T14:20:06Z&spr=https,http&sig=dEljadfjp923kaf9al09la%ajkhLKSDFer%3D;http' size 2G`
+
+3. Map the page blob to the NBD device (in the local host). You can specify an unmapped /dev/nbdXX or just omit it and then the NBD kernel module will allocate one for you.
+
+    `$ nbd-cli azblk map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] <host RUNNER_HOST>`
+
+4. You will see the mapped NBD device returned and displayed or you can check the mapped device info by:
+
+    `$ nbd-cli azblk list <map|unmap|create|dead|live|all> <host RUNNER_HOST>`
+
+<b> Azblk CLI</b>: the azblk specified cli commands
+```script
+$ nbd-cli azblk help
+Usage:
+
+	azblk help
+		Display help for azblk commands
+
+	azblk create <'account.blob.core.windows.net/container/vhd[;option1][;option2']> [prealloc] <size SIZE> [host RUNNER_HOST]
+		Create the vhd file in your storage account container, prealloc is false as default, and the SIZE is valid
+		with B, K(iB), M(iB), G(iB), T(iB), RUNNER_HOST will be 'localhost' as default
+
+		Valid options:
+		sas=SAS_STRING
+		lease=LEASE_ID
+		http https is the default
+
+	azblk delete <account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]
+		Delete the vhd file from your storage account container, RUNNER_HOST will be 'localhost' as default
+
+	azblk map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]
+		Map the vhd to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST
+		will be 'localhost' as default
+
+	azblk unmap <nbd-device|<account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]
+		Unmap the nbd device or account/container/vhd, RUNNER_HOST will be 'localhost' as default
+
+	azblk list [map|unmap|create|dead|live|all] [host RUNNER_HOST]
 		List the mapped|unmapped NBD devices or the created|dead|live backstores, all as
 		default. 'create' means the backstores are just created or unmapped. 'dead' means
 		the IO connection is lost, this is mainly due to the nbd-runner service is restart

@@ -5,7 +5,7 @@ if [ "$1" == "--help" -o "$1" == "help" ]; then
 	echo "  USAGE:"
 	echo ""
 	echo "  # cd nbd-runner/extra/"
-	echo "  # ./make_runnerrpms.sh [--without (tirpc|gluster)]"
+	echo "  # ./make_runnerrpms.sh [--without (tirpc|gluster|azblk)]"
 	echo ""
 	echo "  Will build the RPMs in current dir by using the HEAD commit ID as default."
 	echo ""
