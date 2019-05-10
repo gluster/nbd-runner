@@ -14,7 +14,7 @@ RUN true \
            git autoconf automake gcc libtool make file \
            libevent-devel glib2-devel libnl3-devel     \
            glusterfs-api-devel kmod-devel json-c-devel \
-           libtirpc-devel rpcgen clang                 \
+           libtirpc-devel rpcgen clang libuv-devel libcurl-devel \
  && true
 
 # build

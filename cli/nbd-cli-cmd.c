@@ -1403,6 +1403,11 @@ GHashTable *nbd_register_backstores(void)
         goto err;
     }
 
+    if (cli_cmd_azblk_register(cmds_hash)) {
+        nbd_err("failed to register azblk cmds!\n");
+        goto err;
+    }
+
     return cmds_hash;
 
 err:

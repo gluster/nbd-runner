@@ -10,6 +10,11 @@
 # rpmbuild -ta @PACKAGE_NAME@-@PACKAGE_VERSION@.tar.gz --without tirpc
 %{?_without_tirpc:%global _without_tirpc --with-tirpc=no}
 
+# without azblk dependency
+# if you wish to build without azblk library, use below command
+# rpmbuild -ta @PACKAGE_NAME@-@PACKAGE_VERSION@.tar.gz --without azblk
+%{?_without_azblk:%global _without_azblk --with-azblk=no}
+
 %if ( 0%{?fedora} && 0%{?fedora} <= 27 ) || ( 0%{?rhel} && 0%{?rhel} <= 7 )
 %global _without_tirpc --with-tirpc=no
 %endif
@@ -58,12 +63,24 @@ Requires:      %{name} = %{version}-%{release}
 Gluster backend handler for processing IO requests from the NBD device.
 %endif
 
+%if ( 0%{!?_without_azblk:1} )
+%package azblk-handler
+Summary:       Azblk backstore handler
+BuildRequires: libcurl-devel
+BuildRequires: libuv-devel
+Requires:      libcurl
+Requires:      libuv
+
+%description azblk-handler
+Azblk backend handler for processing IO requests from the NBD device.
+%endif
+
 %prep
 %setup -q -n %{name}-%{version}
 
 %build
 ./autogen.sh
-%configure %{?_without_tirpc} %{?_without_gluster}
+%configure %{?_without_tirpc} %{?_without_gluster} %{?_without_azblk}
 %make_build
 
 %install
@@ -82,6 +99,12 @@ Gluster backend handler for processing IO requests from the NBD device.
 %files gluster-handler
 %dir %{_libdir}/nbd-runner/
 %{_libdir}/nbd-runner/libgluster_handler.so
+%endif
+
+%if ( 0%{!?_without_azblk:1} )
+%files azblk-handler
+%dir %{_libdir}/nbd-runner/
+%{_libdir}/nbd-runner/libazblk_handler.so
 %endif
 
 %changelog

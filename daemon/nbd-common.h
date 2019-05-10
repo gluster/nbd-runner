@@ -162,7 +162,7 @@ struct nbd_handler {
      * For boolean type options please do it like:
      * json_object_object_add(devobj, "dummy3", json_object_new_boolean(dev->priv->dummy3));
      */
-    bool (*update_json)(json_object *devobj);
+    bool (*update_json)(struct nbd_device *dev, json_object *devobj);
 
     /*
      * Load the cfgstring and private extra options from the json file
@@ -194,6 +194,8 @@ struct nbd_handler {
      * If needed please parse the key to the priv too.
      */
     bool (*load_json)(struct nbd_device *dev, json_object *devobj, char *key);
+
+    void (*destroy)(void);
 };
 
 struct nbd_handler_request;
