@@ -19,11 +19,11 @@
 #include "utils.h"
 #include "nbd-log.h"
 #include "list.h"
+#include "config.h"
 
 #define NBD_CONFIG_DIR_DEFAULT "/etc/sysconfig"
 #define NBD_CONFIG_FILE_DEFAULT NBD_CONFIG_DIR_DEFAULT"/nbd-runner"
 
-#define NBD_LOG_DIR_DEFAULT "/var/log"
 #define NBD_HOST_LOCAL_DEFAULT "localhost"
 
 struct nbd_config {

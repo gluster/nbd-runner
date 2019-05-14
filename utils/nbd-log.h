@@ -29,6 +29,7 @@
 
 #include "nbd-sysconfig.h"
 #include "rpc_nbd.h"
+#include "config.h"
 
 #define NBD_LOG_CRIT        LOG_CRIT	/* critical conditions */
 #define NBD_LOG_ERROR       LOG_ERR		/* error conditions */

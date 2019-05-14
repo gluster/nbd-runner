@@ -14,8 +14,6 @@ AC_INIT([nbd-runner],
 AC_SUBST([PACKAGE_RELEASE],
          [m4_esyscmd([build-aux/pkg-version --release])])
 
-CFLAGS="${CLFAGS} -Werror -Wall -Wdeclaration-after-statement"
-
 AC_ARG_WITH(systemddir,
             AC_HELP_STRING([--with-systemddir=DIR],
                            [systemd service files in DIR @<:@PREFIX/lib/systemd/system@:>@]),
@@ -24,12 +22,17 @@ AC_ARG_WITH(systemddir,
 AC_SUBST(systemddir)
 AM_CONDITIONAL([USE_SYSTEMD], test [ -d '/usr/lib/systemd/system' ])
 
-AC_ARG_WITH(initddir,
-            AC_HELP_STRING([--with-initddir=DIR],
-                           [initd service files in DIR @<:@/etc/rc.d/init.d@:>@]),
-            [initddir=$withval],
-            [initddir='/etc/rc.d/init.d'])
-AC_SUBST(initddir)
+if test "x$prefix" = xNONE; then
+	test $localstatedir = '${prefix}/var' && localstatedir=$ac_default_prefix/var
+	localstatedir=/var
+fi
+
+localstatedir="$(eval echo ${localstatedir})"
+LOCALSTATEDIR=${localstatedir}
+
+AC_DEFINE_UNQUOTED(NBD_LOG_DIR_DEFAULT, ["$LOCALSTATEDIR/log/nbd-runner"], [The default log directory])
+NBD_LOG_DIR_DEFAULT="${LOCALSTATEDIR}/log/nbd-runner"
+AC_SUBST(NBD_LOG_DIR_DEFAULT)
 
 AC_ARG_WITH(sysconfigdir,
             AC_HELP_STRING([--with-sysconfigdir=DIR],

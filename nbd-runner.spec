@@ -1,5 +1,3 @@
-%define _unpackaged_files_terminate_build 0
-
 # without glusterfs dependency
 # if you wish to exclude gluster handler in RPM, use below command
 # rpmbuild -ta @PACKAGE_NAME@-@PACKAGE_VERSION@.tar.gz --without gluster
@@ -39,9 +37,8 @@ BuildRequires: glib2-devel
 BuildRequires: json-c-devel
 
 %if ( 0%{!?_without_tirpc:1} )
-BuildRequires: libtirpc-devel
+BuildRequires: libtirpc-devel >= 1.0.0
 BuildRequires: rpcgen
-Requires:      libtirpc
 %endif
 
 Requires:      kmod
@@ -50,11 +47,11 @@ Requires:      rsyslog
 
 %description
 A daemon that handles the userspace side of the NBD(Network Block Device)
-backstore.
+back-store.
 
 %if ( 0%{!?_without_gluster:1} )
 %package gluster-handler
-Summary:       Gluster backstore handler
+Summary:       Gluster back-store handler
 BuildRequires: glusterfs-api-devel
 Requires:      glusterfs-api
 Requires:      %{name} = %{version}-%{release}
@@ -65,11 +62,9 @@ Gluster backend handler for processing IO requests from the NBD device.
 
 %if ( 0%{!?_without_azblk:1} )
 %package azblk-handler
-Summary:       Azblk backstore handler
+Summary:       Azblk back-store handler
 BuildRequires: libcurl-devel
 BuildRequires: libuv-devel
-Requires:      libcurl
-Requires:      libuv
 
 %description azblk-handler
 Azblk backend handler for processing IO requests from the NBD device.
@@ -85,6 +80,8 @@ Azblk backend handler for processing IO requests from the NBD device.
 
 %install
 %make_install
+find %{buildroot}%{_libdir}/nbd-runner/ -name '*.a' -delete
+find %{buildroot}%{_libdir}/nbd-runner/ -name '*.la' -delete
 
 %files
 %{_sbindir}/nbd-runner
@@ -94,16 +91,20 @@ Azblk backend handler for processing IO requests from the NBD device.
 %doc README.md
 %license COPYING-GPLV2 COPYING-LGPLV3
 %config(noreplace) %{_sysconfdir}/sysconfig/nbd-runner
+%ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-runner.log
+%ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-runner-glfs.log
 
 %if ( 0%{!?_without_gluster:1} )
 %files gluster-handler
 %dir %{_libdir}/nbd-runner/
+%license COPYING-GPLV2 COPYING-LGPLV3
 %{_libdir}/nbd-runner/libgluster_handler.so
 %endif
 
 %if ( 0%{!?_without_azblk:1} )
 %files azblk-handler
 %dir %{_libdir}/nbd-runner/
+%license COPYING-GPLV2 COPYING-LGPLV3
 %{_libdir}/nbd-runner/libazblk_handler.so
 %endif
 

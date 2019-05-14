@@ -47,6 +47,7 @@ $ cd nbd-runner/
 $ dnf install autoconf automake libtool kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
 $ dnf install libtirpc-devel rpcgen # only in Fedora or some other Distributions that the glibc version >= 2.26
 $ dnf install glusterfs-api-devel # only when the --with-gluster=yes or absent you need to install this
+$ dnf install libcurl-devel libuv-devel # only when the --with-azure=yes or absent you need to install this
 $ ./autogen.sh
 $ ./configure # '--with-tirpc=no' means try to use legacy glibc, yes by default; --with-gluster means enable the gluster handler, yes by default.
 $ make -j
