@@ -122,10 +122,13 @@ struct azblk_dev_config {
     ssize_t size;
 };
 
-struct azblk_blob_props {
+#define ERR_STR_SZ 80
+
+struct az_ret_header {
     ssize_t max_size;
     int lease_state;
     int lease_infinite;
+    char err_str[ERR_STR_SZ];
 };
 
 struct azblk_dev {
@@ -216,8 +219,8 @@ static void azblk_start_io(uv_async_t *async_req)
         curl_multi_add_handle(azdev->curl_multi, io_cb->curl_ezh);
 
         curl_multi_socket_action(azdev->curl_multi,
-                     CURL_SOCKET_TIMEOUT, 0,
-                     &running_handles);
+                                 CURL_SOCKET_TIMEOUT, 0,
+                                 &running_handles);
     }
 }
 
@@ -310,7 +313,7 @@ static int azblk_start_timeout(CURLM *curl_multi, long timeout_ms, void *userp)
     } else {
         if (timeout_ms == 0)
             timeout_ms = 1; // 0 means directly call socket_action
-                    // but we'll do it in a bit
+                            // but we'll do it in a bit
         azdev->timeout.data = azdev;
         uv_timer_start(&azdev->timeout, azblk_timeout, timeout_ms, 0);
     }
@@ -582,10 +585,6 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
             azdev->cfg.http ? "http://%s" : "https://%s",
             url);
 
-    nbd_info("blob_url %s\n", azdev->cfg.blob_url);
-    nbd_info("sas %s\n", azdev->cfg.sas);
-    nbd_info("lease_id %s\n", azdev->cfg.lease_id);
-
     dev->priv = azdev;
 
     return true;
@@ -667,9 +666,9 @@ done:
     return ret;
 }
 
-static size_t get_blob_prop_headers(void *data, size_t size, size_t nitems, void *userp)
+static size_t get_az_ret_headers(void *data, size_t size, size_t nitems, void *userp)
 {
-    struct azblk_blob_props *azprop = (struct azblk_blob_props *)userp;
+    struct az_ret_header *header = (struct az_ret_header *)userp;
     size_t data_size = size * nitems;
     ssize_t length;
     int ret;
@@ -677,15 +676,23 @@ static size_t get_blob_prop_headers(void *data, size_t size, size_t nitems, void
     if (strncmp("Content-Length:", data, 15) == 0) {
         ret = sscanf(data, "Content-Length: %lu", &length);
         if (ret)
-            azprop->max_size = length;
+            header->max_size = length;
     }
 
     if (strncmp("x-ms-lease-status: locked", data, 25) == 0) {
-        azprop->lease_state = 1;
+        header->lease_state = 1;
     }
 
     if (strncmp("x-ms-lease-duration: infinite", data, 29) == 0) {
-        azprop->lease_infinite = 1;
+        header->lease_infinite = 1;
+    }
+
+    if (strncmp("x-ms-error-code: ", data, 17) == 0) {
+        void *end = strchr(data, '\r');
+        int len = end - (data + 17);
+
+        strlcpy(header->err_str, data + 17,
+                len >= ERR_STR_SZ ? ERR_STR_SZ : len + 1);
     }
 
     return data_size;
@@ -694,10 +701,18 @@ static size_t get_blob_prop_headers(void *data, size_t size, size_t nitems, void
 static int azblk_set_lease(struct azblk_dev *azdev)
 {
     struct curl_slist *headers = NULL;
+    struct az_ret_header az_ret_header = {0};
+    CURL *curl_ezh;
     char *request_url;
     long http_response = 0;
     char buf[128];
     int ret;
+
+    curl_ezh = curl_easy_init();
+    if (!curl_ezh) {
+            nbd_err("Could not init easy handle.\n");
+            return -EINVAL;
+        }
 
     ret = asprintf(&request_url,
                    azdev->cfg.sas ? "%s?comp=lease&%s" : "%s?comp=lease",
@@ -706,6 +721,10 @@ static int azblk_set_lease(struct azblk_dev *azdev)
         nbd_err("Could not allocate query buf.\n");
         return -ENOMEM;
     }
+
+    curl_easy_setopt(curl_ezh, CURLOPT_HEADERFUNCTION, get_az_ret_headers);
+    curl_easy_setopt(curl_ezh, CURLOPT_HEADERDATA, &az_ret_header);
+    curl_easy_setopt(curl_ezh, CURLOPT_NOBODY, 1L);
 
     sprintf(buf, "x-ms-proposed-lease-id: %s", azdev->cfg.lease_id);
     headers = curl_slist_append(headers, buf);
@@ -716,11 +735,11 @@ static int azblk_set_lease(struct azblk_dev *azdev)
 
     /* azblk_sync_io will cleanup the headers, curl handle, and url */
 
-    if (!azblk_sync_io("PUT", NULL, request_url, headers, &http_response))
+    if (!azblk_sync_io("PUT", curl_ezh, request_url, headers, &http_response))
         return -EINVAL;
 
     if (!az_is_done(http_response)) {
-        nbd_err("Azure sync HEAD error %ld.\n", http_response);
+        nbd_err("Azure sync HEAD error %ld - %s.\n", http_response, az_ret_header.err_str);
         return -EINVAL;
     }
 
@@ -728,7 +747,7 @@ static int azblk_set_lease(struct azblk_dev *azdev)
 }
 
 static int azblk_get_blob_properties(struct azblk_dev *azdev,
-                                      struct azblk_blob_props *azprop)
+                                     struct az_ret_header *az_ret_header)
 {
     struct curl_slist *headers = NULL;
     char *request_url;
@@ -751,8 +770,8 @@ static int azblk_get_blob_properties(struct azblk_dev *azdev,
         return -ENOMEM;
     }
 
-    curl_easy_setopt(curl_ezh, CURLOPT_HEADERFUNCTION, get_blob_prop_headers);
-    curl_easy_setopt(curl_ezh, CURLOPT_HEADERDATA, azprop);
+    curl_easy_setopt(curl_ezh, CURLOPT_HEADERFUNCTION, get_az_ret_headers);
+    curl_easy_setopt(curl_ezh, CURLOPT_HEADERDATA, az_ret_header);
     curl_easy_setopt(curl_ezh, CURLOPT_NOBODY, 1L);
     headers = curl_slist_append(headers, "Content-Length: 0");
 
@@ -764,7 +783,8 @@ static int azblk_get_blob_properties(struct azblk_dev *azdev,
     if (!az_is_ok(http_response)) {
         if (az_not_found(http_response))
             return -ENODEV;
-        nbd_err("Azure sync HEAD error %ld.\n", http_response);
+        nbd_err("Azure sync HEAD error %ld - %s.\n",
+                 http_response, az_ret_header->err_str);
         return -EINVAL;
     }
 
@@ -775,10 +795,19 @@ static bool azblk_create(struct nbd_device *dev, nbd_response *rep)
 {
     struct azblk_dev *azdev = dev->priv;
     struct curl_slist *headers = NULL;
+    struct az_ret_header az_ret_header = {0};
+    CURL *curl_ezh;
     char *request_url;
     long http_response = 0;
     char buf[128];
     int ret;
+
+    curl_ezh = curl_easy_init();
+    if (!curl_ezh) {
+            nbd_err("Could not init easy handle.\n");
+            return -EINVAL;
+        }
+
 
     ret = asprintf(&request_url,
                    azdev->cfg.sas ? "%s?%s" : "%s",
@@ -788,6 +817,10 @@ static bool azblk_create(struct nbd_device *dev, nbd_response *rep)
         nbd_fill_reply(rep, -ENOMEM, "Could not allocate query buf.");
         return false;
     }
+
+    curl_easy_setopt(curl_ezh, CURLOPT_HEADERFUNCTION, get_az_ret_headers);
+    curl_easy_setopt(curl_ezh, CURLOPT_HEADERDATA, &az_ret_header);
+    curl_easy_setopt(curl_ezh, CURLOPT_NOBODY, 1L);
 
     headers = curl_slist_append(headers, "x-ms-blob-type: PageBlob");
 
@@ -803,15 +836,17 @@ static bool azblk_create(struct nbd_device *dev, nbd_response *rep)
 
     /* azblk_sync_io will cleanup the headers, curl handle, and url */
 
-    if (!azblk_sync_io("PUT", NULL, request_url, headers, &http_response)) {
+    if (!azblk_sync_io("PUT", curl_ezh, request_url, headers, &http_response)) {
         nbd_err("Azure sync io error.\n");
         nbd_fill_reply(rep, -EINVAL, "Azure sync io.");
         return false;
     }
 
     if (!az_is_done(http_response)) {
-        nbd_err("Azure sync PUT error %ld.\n", http_response);
-        nbd_fill_reply(rep, -EINVAL, "Azure sync PUT error %ld.", http_response);
+        nbd_err("Azure sync PUT error %ld - %s\n",
+                 http_response, az_ret_header.err_str);
+        nbd_fill_reply(rep, -EINVAL, "Azure sync PUT error %ld - %s.",
+                       http_response, az_ret_header.err_str);
         return false;
     }
 
@@ -821,18 +856,19 @@ static bool azblk_create(struct nbd_device *dev, nbd_response *rep)
 static bool azblk_add(struct nbd_device *dev, nbd_response *rep)
 {
     struct azblk_dev *azdev = dev->priv;
-    struct azblk_blob_props azprop = {0};
+    struct az_ret_header az_ret_header = {0};
     int ret;
 
     if (rep)
         rep->exit = 0;
 
     if (!azdev) {
-        nbd_err("Create: Device is not allocated\n");
+        nbd_err("Create: Device is not allocated.\n");
+        nbd_fill_reply(rep, -EINVAL, "Create: Device is not allocated.");
         return false;
     }
 
-    ret = azblk_get_blob_properties(azdev, &azprop);
+    ret = azblk_get_blob_properties(azdev, &az_ret_header);
 
     if (ret == -EINVAL || ret == -ENOMEM) {
         nbd_err("Error getting blob properties.\n");
@@ -841,15 +877,15 @@ static bool azblk_add(struct nbd_device *dev, nbd_response *rep)
      }
 
     if (ret == 0) {
-        if (dev->size != azprop.max_size) {
-            nbd_err("Blob %s exists but properties do not match.\n",
+        if (dev->size != az_ret_header.max_size) {
+            nbd_err("Blob %s exists but sizes do not match.\n",
                     azdev->cfg.key);
             nbd_fill_reply(rep, -EINVAL,
-                           "Blob %s exists but properties do not match.\n",
+                           "Blob %s exists but sizes do not match.",
                            azdev->cfg.key);
             goto error;
         }
-        if (azprop.lease_state) {
+        if (az_ret_header.lease_state) {
             if (!azdev->cfg.lease_id) {
                 nbd_err("Blob %s exists but a lease id is required.\n",
                         azdev->cfg.key);
@@ -858,15 +894,28 @@ static bool azblk_add(struct nbd_device *dev, nbd_response *rep)
                                azdev->cfg.key);
                 goto error;
             }
-            if (!azprop.lease_infinite) {
+            if (!az_ret_header.lease_infinite) {
                 nbd_err("Blob %s exists but an infinite lease id is required.\n",
                         azdev->cfg.key);
                 nbd_fill_reply(rep, -EINVAL,
                                "Blob %s exists but an infinite lease id is required.\n",
-                                azdev->cfg.key);
+                               azdev->cfg.key);
                 goto error;
             }
+        } else {
+            if (azdev->cfg.lease_id) {
+                ret = azblk_set_lease(azdev);
+                if (ret != 0) {
+                    nbd_err("Could not add lease to existing Blob %s.\n",
+                             azdev->cfg.key);
+                    nbd_fill_reply(rep, -EINVAL,
+                                   "Could not add lease to existing Blob %s.\n",
+                                   azdev->cfg.key);
+                    goto error;
+                }
+            }
         }
+
         nbd_warn("Blob %s already exists in Azure. Adding to the backstore.\n", azdev->cfg.key);
         goto done;
     }
@@ -876,14 +925,19 @@ static bool azblk_add(struct nbd_device *dev, nbd_response *rep)
 
     if (azdev->cfg.lease_id) {
         ret = azblk_set_lease(azdev);
-        if (ret != 0)
-            nbd_warn("Blob %s was created but the lease could not be added.\n",
+        if (ret != 0) {
+            nbd_err("Blob %s was created in Azure but not the backstore as the lease could not be added.\n",
                      azdev->cfg.key);
+            nbd_fill_reply(rep, -EINVAL,
+                           "Blob %s was created in Azure but not the backstore as the lease could not be added. Try creating with no lease or a valid lease to add it to the backstore.\n",
+                           azdev->cfg.key);
+            goto error;
+        }
     }
 
 done:
 
-    azdev->cfg.size = azprop.max_size;
+    azdev->cfg.size = az_ret_header.max_size;
     return true;
 
 error:
@@ -912,8 +966,8 @@ static bool azblk_delete(struct nbd_device *dev, nbd_response *rep)
     }
 
     ret = asprintf(&request_url,
-            azdev->cfg.sas ? "%s?%s" : "%s",
-            azdev->cfg.blob_url, azdev->cfg.sas);
+                   azdev->cfg.sas ? "%s?%s" : "%s",
+                   azdev->cfg.blob_url, azdev->cfg.sas);
     if (ret < 0) {
         nbd_err("Could not allocate query buf.\n");
         return false;
@@ -958,7 +1012,8 @@ static bool azblk_map(struct nbd_device *dev, nbd_response *rep)
         rep->exit = 0;
 
     if (!azdev) {
-        nbd_err("Map: Device is not allocated\n");
+        nbd_err("Map: Device is not allocated.\n");
+        nbd_fill_reply(rep, -EINVAL, "Map: Device is not allocated.");
         return false;
     }
 
@@ -975,8 +1030,8 @@ static bool azblk_map(struct nbd_device *dev, nbd_response *rep)
 
     // Get Page
     ret = asprintf(&azdev->read_request_url,
-            azdev->cfg.sas ? "%s?%s" : "%s",
-            azdev->cfg.blob_url, azdev->cfg.sas);
+                   azdev->cfg.sas ? "%s?%s" : "%s",
+                   azdev->cfg.blob_url, azdev->cfg.sas);
     if (ret < 0) {
         nbd_err("Could not allocate query buf.\n");
         nbd_fill_reply(rep, -ENOMEM, "Could not allocate query buf.");
@@ -987,15 +1042,13 @@ static bool azblk_map(struct nbd_device *dev, nbd_response *rep)
 
     // Put Page
     ret = asprintf(&azdev->write_request_url,
-            azdev->cfg.sas ? "%s?comp=page&%s" : "%s?comp=page",
-            azdev->cfg.blob_url, azdev->cfg.sas);
+                   azdev->cfg.sas ? "%s?comp=page&%s" : "%s?comp=page",
+                   azdev->cfg.blob_url, azdev->cfg.sas);
     if (ret < 0) {
         nbd_err("Could not allocate query buf.\n");
-    nbd_fill_reply(rep, -ENOMEM, "Could not global init curl.");
+        nbd_fill_reply(rep, -ENOMEM, "Could not global init curl.");
         goto error;
     }
-
-    nbd_info("write request url %s\n", azdev->write_request_url);
 
     uv_loop_init(&azdev->loop);
 
@@ -1357,7 +1410,7 @@ static ssize_t azblk_get_blksize(struct nbd_device *dev, nbd_response *rep)
 static bool azblk_load_json(struct nbd_device *dev, json_object *devobj, char *key)
 {
     struct azblk_dev *azdev = dev->priv;
-    struct azblk_blob_props azprop;
+    struct az_ret_header az_ret_header;
     json_object *obj;
     char *tmp;
     int ret;
@@ -1390,7 +1443,7 @@ static bool azblk_load_json(struct nbd_device *dev, json_object *devobj, char *k
         azdev->cfg.http = json_object_get_int(obj);
     }
 
-    ret = azblk_get_blob_properties(azdev, &azprop);
+    ret = azblk_get_blob_properties(azdev, &az_ret_header);
 
     if (ret == -EINVAL || ret == -ENOMEM) {
         nbd_err("Error getting Blob %s properties.\n", azdev->cfg.blob_url);
@@ -1402,17 +1455,12 @@ static bool azblk_load_json(struct nbd_device *dev, json_object *devobj, char *k
         goto error;
     }
 
-    if (ret == 0 && dev->size != azprop.max_size) {
+    if (ret == 0 && dev->size != az_ret_header.max_size) {
         nbd_err("Blob %s properties do not match.\n", azdev->cfg.blob_url);
         goto error;
     }
 
     dev->priv = azdev;
-
-    nbd_info("sas %s\n", azdev->cfg.sas);
-    nbd_info("blob_url %s\n", azdev->cfg.blob_url);
-    nbd_info("lease_id %s\n", azdev->cfg.lease_id);
-    nbd_info("http %d\n", azdev->cfg.http);
 
     return true;
 
