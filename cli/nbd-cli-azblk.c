@@ -79,7 +79,7 @@ struct cli_cmd azblk_cmds[] = {
     },
     {.pattern = "azblk delete <account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]",
      .call    = azblk_delete_routine,
-     .desc    = "Delete the vhd file from your storage account container, RUNNER_HOST will be 'localhost' as default",
+     .desc    = "Delete the vhd file from your storage account container, RUNNER_HOST will be 'localhost' as default.\n\t\tWARNING: Deleting the vhd file will also remove all of it's snapshots.",
     },
     {.pattern = "azblk map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]",
      .call    = azblk_map_routine,

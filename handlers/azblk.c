@@ -375,7 +375,7 @@ static void azblk_curl_perform(uv_poll_t *req, int status, int events)
 static int azblk_handle_socket(CURL *curl_ezh, curl_socket_t s, int action,
                                void *userp, void *socketp)
 {
-    struct azblk_socket_context *context;
+    struct azblk_socket_context *context = NULL;
     struct azblk_dev *azdev = (struct azblk_dev *)userp;
 
     if (action == CURL_POLL_IN
@@ -433,7 +433,7 @@ void azblk_dev_loop(void *arg)
 }
 
 static char *azblk_parse_lease(char *str, struct azblk_dev *azdev,
-                               char **err_msg)
+                               char *err_msg)
 {
     char *str_end;
     int len;
@@ -442,13 +442,13 @@ static char *azblk_parse_lease(char *str, struct azblk_dev *azdev,
     if (!str_end)
         str_end = memchr(str, '\0', AZ_LEASE_ID_LEN + 1);
     if (!str_end) {
-        asprintf(err_msg, "Invalid lease argument");
+        sprintf(err_msg, "Invalid lease argument");
         return NULL;
     }
 
     len = str_end - str;
     if (len == 0 || (len > AZ_LEASE_ID_LEN - 1)) {
-        asprintf(err_msg, "Invalid lease length");
+        sprintf(err_msg, "Invalid lease length");
         return NULL;
     }
 
@@ -458,7 +458,7 @@ static char *azblk_parse_lease(char *str, struct azblk_dev *azdev,
 }
 
 static char *azblk_parse_sas(char *str, struct azblk_dev *azdev,
-                             char **err_msg)
+                             char *err_msg)
 {
     char *str_end;
     int len;
@@ -469,13 +469,13 @@ static char *azblk_parse_sas(char *str, struct azblk_dev *azdev,
     if (!str_end)
         str_end = memchr(str, '\0', AZ_SAS_LEN + 1);
     if (!str_end) {
-        asprintf(err_msg, "Invalid sas argument");
+        sprintf(err_msg, "Invalid sas argument");
         return NULL;
     }
 
     len = str_end - str;
     if (len == 0 || (len > AZ_SAS_LEN - 1)) {
-        asprintf(err_msg, "Invalid sas length");
+        sprintf(err_msg, "Invalid sas length");
         return NULL;
     }
 
@@ -485,18 +485,18 @@ static char *azblk_parse_sas(char *str, struct azblk_dev *azdev,
 }
 
 static char *azblk_parse_http(char *str, struct azblk_dev *azdev,
-                              char **err_msg)
+                              char *err_msg)
 {
     azdev->cfg.http = 1;
 
     return str;
 }
 
-#define AZBLK_PARAMS      4
+#define AZBLK_PARAMS      3
 
 struct azblk_dev_config_param {
     char    *name;
-    char    *(*parse)(char *, struct azblk_dev *, char **err_msg);
+    char    *(*parse)(char *, struct azblk_dev *, char *err_msg);
 } azblk_params[AZBLK_PARAMS] = {
     { "sas=",      azblk_parse_sas },
     { "lease=",    azblk_parse_lease },
@@ -508,8 +508,10 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
 {
     struct azblk_dev *azdev;
     char *str, *str_end;
-    char *url, *err_msg = NULL;
-    int i, url_len;
+    char *url;
+    int i = 0;
+    int url_len;
+    char err_msg[80];
 
     nbd_info("cfgstring len=%ld, cfgstring=%s\n", strlen(cfgstring), cfgstring);
 
@@ -543,9 +545,8 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
     url_len = str_end - str;
 
     if ( url_len >= AZ_BLOB_URL_LEN) {
-        asprintf(&err_msg, "Invalid argument %s", str);
         nbd_fill_reply(rep, -EINVAL, "Url too long.");
-        nbd_err("Invalid url argument.\n");
+        nbd_err("Url too long.\n");
         azdev_free(azdev);
         return false;
     }
@@ -563,17 +564,19 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
                     strlen(azblk_params[i].name)) == 0)
                 break;
         }
+
+        if (i == AZBLK_PARAMS) {
+            sprintf(err_msg, "Invalid argument");
+            goto error;
+        }
+
         /* skip over parameter name */
         str += strlen(azblk_params[i].name);
-        str = (azblk_params[i].parse)(str, azdev, &err_msg);
+        str = (azblk_params[i].parse)(str, azdev, err_msg);
         if (!str)
             goto error;
     }
 
-    if (i == AZBLK_PARAMS) {
-        asprintf(&err_msg, "Invalid argument %s", str);
-        goto error;
-    }
 
     azdev->cfg.key = calloc(1, url_len + 1);
     strlcpy(azdev->cfg.key, url, url_len + 1);
@@ -593,7 +596,6 @@ error:
 
     nbd_fill_reply(rep, -EINVAL, "%s", err_msg);
     nbd_err("%s \n", err_msg);
-    free(err_msg);
     azdev_free(azdev);
 
     return false;
@@ -1423,20 +1425,35 @@ static bool azblk_load_json(struct nbd_device *dev, json_object *devobj, char *k
 
     if (json_object_object_get_ex(devobj, "sas", &obj)) {
         tmp = (char *)json_object_get_string(obj);
-        if (tmp)
-            asprintf(&azdev->cfg.sas, "%s", tmp);
+        if (tmp) {
+            ret = asprintf(&azdev->cfg.sas, "%s", tmp);
+            if (ret < 0) {
+                nbd_err("No memory for config string.\n");
+                goto error;
+            }
+        }
     }
 
     if (json_object_object_get_ex(devobj, "blob_url", &obj)) {
         tmp = (char *)json_object_get_string(obj);
-        if (tmp)
-            asprintf(&azdev->cfg.blob_url, "%s", tmp);
+        if (tmp) {
+            ret = asprintf(&azdev->cfg.blob_url, "%s", tmp);
+            if (ret < 0) {
+                nbd_err("No memory for config string.\n");
+                goto error;
+            }
+        }
     }
 
     if (json_object_object_get_ex(devobj, "lease_id", &obj)) {
         tmp = (char *)json_object_get_string(obj);
-        if (tmp)
-            asprintf(&azdev->cfg.lease_id, "%s", tmp);
+        if (tmp) {
+            ret = asprintf(&azdev->cfg.lease_id, "%s", tmp);
+            if (ret < 0) {
+                nbd_err("No memory for config string.\n");
+                goto error;
+            }
+        }
     }
 
     if (json_object_object_get_ex(devobj, "http", &obj)) {
