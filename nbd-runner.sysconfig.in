@@ -13,9 +13,9 @@
 # log_level = 3
 #
 # Logging Directory Path
-# The default logging Directory path is /var/log, uncomment it
-# and set your own path:
-# log_dir = "/var/log"
+# The default logging Directory path is /var/log/nbd-runner,
+# uncomment it and set your own path:
+# log_dir = "/var/log/nbd-runner"
 #
 # IO Host Address
 # The default listening IP address for NBD devices' connection to
