@@ -898,6 +898,8 @@ void nbd_handle_request_done(struct nbd_handler_request *req, int ret)
     if(req->cmd == NBD_CMD_READ && !reply.error)
         nbd_socket_write(dev->sockfd, req->rwbuf, req->len);
     pthread_mutex_unlock(&dev->sock_lock);
+    free(req->rwbuf);
+    free(req);
 }
 
 int nbd_handle_request(int sock, int threads)
