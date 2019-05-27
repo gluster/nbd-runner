@@ -127,9 +127,18 @@ static int load_our_module(void)
             break;
 
         default:
+	    /*
+	     * Initialize 0 nbd device when insearting the nbd module to
+	     * avoid the following issue:
+	     *
+	     * For the first time to execute the 'nbd-cli ... list' command
+	     * just after the nbd.ko is inserted we will randomly hit some
+	     * unused /dev/nbdX devices are listed as mapped, due to nbd
+	     * kernel module bug.
+	     */
             err = kmod_module_probe_insert_module(mod,
                     KMOD_PROBE_APPLY_BLACKLIST,
-                    NULL, NULL, NULL, NULL);
+                    "nbds_max=0", NULL, NULL, NULL);
 
             if (err == 0) {
                 nbd_info("Inserted module '%s'\n", kmod_module_get_name(mod));
@@ -150,6 +159,19 @@ static int load_our_module(void)
                 }
                 ret = -1;
             }
+	    /*
+	     * Currently in nbd.ko module for the first time when loading,
+	     * it will add and initialize nbds_max(16 as default) nbd devices
+	     * defautly, and the udev service will try to open/close the
+	     * /dev/nbdX to do some sanity check.
+	     *
+	     * And if we do the list or map at the same time we will hit some
+	     * errors, such the device is mapped, but it is actually not.
+	     *
+	     * So if the no extra_options is NULL in kmod_module_probe_insert_module,
+	     * the following sleep(1) should be uncommented here.
+	     */
+	//  sleep(1);
         }
         kmod_module_unref(mod);
     }
