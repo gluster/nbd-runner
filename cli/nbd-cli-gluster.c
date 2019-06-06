@@ -84,7 +84,7 @@ struct cli_cmd gluster_cmds[] = {
     },
     {.pattern = "gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]",
      .call    = gluster_map_routine,
-     .desc    = "Map FILEPATH to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST\n\t\twill be 'localhost' as default",
+     .desc    = "Map FILEPATH to the nbd device, as default the socket connection timeout is 30 seconds,\n\t\tnone readonly, RUNNER_HOST will be 'localhost' as default",
     },
     {.pattern = "gluster unmap <nbd-device|VOLUME/FILEPATH> [host RUNNER_HOST]",
      .call    = gluster_unmap_routine,

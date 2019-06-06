@@ -45,16 +45,16 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 $ git clone https://github.com/gluster/nbd-runner.git
 $ cd nbd-runner/
 $ dnf install autoconf automake libtool kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
-$ dnf install libtirpc-devel rpcgen # only in Fedora or some other Distributions that the glibc version >= 2.26
+$ dnf install libtirpc-devel rpcgen # only on Fedora or some other Distributions that the glibc version >= 2.26
 $ dnf install glusterfs-api-devel # only when the --with-gluster=yes or absent you need to install this
 $ dnf install libcurl-devel libuv-devel # only when the --with-azure=yes or absent you need to install this
 $ ./autogen.sh
-$ ./configure # '--with-tirpc=no' means try to use legacy glibc, yes by default; --with-gluster means enable the gluster handler, yes by default.
+$ ./configure # '--with-tirpc=no or --without-tirpc' means try to use legacy glibc, yes by default; --with-gluster means enable the gluster handler, yes by default.
 $ make -j
 $ make install
 </pre>
 
-<b>NOTE:</b> Glibc has removed the rpc functions from the [2.26 release](https://sourceware.org/ml/libc-alpha/2017-08/msg00010.html). Instead of relying on glibc providing these, the modern libtirpc library should be used instead. For the old glibc version or some distribute Linux we will still use the glibc instead to privide the RPC library.
+<b>NOTE:</b> Glibc has removed the rpc functions from the [2.26 release](https://sourceware.org/ml/libc-alpha/2017-08/msg00010.html). Instead of relying on glibc providing these, the modern libtirpc library should be used instead. For the old glibc version or some distribute Linux we will still use the glibc instead to privide the RPC library. Currently we recommend on Fedora <= 27 and RHEL <= 7 to disable the tirpc.
 
 # Usage
 ------
@@ -229,8 +229,8 @@ Usage:
 		Delete FILEPATH from the VOLUME, RUNNER_HOST will be 'localhost' as default
 
 	gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]
-		Map FILEPATH to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST
-		will be 'localhost' as default
+		Map FILEPATH to the nbd device, as default the socket connection timeout is 30 seconds,
+		none readonly, RUNNER_HOST will be 'localhost' as default
 
 	gluster unmap <nbd-device|VOLUME/FILEPATH> [host RUNNER_HOST]
 		Unmap the nbd device or VOLUME/FILEPATH, RUNNER_HOST will be 'localhost' as default
@@ -299,8 +299,8 @@ Usage:
 		Delete the vhd file from your storage account container, RUNNER_HOST will be 'localhost' as default
 
 	azblk map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]
-		Map the vhd to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST
-		will be 'localhost' as default
+		Map the vhd to the nbd device, as default the socket connection timeout is 30 seconds,
+		none readonly, RUNNER_HOST will be 'localhost' as default
 
 	azblk unmap <nbd-device|<account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]
 		Unmap the nbd device or account/container/vhd, RUNNER_HOST will be 'localhost' as default

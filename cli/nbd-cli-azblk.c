@@ -83,7 +83,7 @@ struct cli_cmd azblk_cmds[] = {
     },
     {.pattern = "azblk map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]",
      .call    = azblk_map_routine,
-     .desc    = "Map the vhd to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST\n\t\twill be 'localhost' as default",
+     .desc    = "Map the vhd to the nbd device, as default the socket connection timeout is 30 seconds,\n\t\t none readonly, RUNNER_HOST will be 'localhost' as default",
     },
     {.pattern = "azblk unmap <nbd-device|<account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]",
      .call    = azblk_unmap_routine,

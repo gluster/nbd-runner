@@ -26,7 +26,7 @@ VERSION=`echo $VERSION | awk -F'-' '{print $1}'`
 VERSION=`echo $VERSION | sed "s/v//"`
 
 RELEASE=`git describe --tags --match "v[0-9]*"`
-RELEASE=`echo $RELEASE | awk -F'-' '{print $2"."$3}'`
+RELEASE=`echo $RELEASE | awk -F'-' '{if($2) {print $2"."$3} else {print 0}}'`
 NBDRUNNER_TAR=nbd-runner-$VERSION.tar.gz
 rpmbuild_path=`pwd`/rpmbuild
 
@@ -46,7 +46,7 @@ SPEC=$rpmbuild_path/SPECS/nbd-runner.spec
 
 # Replace the Version
 sed -i "s/Version:.*$/Version:       ${VERSION}/" $SPEC
-sed -i "s/Release:.*$/Release:       ${RELEASE}%{dist}/" $SPEC
+sed -i "s/Release:.*$/Release:       ${RELEASE}%{?dist}/" $SPEC
 
 # Generate the source package
 TMPDIR=/tmp/nbd-runner-build
@@ -60,4 +60,4 @@ cd $TOPDIR/extra
 rm -rf $TMPDIR
 
 # Build the RPMs
-rpmbuild --define="_topdir $rpmbuild_path" -ba $SPEC "$@"
+rpmbuild --define="_topdir $rpmbuild_path" -ba $SPEC "$@" --noclean

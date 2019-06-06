@@ -656,7 +656,7 @@ int nbd_map_device(int count, char **options, int type)
     int sock = RPC_ANYSOCK;
     int dev_index = -1;
     int tmp_index;
-    int timeout = 0;
+    int timeout = 30; //This is the default timeout value in kernel space for each IO request
     bool readonly = false;
     int ret = -EINVAL;
     int len;
