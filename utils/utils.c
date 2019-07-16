@@ -216,8 +216,11 @@ bool nbd_is_valid_host(const char *host)
         return false;
     }
 
-    if (!inet_pton(AF_INET, host, tmp) && !inet_pton(AF_INET6, host, tmp))
+    if (!inet_pton(AF_INET, host, tmp) && !inet_pton(AF_INET6, host, tmp)) {
+        free(tmp);
         return false;
+    }
 
+    free(tmp);
     return true;
 }
