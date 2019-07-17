@@ -119,7 +119,7 @@ ssize_t nbd_parse_size(const char *value, int sector_size)
         }
 
         if (sizef % sector_size) {
-            fprintf(stdout, "The size %ld will align to sector size %d bytes\n",
+            fprintf(stdout, "The size %zd will align to sector size %d bytes\n",
                     sizef, sector_size);
             sizef = round_down(sizef, sector_size);
         }

@@ -335,7 +335,7 @@ static int nbd_parse_from_json_config_file(void)
 
             strcpy(dev->bstore, key);
 
-            nbd_dbg("key: %s, type: %d, nbd: %s, maptime: %s, size: %ld, blksize: %ld, prealloc: %d, readonly: %d\n",
+            nbd_dbg("key: %s, type: %d, nbd: %s, maptime: %s, size: %zd, blksize: %zd, prealloc: %d, readonly: %d\n",
                     key, dev->type, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
             handler = g_hash_table_lookup(nbd_handler_hash, &dev->type);
             if (!handler) {
@@ -837,8 +837,8 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         l += strlen(key) + 11;
         l += snprintf(tmp, max, "%d", dev->type) + 8;
         l += strlen(dev->time) + 13;
-        l += snprintf(tmp, max, "%ld", dev->size) + 8;
-        l += snprintf(tmp, max, "%ld", dev->blksize) + 11;
+        l += snprintf(tmp, max, "%zd", dev->size) + 8;
+        l += snprintf(tmp, max, "%zd", dev->blksize) + 11;
         l += 17;
         l += 17;
         st = nbd_dev_status_lookup_str(dev->status);

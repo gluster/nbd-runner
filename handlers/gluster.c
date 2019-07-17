@@ -243,9 +243,9 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
     }
 
     if (!nbd_check_available_space(glfs, info->volume, dev->size)) {
-        nbd_fill_reply(rep, -ENOSPC, "No enough space in volume %s, require %ld!",
+        nbd_fill_reply(rep, -ENOSPC, "No enough space in volume %s, require %zd!",
                        info->volume, dev->size);
-        nbd_err("No enough space in volume %s, require %ld!\n", info->volume,
+        nbd_err("No enough space in volume %s, require %zd!\n", info->volume,
                 dev->size);
         goto err;
     }
@@ -517,13 +517,13 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
 
     switch (req->cmd) {
     case NBD_CMD_WRITE:
-        nbd_dbg_io("NBD_CMD_WRITE: offset: %ld len: %ld\n", req->offset,
+        nbd_dbg_io("NBD_CMD_WRITE: offset: %zd len: %zd\n", req->offset,
                    req->len);
         glfs_pwrite_async(info->gfd, req->rwbuf, req->len, req->offset,
                           ALLOWED_BSOFLAGS, glfs_async_cbk, req);
         break;
     case NBD_CMD_READ:
-        nbd_dbg_io("NBD_CMD_READ: offset: %ld, len: %ld\n", req->offset,
+        nbd_dbg_io("NBD_CMD_READ: offset: %zd, len: %zd\n", req->offset,
                    req->len);
         glfs_pread_async(info->gfd, req->rwbuf, req->len, req->offset, SEEK_SET,
                          glfs_async_cbk, req);
@@ -533,7 +533,7 @@ static void glfs_handle_request(gpointer data, gpointer user_data)
         glfs_fdatasync_async(info->gfd, glfs_async_cbk, req);
         break;
     case NBD_CMD_TRIM:
-        nbd_dbg_io("NBD_CMD_TRIM: offset: %ld, len: %ld\n", req->offset,
+        nbd_dbg_io("NBD_CMD_TRIM: offset: %zd, len: %zd\n", req->offset,
                    req->len);
         glfs_discard_async(info->gfd, req->offset, req->len,
                 glfs_async_cbk, req);

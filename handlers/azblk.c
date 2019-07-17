@@ -513,7 +513,7 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
     int url_len;
     char err_msg[80];
 
-    nbd_info("cfgstring len=%ld, cfgstring=%s\n", strlen(cfgstring), cfgstring);
+    nbd_info("cfgstring len=%zu, cfgstring=%s\n", strlen(cfgstring), cfgstring);
 
     if (!cfgstring || !dev) {
         nbd_fill_reply(rep, -EINVAL, "The cfgstring param is NULL.");
@@ -676,7 +676,7 @@ static size_t get_az_ret_headers(void *data, size_t size, size_t nitems, void *u
     int ret;
 
     if (strncmp("Content-Length:", data, 15) == 0) {
-        ret = sscanf(data, "Content-Length: %lu", &length);
+        ret = sscanf(data, "Content-Length: %zd", &length);
         if (ret)
             header->max_size = length;
     }
@@ -829,7 +829,7 @@ static bool azblk_create(struct nbd_device *dev, nbd_response *rep)
     headers = curl_slist_append(headers,
                                 "Content-Type: application/octet-stream");
 
-    sprintf(buf, "x-ms-blob-content-length: %lu", dev->size);
+    sprintf(buf, "x-ms-blob-content-length: %zd", dev->size);
     headers = curl_slist_append(headers, buf);
 
     headers = curl_slist_append(headers, "x-ms-blob-sequence-number: 0");
@@ -1178,7 +1178,7 @@ static void azblk_read(struct nbd_handler_request *req)
         io_cb->headers = curl_slist_append(io_cb->headers, buf);
     }
 
-    sprintf(buf, "x-ms-range: bytes=%lu-%lu", req->offset,
+    sprintf(buf, "x-ms-range: bytes=%zd-%zd", req->offset,
         req->offset + (req->len - 1));
     io_cb->headers = curl_slist_append(io_cb->headers, buf);
 
@@ -1248,7 +1248,7 @@ static void azblk_write(struct nbd_handler_request *req)
     io_cb->headers = curl_slist_append(io_cb->headers,
                        "x-ms-page-write: update");
 
-    sprintf(buf, "Content-Length: %lu", req->len);
+    sprintf(buf, "Content-Length: %zd", req->len);
     io_cb->headers = curl_slist_append(io_cb->headers, buf);
 
     io_cb->headers = curl_slist_append(io_cb->headers, "Expect:");
@@ -1256,7 +1256,7 @@ static void azblk_write(struct nbd_handler_request *req)
     io_cb->headers = curl_slist_append(io_cb->headers,
                 "Content-Type: application/octet-stream");
 
-    sprintf(buf, "x-ms-range: bytes=%lu-%lu", req->offset,
+    sprintf(buf, "x-ms-range: bytes=%zd-%zd", req->offset,
              req->offset + (req->len - 1));
     io_cb->headers = curl_slist_append(io_cb->headers, buf);
 
@@ -1324,7 +1324,7 @@ static void azblk_discard(struct nbd_handler_request *req)
     io_cb->headers = curl_slist_append(io_cb->headers,
                        "x-ms-page-write: clear");
 
-    sprintf(buf, "x-ms-range: bytes=%lu-%lu", req->offset,
+    sprintf(buf, "x-ms-range: bytes=%zd-%zd", req->offset,
             req->offset + (req->len - 1));
     io_cb->headers = curl_slist_append(io_cb->headers, buf);
 
@@ -1366,22 +1366,22 @@ static void azblk_handle_request(gpointer data, gpointer user_data)
 
     switch (req->cmd) {
     case NBD_CMD_WRITE:
-        nbd_dbg_io("NBD_CMD_WRITE: offset: %ld, len: %ld\n", req->offset,
+        nbd_dbg_io("NBD_CMD_WRITE: offset: %zd, len: %zd\n", req->offset,
                    req->len);
         azblk_write(req);
         break;
     case NBD_CMD_READ:
-        nbd_dbg_io("NBD_CMD_READ: offset: %ld, len: %ld\n", req->offset,
+        nbd_dbg_io("NBD_CMD_READ: offset: %zd, len: %zd\n", req->offset,
                    req->len);
         azblk_read(req);
         break;
     case NBD_CMD_FLUSH:
-        nbd_dbg_io("NBD_CMD_FLUSH: offset: %ld, len: %ld\n", req->offset,
+        nbd_dbg_io("NBD_CMD_FLUSH: offset: %zd, len: %zd\n", req->offset,
                    req->len);
         req->done(req, 0);
         break;
     case NBD_CMD_TRIM:
-        nbd_dbg_io("NBD_CMD_TRIM: offset: %ld, len: %ld\n", req->offset,
+        nbd_dbg_io("NBD_CMD_TRIM: offset: %zd, len: %zd\n", req->offset,
                    req->len);
         azblk_discard(req);
         break;
