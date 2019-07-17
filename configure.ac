@@ -180,9 +180,10 @@ AC_CHECK_HEADERS([stdio.h stdlib.h string.h stdbool.h stddef.h libkmod.h \
                   rpc/pmap_clnt.h inttypes.h fcntl.h linux/nbd.h signal.h glib.h \
                   rpc/rpc.h])
 
-libdir=$ac_default_prefix/lib64/nbd-runner
+ARCH_BIT="$(eval getconf LONG_BIT)"
+libdir=$ac_default_prefix/lib${ARCH_BIT}/nbd-runner
 if test "x$prefix" != xNONE; then
-    libdir=$prefix/lib64/nbd-runner
+    libdir=$prefix/lib${ARCH_BIT}/nbd-runner
 fi
 NBD_RUNNER_LIBDIR="$(eval echo ${libdir})"
 AC_SUBST(NBD_RUNNER_LIBDIR)
