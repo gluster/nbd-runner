@@ -38,10 +38,10 @@
 #include <json-c/json.h>
 
 #include "rpc_nbd.h"
+#include "nbd-common.h"
 #include "nbd-log.h"
 #include "utils.h"
 #include "strlcpy.h"
-#include "nbd-common.h"
 #include "nbd-sysconfig.h"
 
 static GHashTable *nbd_handler_hash;
