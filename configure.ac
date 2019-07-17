@@ -180,9 +180,15 @@ AC_CHECK_HEADERS([stdio.h stdlib.h string.h stdbool.h stddef.h libkmod.h \
                   rpc/pmap_clnt.h inttypes.h fcntl.h linux/nbd.h signal.h glib.h \
                   rpc/rpc.h])
 
-libdir=$ac_default_prefix/lib64/nbd-runner
+LOCAL_ARCH="$(eval uname -p)"
+libdir_bit=lib64
+if test "x$LOCAL_ARCH" = "xi686" -o "x$LOCAL_ARCH" = "xarmv7l"; then
+    libdir_bit=lib
+fi
+
+libdir=$ac_default_prefix/$libdir_bit/nbd-runner
 if test "x$prefix" != xNONE; then
-    libdir=$prefix/lib64/nbd-runner
+    libdir=$prefix/$libdir_bit/nbd-runner
 fi
 NBD_RUNNER_LIBDIR="$(eval echo ${libdir})"
 AC_SUBST(NBD_RUNNER_LIBDIR)
