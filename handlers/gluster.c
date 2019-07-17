@@ -30,10 +30,10 @@
 #include <glusterfs/api/glfs.h>
 #include <glib.h>
 
+#include "nbd-common.h"
 #include "nbd-log.h"
 #include "utils.h"
 #include "strlcpy.h"
-#include "nbd-common.h"
 #include "nbd-sysconfig.h"
 
 #define NBD_GFAPI_LOG_FILE NBD_LOG_DIR_DEFAULT"/nbd-runner-glfs.log"

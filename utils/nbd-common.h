@@ -10,8 +10,8 @@
   Part of this file copied from open-iscsi/tcmu-runner project.
 */
 
-#ifndef __NBD_HANDLER_H
-#define __NBD_HANDLER_H
+#ifndef __NBD_COMMON_H
+#define __NBD_COMMON_H
 
 #define _GNU_SOURCE
 
@@ -20,8 +20,8 @@
 #include <linux/limits.h>
 #include <json-c/json.h>
 
-#include "rpc_nbd.h"
-#include "utils/utils.h"
+#include "utils.h"
+#include "nbd-sysconfig.h"
 
 struct nbd_device {
     handler_t type;
@@ -222,7 +222,5 @@ struct nbd_handler_request {
  * And the handler library name must be "libXXX_handler.so"
  */
 typedef struct nbd_handler *(*handler_init_fn_t)(const struct nbd_config *);
-bool nbd_service_init(struct nbd_config *cfg);
-void nbd_service_fini(void);
 
-#endif /* __NBD_HANDLER_H */
+#endif /* __NBD_COMMON_H */

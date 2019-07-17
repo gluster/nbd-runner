@@ -22,12 +22,13 @@
 #include <arpa/inet.h>
 
 #include "utils.h"
-#include "config.h"
 #include "nbd-log.h"
+#include "nbd-sysconfig.h"
+#include "nbd-common.h"
+#include "nbd-svc-routines.h"
+#include "config.h"
 #include "rpc_nbd.h"
 #include "rpc_nbd_svc.h"
-#include "nbd-common.h"
-#include "nbd-sysconfig.h"
 
 #define NBD_LOCK_FILE "/run/nbd-runner.lock"
 #define NBD_MIN_THREADS  1

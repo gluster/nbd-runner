@@ -62,8 +62,10 @@ back-store.
 %build
 echo v%{version}-%{release} > VERSION
 ./autogen.sh
+%if ( 0%{!?rhel} )
 export CFLAGS="%build_cflags -fPIC"
 export CPPFLAGS="%build_cxxflags -fPIC"
+%endif
 %configure %{?_without_tirpc} %{?_without_gluster} %{?_without_azblk}
 %make_build
 
@@ -86,6 +88,8 @@ find %{buildroot}%{_libdir}/nbd-runner/ -name '*.la' -delete
 %{_sbindir}/nbd-cli
 %{_unitdir}/nbd-runner.service
 %{_mandir}/man8/nbd-*.8.*
+%dir %{_libdir}/nbd-runner/
+%{_libdir}/nbd-runner/libutils.so*
 %doc README.md
 %license COPYING-GPLV2 COPYING-LGPLV3
 %config(noreplace) %{_sysconfdir}/sysconfig/nbd-runner
@@ -93,12 +97,10 @@ find %{buildroot}%{_libdir}/nbd-runner/ -name '*.la' -delete
 %ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-runner-glfs.log
 
 %if %{with gluster}
-%dir %{_libdir}/nbd-runner/
 %{_libdir}/nbd-runner/libgluster_handler.so
 %endif
 
 %if %{with azblk}
-%dir %{_libdir}/nbd-runner/
 %{_libdir}/nbd-runner/libazblk_handler.so
 %endif
 
