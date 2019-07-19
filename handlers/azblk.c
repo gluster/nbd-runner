@@ -140,10 +140,12 @@ struct azblk_dev {
     uv_loop_t loop;
     uv_async_t stop_loop;
     uv_timer_t timeout;
+    int io_timeout;
     uv_async_t start_io_async;
     struct list_head start_io_queue;
     uv_mutex_t start_io_mutex;
     uv_thread_t thread;
+    int unmapping;
 };
 
 struct azblk_io_cb {
@@ -180,13 +182,22 @@ static void azblk_loop_cleanup(uv_handle_t *handle, void *data)
 static void azblk_stop_loop(uv_async_t *async_req)
 {
     struct azblk_dev *azdev = (struct azblk_dev *)async_req->data;
-
-    uv_mutex_lock(&azdev->start_io_mutex);
-    if (!list_empty(&azdev->start_io_queue))
-        nbd_dev_warn(azdev->dev, "IO outstanding on device close.\n");
-    uv_mutex_unlock(&azdev->start_io_mutex);
+    struct azblk_io_cb *io_cb, *tmp;
 
     uv_stop(&azdev->loop);
+
+    uv_mutex_lock(&azdev->start_io_mutex);
+
+    list_for_each_entry_safe(io_cb, tmp, &azdev->start_io_queue, entry) {
+        list_del(&io_cb->entry);
+        curl_multi_remove_handle(azdev->curl_multi, io_cb->curl_ezh);
+        curl_slist_free_all(io_cb->headers);
+        curl_easy_cleanup(io_cb->curl_ezh);
+        io_cb->nbd_req->done(io_cb->nbd_req, -EIO);
+        free(io_cb);
+    }
+
+    uv_mutex_unlock(&azdev->start_io_mutex);
 }
 
 static void azblk_kick_start(struct azblk_dev *azdev,
@@ -253,12 +264,14 @@ static void azblk_multi_done(CURLM *curl_multi, CURLMsg *message)
     if (az_is_done(resp_code))
         goto done;
 
-    nbd_dev_err(dev, "Curl HTTP error %ld.\n", resp_code);
-
     ret = -EIO;
 
-    if (az_is_throttle(resp_code))
+    if (az_is_throttle(resp_code)) {
+        nbd_dev_dbg(dev, "Curl HTTP error %ld. Azure is throttling the IO.\n", resp_code);
         ret = -EAGAIN;
+    }
+    else
+        nbd_dev_err(dev,"Curl HTTP error %ld.\n", resp_code);
 
 done:
 
@@ -1019,6 +1032,10 @@ static bool azblk_map(struct nbd_device *dev, nbd_response *rep)
         return false;
     }
 
+    azdev->io_timeout = dev->timeout;
+
+    azdev->unmapping = 0;
+
     azdev->curl_multi = curl_multi_init();
 
     curl_multi_setopt(azdev->curl_multi, CURLMOPT_SOCKETFUNCTION,
@@ -1031,21 +1048,25 @@ static bool azblk_map(struct nbd_device *dev, nbd_response *rep)
     // blob calls
 
     // Get Page
-    ret = asprintf(&azdev->read_request_url,
-                   azdev->cfg.sas ? "%s?%s" : "%s",
-                   azdev->cfg.blob_url, azdev->cfg.sas);
+    if (azdev->cfg.sas)
+        ret = asprintf(&azdev->read_request_url, "%s?%s&timeout=%d",
+                   azdev->cfg.blob_url, azdev->cfg.sas, azdev->io_timeout);
+    else
+        ret = asprintf(&azdev->read_request_url, "%s?timeout=%d",
+                   azdev->cfg.blob_url, azdev->io_timeout);
     if (ret < 0) {
         nbd_err("Could not allocate query buf.\n");
         nbd_fill_reply(rep, -ENOMEM, "Could not allocate query buf.");
         goto error;
     }
 
-    nbd_info("read request url %s\n", azdev->read_request_url);
-
     // Put Page
-    ret = asprintf(&azdev->write_request_url,
-                   azdev->cfg.sas ? "%s?comp=page&%s" : "%s?comp=page",
-                   azdev->cfg.blob_url, azdev->cfg.sas);
+    if (azdev->cfg.sas)
+        ret = asprintf(&azdev->write_request_url, "%s?comp=page&%s&timeout=%d",
+                   azdev->cfg.blob_url, azdev->cfg.sas, azdev->io_timeout);
+    else
+        ret = asprintf(&azdev->write_request_url, "%s?comp=page&timeout=%d",
+                   azdev->cfg.blob_url, azdev->io_timeout);
     if (ret < 0) {
         nbd_err("Could not allocate query buf.\n");
         nbd_fill_reply(rep, -ENOMEM, "Could not global init curl.");
@@ -1087,6 +1108,8 @@ static bool azblk_unmap(struct nbd_device *dev)
     }
 
     // nbd-runner makes sure that the device has been mapped.
+
+    azdev->unmapping = 1;
 
     uv_timer_stop(&azdev->timeout);
 
@@ -1143,6 +1166,11 @@ static void azblk_read(struct nbd_handler_request *req)
     int len;
     int ret;
 
+    if (azdev->unmapping) {
+        ret = -EIO;
+        goto error;
+    }
+
     io_cb = alloc_iocb(req);
     if (!io_cb) {
         ret = -ENOMEM;
@@ -1156,6 +1184,8 @@ static void azblk_read(struct nbd_handler_request *req)
         goto error;
     }
 
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_URL, azdev->read_request_url);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_USERAGENT,
              "nbd-runner-azblk/1.0");
@@ -1217,6 +1247,11 @@ static void azblk_write(struct nbd_handler_request *req)
     struct azblk_io_cb *io_cb = NULL;
     char buf[128];
 
+    if (azdev->unmapping) {
+        ret = -EIO;
+        goto error;
+    }
+
     io_cb = alloc_iocb(req);
     if (!io_cb) {
         ret = -ENOMEM;
@@ -1230,6 +1265,8 @@ static void azblk_write(struct nbd_handler_request *req)
         goto error;
     }
 
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_URL, azdev->write_request_url);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_POSTFIELDS, req->rwbuf);
@@ -1293,6 +1330,11 @@ static void azblk_discard(struct nbd_handler_request *req)
     int len;
     int ret;
 
+    if (azdev->unmapping) {
+        ret = -EIO;
+        goto error;
+    }
+
     io_cb = alloc_iocb(req);
     if (!io_cb) {
         ret = -ENOMEM;
@@ -1306,6 +1348,8 @@ static void azblk_discard(struct nbd_handler_request *req)
         goto error;
     }
 
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_URL, azdev->write_request_url);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_USERAGENT,
