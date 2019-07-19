@@ -22,6 +22,7 @@
 
 #include "utils.h"
 #include "nbd-sysconfig.h"
+#include "list.h"
 
 struct nbd_device {
     handler_t type;
@@ -55,6 +56,12 @@ struct nbd_device {
 
     /* The mapped time, e.g. "2019-02-12 12:00:37" */
     char time[NBD_TLEN_MAX];
+
+    int timeout;
+    int stop_retry_thread;
+    GThread *retry_thread;
+    struct list_head retry_io_queue;
+    pthread_mutex_t retry_lock;
 
     /*
      * Private data pointer for each device
@@ -208,6 +215,11 @@ struct nbd_handler_request {
     ssize_t len;
     int flags;
     char handle[8];
+
+    struct list_head entry;
+    gint64 io_start_time;
+    gint64 retry_end_time;
+    gint64 timer_expires;
 
     struct nbd_device *dev;
 
