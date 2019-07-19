@@ -419,6 +419,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     pthread_mutex_init(&dev->sock_lock, NULL);
     pthread_mutex_init(&dev->lock, NULL);
+    pthread_mutex_init(&dev->retry_lock, NULL);
     dev->type = create->type;
     dev->handler = handler;
     dev->size = create->size;
@@ -450,6 +451,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 err_create:
     pthread_mutex_destroy(&dev->sock_lock);
     pthread_mutex_destroy(&dev->lock);
+    pthread_mutex_destroy(&dev->retry_lock);
 err_dev:
     if (dev && dev->priv)
         free(dev->priv);
@@ -641,6 +643,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
         pthread_mutex_init(&dev->sock_lock, NULL);
         pthread_mutex_init(&dev->lock, NULL);
+        pthread_mutex_init(&dev->retry_lock, NULL);
         nbd_update_json_config_file(dev, false);
         g_hash_table_insert(nbd_devices_hash, key, dev);
         inserted = true;
@@ -648,6 +651,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
 map:
     save_ret = rep->exit;
+    dev->timeout = map->timeout;
     pthread_mutex_lock(&dev->lock);
     if (!handler->map(dev, rep)) {
         pthread_mutex_unlock(&dev->lock);
@@ -656,6 +660,7 @@ map:
 
     rep->size = dev->size;
     rep->blksize = dev->blksize;
+    INIT_LIST_HEAD(&dev->retry_io_queue);
     pthread_mutex_unlock(&dev->lock);
 
     if (!rep->exit)
@@ -884,11 +889,59 @@ err:
     return true;
 }
 
+static gpointer nbd_request_retry(gpointer data)
+{
+    struct nbd_device *dev = data;
+    struct nbd_handler_request *req, *tmp;
+    gint64 current_time;
+
+    while (!dev->stop_retry_thread) {
+        g_usleep(60000);
+        pthread_mutex_lock(&dev->retry_lock);
+        list_for_each_entry_safe(req, tmp, &dev->retry_io_queue, entry) {
+            current_time = g_get_monotonic_time();
+            if (current_time >= req->timer_expires) {
+                list_del(&req->entry);
+                dev->handler->handle_request(req, NULL);
+                }
+            }
+        pthread_mutex_unlock(&dev->retry_lock);
+    }
+
+    pthread_mutex_lock(&dev->retry_lock);
+    list_for_each_entry_safe(req, tmp, &dev->retry_io_queue, entry) {
+        list_del(&req->entry);
+        req->done(req, -EIO);
+        }
+     pthread_mutex_unlock(&dev->retry_lock);
+
+    return NULL;
+}
+
 void nbd_handle_request_done(struct nbd_handler_request *req, int ret)
 {
     struct nbd_reply reply;
     struct nbd_device *dev = req->dev;
 
+    if (ret == -EAGAIN && dev->timeout) {
+        gint64 current_time;
+        gint64 expire_interval = 2 * G_USEC_PER_SEC;
+        if (!req->retry_end_time)
+            req->retry_end_time = req->io_start_time + (dev->timeout * G_USEC_PER_SEC);
+        current_time = g_get_monotonic_time();
+        if (current_time + expire_interval >= req->retry_end_time) {
+            ret = -EIO;
+            goto done;
+        }
+        req->timer_expires = current_time + expire_interval;
+        INIT_LIST_HEAD(&req->entry);
+        pthread_mutex_lock(&dev->retry_lock);
+        list_add_tail(&req->entry, &dev->retry_io_queue);
+        pthread_mutex_unlock(&dev->retry_lock);
+        return;
+    }
+
+done:
     reply.magic = htonl(NBD_REPLY_MAGIC);
     reply.error = htonl(ret < 0 ? ret : 0);
     memcpy(&(reply.handle), &(req->handle), sizeof(req->handle));
@@ -972,6 +1025,13 @@ int nbd_handle_request(int sock, int threads)
         return -1;
     }
 
+    dev->retry_thread = g_thread_try_new("retry thread", nbd_request_retry, (gpointer)dev, NULL);
+
+    if (!dev->retry_thread) {
+        nbd_err("Creating device retry thread failed!\n");
+        goto err;
+    }
+
     while (1) {
         memset(&request, 0, sizeof(struct nbd_request));
         ret = nbd_socket_read(sock, &request,
@@ -1037,12 +1097,20 @@ int nbd_handle_request(int sock, int threads)
         if(req->cmd == NBD_CMD_WRITE)
             nbd_socket_read(sock, req->rwbuf, req->len);
 
+        req->io_start_time = g_get_monotonic_time();
+
         g_thread_pool_push(thread_pool, req, NULL);
     }
 
 err:
     free(key);
     g_thread_pool_free(thread_pool, false, true);
+    if (dev->retry_thread) {
+        dev->stop_retry_thread = 1;
+        g_thread_join(dev->retry_thread);
+        dev->retry_thread = 0;
+        dev->stop_retry_thread = 0;
+    }
     close(sock);
     return ret;
 }
@@ -1065,6 +1133,7 @@ static void free_value(gpointer value)
 
     pthread_mutex_destroy(&dev->sock_lock);
     pthread_mutex_destroy(&dev->lock);
+    pthread_mutex_destroy(&dev->retry_lock);
     free(dev);
 }
 

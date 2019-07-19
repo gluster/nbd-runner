@@ -733,6 +733,7 @@ int nbd_map_device(int count, char **options, int type)
                 nbd_err("Invalid timeout value!\n");
                 goto err;
             }
+            map->timeout = timeout;
 
             ind += 2;
         } else {

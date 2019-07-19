@@ -270,7 +270,7 @@ The Azure block driver allows the creation, deletion, and mapping of an NBD devi
 
     ` nbd-cli azblk create 'azure-storage-acct.blob.core.windows.net/test/test.vhd;sas=sv=2018-03-28&ss=bfqt&srt=sco&sp=rwdlacup&se=2019-07-31T22:20:06Z&st=2019-04-17T14:20:06Z&spr=https,http&sig=dEljadfjp923kaf9al09la%ajkhLKSDFer%3D;http' size 2G`
 
-3. Map the page blob to the NBD device (in the local host). You can specify an unmapped /dev/nbdXX or just omit it and then the NBD kernel module will allocate one for you.
+3. Map the page blob to the NBD device (in the local host). You can specify an unmapped /dev/nbdXX or just omit it and then the NBD kernel module will allocate one for you. NOTE: Timeouts should be set to 3 minutes at least when mapping to cloud devices.
 
     `$ nbd-cli azblk map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] <host RUNNER_HOST>`
 

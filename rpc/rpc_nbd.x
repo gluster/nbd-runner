@@ -32,6 +32,7 @@ struct nbd_delete {
 struct nbd_premap {
     handler_t     type;
     bool          readonly;
+    int           timeout;
     char          cfgstring[CFGS_MAX];
 };
 
