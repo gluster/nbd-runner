@@ -154,6 +154,7 @@ struct azblk_io_cb {
     struct list_head entry;
     struct curl_callback ctx;
     struct curl_slist *headers;
+    char errmsg[CURL_ERROR_SIZE];
     CURL *curl_ezh;
 };
 
@@ -248,32 +249,23 @@ static void azblk_multi_done(CURLM *curl_multi, CURLMsg *message)
     dev = io_cb->azdev->dev;
 
     if (message->data.result != CURLE_OK) {
-        if (io_cb->nbd_req->cmd == NBD_CMD_READ) {
-            nbd_dev_err(dev, "Curl GET error %s.\n",
-                     curl_easy_strerror(message->data.result));
+
+        curl_easy_getinfo(curl_ezh, CURLINFO_RESPONSE_CODE, &resp_code);
+
+        if (az_is_throttle(resp_code)) {
+            nbd_dev_dbg(dev, "Curl HTTP error %ld. Azure is throttling the IO.\n", resp_code);
+            ret = -EAGAIN;
         } else {
-            nbd_dev_err(dev, "Curl PUT error %s.\n",
-                     curl_easy_strerror(message->data.result));
+            nbd_dev_err(dev,"Curl HTTP error %ld.\n", resp_code);
+
+            if (io_cb->nbd_req->cmd == NBD_CMD_READ)
+                nbd_dev_err(dev, "Curl GET error %s.\n", io_cb->errmsg);
+            else
+                nbd_dev_err(dev, "Curl PUT error %s.\n", io_cb->errmsg);
+
+            ret = -EIO;
         }
-    ret = -EIO;
-    goto done;
     }
-
-    curl_easy_getinfo(curl_ezh, CURLINFO_RESPONSE_CODE, &resp_code);
-
-    if (az_is_done(resp_code))
-        goto done;
-
-    ret = -EIO;
-
-    if (az_is_throttle(resp_code)) {
-        nbd_dev_dbg(dev, "Curl HTTP error %ld. Azure is throttling the IO.\n", resp_code);
-        ret = -EAGAIN;
-    }
-    else
-        nbd_dev_err(dev,"Curl HTTP error %ld.\n", resp_code);
-
-done:
 
     curl_multi_remove_handle(curl_multi, curl_ezh);
     curl_slist_free_all(io_cb->headers);
@@ -1184,6 +1176,8 @@ static void azblk_read(struct nbd_handler_request *req)
         goto error;
     }
 
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_ERRORBUFFER, io_cb->errmsg);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_URL, azdev->read_request_url);
@@ -1239,6 +1233,11 @@ error:
     req->done(req, ret);
 }
 
+static size_t put_callback(void *data, size_t size, size_t nmemb, void *userp)
+{
+    return size * nmemb;
+}
+
 static void azblk_write(struct nbd_handler_request *req)
 {
     struct azblk_dev *azdev = req->dev->priv;
@@ -1265,6 +1264,8 @@ static void azblk_write(struct nbd_handler_request *req)
         goto error;
     }
 
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_ERRORBUFFER, io_cb->errmsg);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_URL, azdev->write_request_url);
@@ -1273,6 +1274,12 @@ static void azblk_write(struct nbd_handler_request *req)
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_POSTFIELDSIZE, req->len);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_USERAGENT,
                 "nbd-runner-azblk/1.0");
+
+    // Throw away any error return message data so it does not go to stdout
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_WRITEFUNCTION,
+             put_callback);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_WRITEDATA,
+             (void *)&io_cb->ctx);
 
     io_cb->headers = curl_slist_append(io_cb->headers,
                        "x-ms-version: 2018-03-28");
@@ -1348,6 +1355,8 @@ static void azblk_discard(struct nbd_handler_request *req)
         goto error;
     }
 
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_ERRORBUFFER, io_cb->errmsg);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_URL, azdev->write_request_url);
@@ -1355,6 +1364,11 @@ static void azblk_discard(struct nbd_handler_request *req)
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_USERAGENT,
              "nbd-runner-azblk/1.0");
 
+    // Throw away any error return message data so it does not go to stdout
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_WRITEFUNCTION,
+             put_callback);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_WRITEDATA,
+             (void *)&io_cb->ctx);
     io_cb->headers = curl_slist_append(io_cb->headers,
                        "x-ms-version: 2018-03-28");
 
