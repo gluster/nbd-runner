@@ -29,8 +29,7 @@ extra/*rpm
 
 cli/nbd-cli
 daemon/nbd-runner
-systemd/nbd-runner.service
-systemd/nbd-runner.initd
+nbd-runner.service
 
 cscope.*
 tags

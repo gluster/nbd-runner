@@ -7,7 +7,7 @@ After=network-online.target rpcbind.service
 [Service]
 Type=simple
 EnvironmentFile=-/etc/sysconfig/nbd-runner
-ExecStart=/usr/local/sbin/nbd-runner threads 2
+ExecStart=@prefix@/sbin/nbd-runner threads 2
 KillMode=process
 TimeoutStartSec=600
 

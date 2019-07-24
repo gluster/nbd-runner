@@ -2,19 +2,19 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = rpc utils cli daemon handlers
 
-DISTCLEANFILES = Makefile.in autom4te.cache
+DISTCLEANFILES = Makefile.in autom4te.cache nbd-runner.service
 
 EXTRA_DIST = autogen.sh README.md COPYING-GPLV2 COPYING-LGPLV3     \
 			 INSTALL nbd-runner.sysconfig.in nbd-runner.service.in \
 			 build-aux/pkg-version nbd-runner.8 nbd-cli.8
+
+systemd_DATA = nbd-runner.service
 
 man8_MANS = nbd-runner.8 nbd-cli.8
 
 install-data-local:
 	$(mkdir_p) $(DESTDIR)${sysconfigdir}
 	$(INSTALL_DATA) nbd-runner.sysconfig.in $(DESTDIR)${sysconfigdir}/nbd-runner
-	$(mkdir_p) $(DESTDIR)${systemddir}
-	$(INSTALL_DATA) nbd-runner.service.in $(DESTDIR)$(systemddir)/nbd-runner.service
 	$(mkdir_p) $(DESTDIR)${NBD_LOG_DIR_DEFAULT}
 	touch $(DESTDIR)$(NBD_LOG_DIR_DEFAULT)/nbd-runner.log
 	touch $(DESTDIR)$(NBD_LOG_DIR_DEFAULT)/nbd-runner-glfs.log
