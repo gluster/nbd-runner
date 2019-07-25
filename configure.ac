@@ -28,10 +28,9 @@ if test "x$prefix" = xNONE; then
 fi
 
 localstatedir="$(eval echo ${localstatedir})"
-LOCALSTATEDIR=${localstatedir}
 
-AC_DEFINE_UNQUOTED(NBD_LOG_DIR_DEFAULT, ["$LOCALSTATEDIR/log/nbd-runner"], [The default log directory])
-NBD_LOG_DIR_DEFAULT="${LOCALSTATEDIR}/log/nbd-runner"
+AC_DEFINE_UNQUOTED(NBD_LOG_DIR_DEFAULT, ["/var/log/nbd-runner"], [The default log directory])
+NBD_LOG_DIR_DEFAULT="/var/log/nbd-runner"
 AC_SUBST(NBD_LOG_DIR_DEFAULT)
 
 AC_ARG_WITH(sysconfigdir,
