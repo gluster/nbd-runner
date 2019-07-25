@@ -31,6 +31,7 @@ BuildRequires: libnl3-devel
 BuildRequires: libevent-devel
 BuildRequires: glib2-devel
 BuildRequires: json-c-devel
+BuildRequires: systemd
 
 %if %{with tirpc}
 BuildRequires: libtirpc-devel >= 1.0.0
