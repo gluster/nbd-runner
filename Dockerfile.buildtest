@@ -1,6 +1,6 @@
 # Dockerfile for testing the build of nbd-runner
 
-FROM fedora:29
+FROM fedora:30
 
 ENV BUILDDIR=/build
 RUN mkdir -p $BUILDDIR
@@ -14,7 +14,8 @@ RUN true \
            git autoconf automake gcc libtool make file \
            libevent-devel glib2-devel libnl3-devel     \
            glusterfs-api-devel kmod-devel json-c-devel \
-           libtirpc-devel rpcgen clang libuv-devel libcurl-devel \
+           libtirpc-devel rpcgen clang libuv-devel     \
+           libcurl-devel \
  && true
 
 # build
