@@ -94,5 +94,4 @@ enum {
 	__NBD_CMD_MAX,
 };
 #define NBD_CMD_MAX	(__NBD_CMD_MAX - 1)
-
 #endif /* _UAPILINUX_NBD_NETLINK_H */

@@ -28,8 +28,10 @@ extra/*rpm
 *.patch
 
 client/nbd-cli
+client/nbd-clid
 server/nbd-runner
 nbd-runner.service
+nbd-clid.service
 
 core.*
 cscope.*

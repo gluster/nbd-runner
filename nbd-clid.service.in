@@ -1,0 +1,15 @@
+[Unit]
+Description=Network Block Device Clid Daemon
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+PIDFile=/run/nbd-clid.pid
+EnvironmentFile=-/etc/sysconfig/nbd-clid
+ExecStart=@prefix@/sbin/nbd-clid
+KillMode=process
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

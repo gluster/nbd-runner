@@ -58,6 +58,7 @@ __attribute__ ((format (printf, 4, 5)))
 void _nbd_dbg_io_message(struct nbd_device *dev, const char *funcname, int linenr, const char *fmt, ...);
 __attribute__ ((format (printf, 3, 4)))
 void _nbd_fill_reply_message(struct nbd_response *rep, int exit, const char *fmt, ...);
+void _nbd_clid_fill_reply_message(struct cli_reply **rep, int exit, const char *fmt, ...);
 
 #define nbd_dev_crit(dev, ...)  do { _nbd_crit_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
 #define nbd_dev_err(dev, ...)  do { _nbd_err_message(dev, __func__, __LINE__, __VA_ARGS__);} while (0)
@@ -74,5 +75,6 @@ void _nbd_fill_reply_message(struct nbd_response *rep, int exit, const char *fmt
 #define nbd_dbg_io(...)  do { _nbd_dbg_io_message(NULL, __func__, __LINE__, __VA_ARGS__);} while (0)
 
 #define nbd_fill_reply(rep, exit, ...)  do { _nbd_fill_reply_message(rep, exit, __VA_ARGS__);} while (0)
+#define nbd_clid_fill_reply(rep, exit, ...)  do { _nbd_clid_fill_reply_message(rep, exit, __VA_ARGS__);} while (0)
 
 #endif /* __NBD_LOG_H */

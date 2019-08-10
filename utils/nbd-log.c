@@ -351,6 +351,40 @@ void _nbd_fill_reply_message(struct nbd_response *rep, int exit,
     va_end(args);
 }
 
+static void __nbd_clid_fill_reply_message(struct cli_reply **rep, int exit,
+                                          const char *fmt, va_list args)
+{
+    char *buf = NULL;
+    struct cli_reply *p;
+    int n;
+
+    if (!rep)
+        return;
+
+    n = vasprintf(&buf, fmt, args);
+
+    p = *rep = calloc(1, sizeof(struct cli_reply) + n + 1);
+    if (!(p))
+        goto out;
+
+    p->exit = exit;
+    p->len = n + 1;
+
+    memcpy(p->buf, buf, n);
+out:
+    free(buf);
+}
+
+void _nbd_clid_fill_reply_message(struct cli_reply **rep, int exit,
+                                  const char *fmt, ...)
+{
+    va_list args;
+
+    va_start(args, fmt);
+    __nbd_clid_fill_reply_message(rep, exit, fmt, args);
+    va_end(args);
+}
+
 static struct log_output *
 create_output(log_output_fn_t output_fn, log_close_fn_t close_fn, void *data,
               int pri)
