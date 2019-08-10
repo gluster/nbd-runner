@@ -15,7 +15,7 @@ enum handler_t {
 #define CFGS_MAX  1024
 #define PORT_MAX  32
 #define TLEN_MAX  32
-#define DLEN_MAX  16
+#define DLEN_MAX  32
 
 struct nbd_create {
     handler_t     htype;

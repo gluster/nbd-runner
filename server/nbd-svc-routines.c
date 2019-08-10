@@ -513,7 +513,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         g_usleep(NBD_RETRY_THREAD_THRESH);
         retry++;
     }
-    nbd_info("Retry %d times for waiting the device to be unmapped!");
+    nbd_info("Retry %d times for waiting the device to be unmapped!", retry);
 
     pthread_mutex_lock(&dev->lock);
     if (dev->status == NBD_DEV_CONN_ST_MAPPED) {

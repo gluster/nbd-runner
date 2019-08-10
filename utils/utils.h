@@ -31,6 +31,7 @@
 #include <netinet/in.h>
 #include <gmodule.h>
 #include "config.h"
+#include "strlcpy.h"
 
 #define NBD_LICENSE_INFO                                            \
 "Repository rev: https://github.com/gluster/nbd-runner.git\n"       \
