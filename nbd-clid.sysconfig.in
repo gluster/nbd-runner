@@ -18,8 +18,8 @@
 # log_dir = "/var/log/nbd-runner"
 #
 # Runner Host Address
-# The default listening IP address for RPC Control commands, such
-# as the nbd-cli [gluster|ceph|...] create/delete/map/unmap/list,
-# as default will listen on INADDR_ANY, uncomment it and set your
-# own IP:
+# The default host where the nbd-runner service is running and
+# listening for the RPC Control command requests, such as the
+# nbd-cli [gluster|ceph|...] create/delete/map/unmap/list commands
+# will try to connect to it. "localhost" as default.
 # rhost = ""

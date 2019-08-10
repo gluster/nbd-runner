@@ -1,0 +1,49 @@
+.TH nbd-clid 8
+.SH NAME
+.B nbd-clid
+.SH DESCRIPTION
+.B nbd-clid
+is a client side daemon, which will handle the cmd requests from nbd-cli and do the stale connections restore when the node or the nbd-runner is reboot
+
+.SH SYNOPSIS
+.B nbd-clid [OPTION]
+
+.SH OPTIONS
+.TP
+.B -r, --rhost=<RUNNER_HOST>
+Specify the host where the nbd-runner service is running and listening for the RPC Control command requests, such as create/delete/map/unmap/list, etc from the nbd-clid/nbd-cli side, "localhost" as default.
+
+.TP
+.B -u, --uid=<UID>
+Run as uid, default is current user
+
+.TP
+.B -g, --gid=<GID>
+Run as gid, default is current user group
+
+.TP
+.B -h, --help
+Display this help and exit
+
+.TP
+.B -v, --version
+Display version and exit
+
+.TP
+.B NOTE:
+The RUNNER_HOST will be useful if the nbd-runner and nbd-clid services are working
+on diffrent nodes.
+
+
+
+
+.SH SEE ALSO
+.BR nbd-runner (8),
+.BR nbd-cli (8),
+
+.SH AUTHOR
+Xiubo Li <xiubli@redhat.com>
+.SH REPORTING BUGS
+Report bugs via gluster-devel <gluster-devel@gluster.org>
+.br
+or <https://github.com/gluster/nbd-runner/issues>

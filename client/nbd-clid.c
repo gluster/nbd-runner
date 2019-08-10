@@ -42,7 +42,6 @@ nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
     struct nbd_create *create;
     struct nbd_response rep = {0,};
     struct addrinfo *res;
-    char *host = NULL;
     int sock = RPC_ANYSOCK;
     int ind;
     int len;
@@ -67,17 +66,7 @@ nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
         goto err;
     }
 
-    if (rhost)
-        host = strdup(rhost);
-    else
-        host = strdup("localhost");
-    if (!host) {
-        nbd_clid_fill_reply(cli_rep, -ENOMEM, "No memory for host!");
-        nbd_err("No memory for host!\n");
-        goto err;
-    }
-
-    res = nbd_get_sock_addr(host);
+    res = nbd_get_sock_addr(rhost);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -112,7 +101,6 @@ err:
         clnt_destroy(clnt);
     }
 
-    free(host);
     free(create);
 }
 
@@ -124,7 +112,6 @@ nbd_clid_delete_backstore(int htype, const char *cfg, const char *rhost,
     struct nbd_delete *delete;
     struct nbd_response rep = {0,};
     struct addrinfo *res;
-    char *host = NULL;
     int sock = RPC_ANYSOCK;
     int len;
     int max_len = 1024;
@@ -145,17 +132,7 @@ nbd_clid_delete_backstore(int htype, const char *cfg, const char *rhost,
         goto err;
     }
 
-    if (rhost)
-        host = strdup(rhost);
-    else
-        host = strdup("localhost");
-    if (!host) {
-        nbd_clid_fill_reply(cli_rep, -ENOMEM, "No memory for host!");
-        nbd_err("No memory for host!\n");
-        goto err;
-    }
-
-    res = nbd_get_sock_addr(host);
+    res = nbd_get_sock_addr(rhost);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -190,7 +167,6 @@ err:
         clnt_destroy(clnt);
     }
 
-    free(host);
     free(delete);
 }
 
@@ -264,10 +240,8 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
     nla_nest_end(msg, sock_attr);
 
     if ((ret = nl_send_sync(netfd, msg)) < 0) {
-//        if (ret != -ENOTTY) {
-            nbd_err("Failed to setup device, check dmesg, %d!\n", ret);
-            goto nla_put_failure;
-//        }
+        nbd_err("Failed to setup device, check dmesg, %d!\n", ret);
+        goto nla_put_failure;
     }
 
     return 0;
@@ -366,18 +340,9 @@ static int unmap_device(struct nl_sock *netfd, int driver_id, int index)
             NBD_CMD_DISCONNECT, 0);
     NLA_PUT_U32(msg, NBD_ATTR_INDEX, index);
     if ((ret = nl_send_sync(netfd, msg)) < 0) {
-        /*
-         * There will be 16 nbd device created when the nbd.ko
-         * is loading as default, if the dead backstore mapped
-         * to have higher number than 15 and after the client
-         * node is restart or the module is reloaded, the kernel
-         * will return ENOENT
-         */
-//        if (ret != -ENOENT) {
-            nbd_err("Failed to disconnect device, check dmsg, %d\n", ret);
-            ret = -1;
-            goto nla_put_failure;
-//        }
+        nbd_err("Failed to disconnect device, check dmsg, %d\n", ret);
+        ret = -1;
+        goto nla_put_failure;
     }
 
     nbd_info("Unmap '/dev/nbd%d' succeeded!\n", index);
@@ -431,7 +396,6 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
     struct nbd_premap *map;
     struct nbd_response rep = {0,};
     struct addrinfo *res;
-    char *host = NULL;
     int sock = RPC_ANYSOCK;
     int tmp_index;
     int timeout = 30; //This is the default timeout value in kernel space for each IO request
@@ -445,7 +409,7 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
     int count;
 
     nbd_info("Map request htype: %d, cfg: %s, nbd_index: %d, readonly: %d, rhost: %s\n",
-             htype, cfg, nbd_index, readonly, rhost ? rhost : "localhost");
+             htype, cfg, nbd_index, readonly, rhost);
 
     if (nbd_index < -1)
         nbd_index = -1;
@@ -468,17 +432,7 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
         goto err;
     }
 
-    if (rhost)
-        host = strdup(rhost);
-    else
-        host = strdup("localhost");
-    if (!host) {
-        nbd_clid_fill_reply(cli_rep, -ENOMEM, "No memory for host!");
-        nbd_err("No memory for host!\n");
-        goto err;
-    }
-
-    res = nbd_get_sock_addr(host);
+    res = nbd_get_sock_addr(rhost);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -580,7 +534,6 @@ err:
         clnt_destroy(clnt);
     }
 
-    free(host);
     free(map);
 }
 
@@ -591,7 +544,6 @@ nbd_clid_unmap_device(int htype, const char *cfg, int nbd_index,
     CLIENT *clnt = NULL;
     struct nbd_response rep = {0,};
     struct addrinfo *res;
-    char *host = NULL;
     int sock = RPC_ANYSOCK;
     struct nbd_unmap *unmap = NULL;
     struct nl_sock *netfd = NULL;
@@ -624,17 +576,7 @@ nbd_clid_unmap_device(int htype, const char *cfg, int nbd_index,
         }
     }
 
-    if (rhost)
-        host = strdup(rhost);
-    else
-        host = strdup("localhost");
-    if (!host) {
-        nbd_clid_fill_reply(cli_rep, -ENOMEM, "No memory for host!");
-        nbd_err("No memory for host!\n");
-        goto err;
-    }
-
-    res = nbd_get_sock_addr(host);
+    res = nbd_get_sock_addr(rhost);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -701,7 +643,6 @@ err:
         clnt_destroy(clnt);
     }
 
-    free(host);
     free(unmap);
 }
 
@@ -712,7 +653,6 @@ nbd_clid_list_devices(handler_t htype, const char *rhost, struct cli_reply **cli
     CLIENT *clnt = NULL;
     struct addrinfo *res;
     struct nbd_response rep = {0,};
-    char *host = NULL;
     int sock = RPC_ANYSOCK;
     struct nbd_list list = {.htype = htype};
     int driver_id;
@@ -721,19 +661,9 @@ nbd_clid_list_devices(handler_t htype, const char *rhost, struct cli_reply **cli
     int count = 0;
 
     nbd_info("List request htype: %d, do_retry: %d, rhost: %s\n",
-             htype, do_retry, rhost ? rhost : "localhost");
+             htype, do_retry, rhost);
 
-    if (rhost)
-        host = strdup(rhost);
-    else
-        host = strdup("localhost");
-    if (!host) {
-        nbd_clid_fill_reply(cli_rep, -ENOMEM, "No memory for host!");
-        nbd_err("No memory for host!\n");
-        goto nla_put_failure;
-    }
-
-    res = nbd_get_sock_addr(host);
+    res = nbd_get_sock_addr(rhost);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -770,13 +700,12 @@ nla_put_failure:
             clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response, (char *)&rep);
         clnt_destroy(clnt);
     }
-
-    free(host);
 }
 
 static void *nbd_clid_connections_restore(void *arg)
 {
     struct cli_reply *cli_rep = NULL;
+    struct nbd_config *nbd_cfg = arg;
     json_object *globalobj = NULL;
     json_object *dobj = NULL;
     json_object *obj = NULL;
@@ -784,10 +713,8 @@ static void *nbd_clid_connections_restore(void *arg)
     bool readonly;
     const char *tmp, *cfg;
     int nbd_index;
-    char *rhost = NULL;
     int count = 0;
 
-    /* TODO: rhost ? local host only for now */
     /*
      * Retry and wait 5 seconds
      *
@@ -797,7 +724,7 @@ static void *nbd_clid_connections_restore(void *arg)
      */
 retry:
     free(cli_rep);
-    nbd_clid_list_devices(NBD_BACKSTORE_MAX, rhost, &cli_rep, true);
+    nbd_clid_list_devices(NBD_BACKSTORE_MAX, nbd_cfg->rhost, &cli_rep, true);
     if (!cli_rep) {
         nbd_err("nbd_clid_list_devices failed, no memory!\n");
         return NULL;
@@ -840,7 +767,7 @@ retry:
             free(cli_rep);
             cli_rep = NULL;
             nbd_clid_map_device(htype, cfg, nbd_index, readonly,
-                                rhost, &cli_rep);
+                                nbd_cfg->rhost, &cli_rep);
             if (cli_rep && cli_rep->exit) {
                 nbd_err("nbd_clid_map_device failed, %s!\n", cli_rep->buf);
                 goto out;
@@ -856,7 +783,7 @@ out:
 }
 
 static struct option const long_options[] = {
-	{"debug", required_argument, NULL, 'd'},
+	{"rhost", required_argument, NULL, 'r'},
 	{"uid", required_argument, NULL, 'u'},
 	{"gid", required_argument, NULL, 'g'},
 	{"help", no_argument, NULL, 'h'},
@@ -866,20 +793,20 @@ static struct option const long_options[] = {
 
 static void usage(void)
 {
-    nbd_info("Usage:\n"
-             "\tnbd-clid [<args>]\n\n"
-             "Commands:\n"
-             "\t-d, --debug debuglevel\n"
-             "\t\tprint debugging information\n\n"
-             "\t-u, --uid=uid\n"
-             "\t\trun as uid, default is current user\n\n"
-             "\t-g, --gid=gid\n"
-             "\t\trun as gid, default is current user group\n\n"
-             "\t-h, --help\n"
-             "\t\tdisplay this help and exit\n\n"
-             "\t-v, --version\n"
-             "\t\tdisplay version and exit\n\n"
-            );
+    printf("Usage:\n"
+           "\tnbd-clid [<args>]\n\n"
+           "Commands:\n"
+           "\t-r, --rhost=<RUNNER_HOST>\n"
+           "\t\tSpecify the listenning IP for the nbd-runner server who are handling the\n\t\tcommands of create/delete/map/unmap/list, etc from nbd-clid and IO requests\n\t\tfrom nbd.ko, 'localhost' as default\n\n"
+           "\t-u, --uid=<UID>\n"
+           "\t\tRun as uid, default is current user\n\n"
+           "\t-g, --gid=<GID>\n"
+           "\t\tRun as gid, default is current user group\n\n"
+           "\t-h, --help\n"
+           "\t\tDisplay this help and exit\n\n"
+           "\t-v, --version\n"
+           "\t\tDisplay version and exit\n\n"
+          );
 }
 
 static int nbd_setup_pid_file(void)
@@ -927,13 +854,14 @@ static void event_loop_exit(void)
 	event_loop_stop = 1;
 }
 
-static int nbd_clid_ipc_handle(int fd)
+static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
 {
     struct cli_request req;
     struct cli_reply *cli_rep = NULL;
-    int sock;
+    const char *rhost = nbd_cfg->rhost;
     char *buf;
     int ret = 0;
+    int sock;
 
     sock = accept(fd, NULL, NULL);
     if (sock < 0) {
@@ -950,27 +878,31 @@ static int nbd_clid_ipc_handle(int fd)
         goto out;
     }
 
+    /* Use the rhost from nbd-cli if exist */
+    if (nbd_is_valid_host(req.rhost))
+        rhost = req.rhost;
+
     switch (req.cmd) {
     case NBD_CLI_CREATE:
         nbd_clid_create_backstore(req.htype, req.create.cfgstring,
                                   req.create.size, req.create.prealloc,
-                                  req.rhost, &cli_rep);
+                                  rhost, &cli_rep);
         break;
     case NBD_CLI_DELETE:
-        nbd_clid_delete_backstore(req.htype, req.delete.cfgstring, req.rhost,
+        nbd_clid_delete_backstore(req.htype, req.delete.cfgstring, rhost,
                                   &cli_rep);
         break;
     case NBD_CLI_MAP:
         nbd_clid_map_device(req.htype, req.map.cfgstring,
                             req.map.nbd_index, req.map.readonly,
-                            req.rhost, &cli_rep);
+                            rhost, &cli_rep);
         break;
     case NBD_CLI_UNMAP:
         nbd_clid_unmap_device(req.htype, req.unmap.cfgstring,
-                              req.unmap.nbd_index, req.rhost, &cli_rep);
+                              req.unmap.nbd_index, rhost, &cli_rep);
         break;
     case NBD_CLI_LIST:
-        nbd_clid_list_devices(req.htype, req.rhost, &cli_rep, false);
+        nbd_clid_list_devices(req.htype, rhost, &cli_rep, false);
         break;
     default:
         break;
@@ -989,7 +921,7 @@ out:
     return ret;
 }
 
-static void nbd_event_loop(int fd)
+static void nbd_event_loop(int fd, const struct nbd_config *nbd_cfg)
 {
 	struct pollfd pfd;
     struct timespec tmo;
@@ -1017,7 +949,7 @@ static void nbd_event_loop(int fd)
             return;
         }
 
-        if (nbd_clid_ipc_handle(fd)) {
+        if (nbd_clid_ipc_handle(fd, nbd_cfg)) {
             return;
         }
 	} while (!event_loop_stop);
@@ -1061,11 +993,16 @@ int main(int argc, char *argv[])
 
     nbd_crit("Starting...\n");
 
-	while ((ch = getopt_long(argc, argv, "d:u:g:vh", long_options,
+	while ((ch = getopt_long(argc, argv, "r:u:g:vh", long_options,
 				 &longindex)) >= 0) {
 		switch (ch) {
-		case 'd':
-			log_level = atoi(optarg);
+		case 'r':
+            snprintf(nbd_cfg->rhost, NBD_HOST_MAX, "%s", optarg);
+
+            if (!nbd_is_valid_host(optarg)) {
+                nbd_err("Invalid rhost IP %s!\n", optarg);
+                goto out;
+            }
 			break;
 		case 'g':
 			gid = strtoul(optarg, NULL, 10);
@@ -1074,14 +1011,14 @@ int main(int argc, char *argv[])
 			uid = strtoul(optarg, NULL, 10);
 			break;
 		case 'v':
-            nbd_info("nbd-clid (%s)\n\n", VERSION);
-            nbd_info("%s\n", NBD_LICENSE_INFO);
+            printf("nbd-clid (%s)\n\n", VERSION);
+            printf("%s\n", NBD_LICENSE_INFO);
 			exit(0);
 		case 'h':
 			usage();
 			exit(0);
 		default:
-		    nbd_err("Try 'nbd-clid -h/--help' for more information.\n");
+		    printf("Try 'nbd-clid -h/--help' for more information.\n");
 			exit(1);
         }
     }
@@ -1132,9 +1069,9 @@ int main(int argc, char *argv[])
      * NOTE: the restore thread may take a while to be finished
      * due to the known kernel issue.
      */
-    pthread_create(&restore_threadid, NULL, nbd_clid_connections_restore, NULL);
+    pthread_create(&restore_threadid, NULL, nbd_clid_connections_restore, nbd_cfg);
 
-	nbd_event_loop(clid_ipc_fd);
+	nbd_event_loop(clid_ipc_fd, nbd_cfg);
 
     pthread_join(restore_threadid, NULL);
 

@@ -17,6 +17,13 @@
 # uncomment it and set your own path:
 # log_dir = "/var/log/nbd-runner"
 #
+# Runner Host Address
+# The default listening IP address for the RPC Control command
+# requests from nbd-clid/nbd-cli. Such as the following commands:
+# nbd-cli [gluster|ceph|azblk] create/delete/map/unmap/list
+# will try to connect to it. INADDR_ANY as default.
+# rhost = ""
+#
 # IO Host Address
 # The default listening IP address for NBD devices' connection to
 # do the IOs, as default will listen on INADDR_ANY, uncomment it

@@ -3,8 +3,7 @@
 .B nbd-cli
 .SH DESCRIPTION
 .B nbd-cli
-is a cli utility, which aims at making backstore creation/deletion/mapping/
-unmaping/listing.
+is a cli utility, which aims at making backstore creation/deletion/mapping/unmaping/listing.
 
 .SH SYNOPSIS
 .B nbd-cli [OPTION] [COMMAND [OPTIONS]]
@@ -14,6 +13,10 @@ unmaping/listing.
 .TP
 .B gluster help
 Display help for gluster commands
+
+.TP
+.B azblk help
+Display help for azblk commands
 
 .TP
 .B ceph help [TODO]
@@ -44,30 +47,51 @@ be 'localhost' as default
 Delete FILEPATH from the VOLUME, RUNNER_HOST will be 'localhost' as default
 
 .TP
-.B
-gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]
+.B gluster map <VOLUME/FILEPATH> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]
 Map FILEPATH to the nbd device, as default the timeout 0, none readonly, RUNNER_HOST
 will be 'localhost' as default
 
 .TP
-.B
-gluster unmap <nbd-device|VOLUME/FILEPATH> [host RUNNER_HOST]
+.B gluster unmap <nbd-device|VOLUME/FILEPATH> [host RUNNER_HOST]
 Unmap the nbd device or VOLUME/FILEPATH, RUNNER_HOST will be 'localhost' as default
 
 .TP
-.B
-gluster list [map|unmap|create|dead|live|all] [host RUNNER_HOST]
-List the mapped|unmapped NBD devices or the backstores which are in created state or
-which the connections are in dead|live state, 'all' as default. 'create' means the
-backstores are just created or unmapped. 'dead' means the socket connection is lost,
-which mainly dues to the nbd-runner service was restart without unmapping. 'live' means
-everything is okay for both mapping and socket connection, RUNNER_HOST will be 'localhost'
-as default
+.B gluster list [inuse|free|create|dead|live|all] [host RUNNER_HOST]
+List the inuseded|free NBD devices or the backstores which are in created state or which the connections are in dead|live state, 'all' as default. 'create' means the backstores are just created or unmapped. 'dead' means the socket connection is lost, which mainly dues to the nbd-runner service was restart without unmapping. 'live' means everything is okay for both mapping and socket connection, RUNNER_HOST will be 'localhost' as default
 
+.SH NBD-CLI AZBLK COMMANDS
+.TP
+.B azblk help
+Display help for azblk commands
+
+.TP
+.B azblk create <'account.blob.core.windows.net/container/vhd[;option1][;option2']> [prealloc] <size SIZE> [host RUNNER_HOST]
+Create the vhd file in your storage account container, prealloc is false as default, and the SIZE is valid with B, K(iB), M(iB), G(iB), T(iB), RUNNER_HOST will be 'localhost' as default
+
+Valid options:
+.I sas=SAS_STRING
+.I lease=LEASE_ID
+.I http https is the default
+
+.TP
+.B azblk delete <account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]
+Delete the vhd file from your storage account container, RUNNER_HOST will be 'localhost' as default
+
+.TP
+.B azblk map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]
+Map the vhd to the nbd device, as default the socket connection timeout is 30 seconds, none readonly, RUNNER_HOST will be 'localhost' as default
+
+.TP
+.B azblk unmap <nbd-device|<account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]
+Unmap the nbd device or account/container/vhd, RUNNER_HOST will be 'localhost' as default
+
+.TP
+.B azblk list [inuse|free|create|dead|live|all] [host RUNNER_HOST]
+List the inused|free NBD devices or the backstores which are in created state or which the connections are in dead|live state, 'all' as default. 'create' means the backstores are just created or unmapped. 'dead' means the socket connection is lost, which mainly dues to the nbd-runner service was restart without unmapping. 'live' means everything is okay for both mapping and socket connection, RUNNER_HOST will be 'localhost' as default
 
 .SH SEE ALSO
-.BR gluster (8),
 .BR nbd-runner (8),
+.BR nbd-clid (8),
 
 .SH AUTHOR
 Xiubo Li <xiubli@redhat.com>
