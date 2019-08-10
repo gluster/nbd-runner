@@ -368,8 +368,8 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     key = strdup(create->cfgstring);
     if (!key) {
-        nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", create->cfgstring);
-        nbd_err("Invalid cfgstring %s!\n", create->cfgstring);
+        nbd_fill_reply(rep, -ENOMEM, "No memory to dup %s!", create->cfgstring);
+        nbd_err("No memory to dup %s!\n", create->cfgstring);
         return true;
     }
 
@@ -383,8 +383,9 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     dev = calloc(1, sizeof(struct nbd_device));
     if (!dev) {
-        nbd_fill_reply(rep, -ENOMEM, "No memory for nbd_device!");
-        nbd_err("No memory for nbd_device!\n");
+        nbd_fill_reply(rep, -ENOMEM, "No memory for nbd_device for %s!",
+                       create->cfgstring);
+        nbd_err("No memory for nbd_device for %s!\n", create->cfgstring);
         goto err_key;
     }
 
@@ -512,6 +513,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         g_usleep(NBD_RETRY_THREAD_THRESH);
         retry++;
     }
+    nbd_info("Retry %d times for waiting the device to be unmapped!");
 
     pthread_mutex_lock(&dev->lock);
     if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
@@ -597,6 +599,10 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         } else if (dev->status == NBD_DEV_CONN_ST_MAPPING) {
             nbd_fill_reply(rep, -EBUSY, "%s already in mapping state!", key);
             nbd_err("%s already in mapping state!\n", key);
+            goto err;
+        } else if (dev->status == NBD_DEV_CONN_ST_UNMAPPING) {
+            nbd_fill_reply(rep, -EBUSY, "%s is still in unmapping state!", key);
+            nbd_err("%s is still in in unmapping state!\n", key);
             goto err;
         } else if (dev->status == NBD_DEV_CONN_ST_DEAD) {
             nbd_fill_reply(rep, -EEXIST, "%s", dev->nbd);
