@@ -725,6 +725,8 @@ static void *nbd_ping_liveness_start(void *arg)
     nbd_info("rhost: %s, ping_interval is %d\n", nbd_cfg->rhost, nbd_cfg->ping_interval);
 
     while (1) {
+        sleep(nbd_cfg->ping_interval);
+
         sock = nbd_connect_to_server(nbd_cfg->rhost, NBD_PING_SVC_PORT);
         if (sock < 0) {
             nbd_err("The nbd-runner daemon is down, sock: %d!\n", sock);
@@ -740,8 +742,6 @@ static void *nbd_ping_liveness_start(void *arg)
             }
             close(sock);
         }
-
-        sleep(nbd_cfg->ping_interval);
     }
 
     nbd_info("nbd ping liveness thread exits!\n");
