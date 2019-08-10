@@ -19,6 +19,7 @@
 #include <sys/utsname.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <linux/nbd-netlink.h>
 #include <arpa/inet.h>
 #include <netlink/netlink.h>
 #include <libnl3/netlink/genl/genl.h>
@@ -29,7 +30,6 @@
 #include "rpc_nbd.h"
 #include "utils.h"
 #include "nbd-log.h"
-#include "nbd-netlink.h"
 #include "nbd-cli-common.h"
 
 static void free_key(gpointer key)

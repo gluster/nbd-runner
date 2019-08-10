@@ -1,6 +1,6 @@
 sbin_PROGRAMS = nbd-cli nbd-clid
 
-noinst_HEADERS = nbd-netlink.h nbd-cli-common.h ipc.h
+noinst_HEADERS = nbd-cli-common.h ipc.h
 
 nbd_cli_SOURCES = nbd-cli.c nbd-cli-common.c gluster.c azblk.c ipc.c
 nbd_clid_SOURCES = nbd-clid.c nbd-cli-common.c ipc.c

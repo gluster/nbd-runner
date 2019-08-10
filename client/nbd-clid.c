@@ -16,6 +16,7 @@
 #include <grp.h>
 #include <unistd.h>
 #include <linux/nbd.h>
+#include <linux/nbd-netlink.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -31,9 +32,7 @@
 #include "rpc_nbd.h"
 #include "utils.h"
 #include "nbd-log.h"
-#include "nbd-netlink.h"
 #include "nbd-cli-common.h"
-#include "nbd-netlink.h"
 #include "ipc.h"
 
 #define NBD_CLID_PID_FILE_DEFAULT "/run/nbd-clid.pid"
@@ -295,6 +294,10 @@ retry:
     NLA_PUT_U64(msg, NBD_ATTR_BLOCK_SIZE_BYTES,
                 blk_size ? blk_size : NBD_DEFAULT_SECTOR_SIZE);
     NLA_PUT_U64(msg, NBD_ATTR_SERVER_FLAGS, flags);
+
+    /* Release/remove the nbd device when disconnected */
+    NLA_PUT_U64(msg, NBD_ATTR_CLIENT_FLAGS, NBD_CFLAG_DESTROY_ON_DISCONNECT);
+
     if (timeout)
         NLA_PUT_U64(msg, NBD_ATTR_TIMEOUT, timeout);
 

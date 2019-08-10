@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <linux/nbd.h>
+#include <linux/nbd-netlink.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -34,7 +35,6 @@
 #include "rpc_nbd.h"
 #include "utils.h"
 #include "nbd-log.h"
-#include "nbd-netlink.h"
 #include "ipc.h"
 
 static GPtrArray *cmds_list;
