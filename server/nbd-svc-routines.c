@@ -52,6 +52,7 @@ static char *ihost;
 int iport = NBD_MAP_SVC_PORT;
 
 #define NBD_NL_VERSION 1
+#define NBD_RETRY_THREAD_THRESH 60000
 
 static void nbd_gfree_data(gpointer data)
 {
@@ -442,6 +443,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     struct nbd_device *dev = NULL;
     struct nbd_handler *handler;
     char *key = NULL;
+    int retry;
 
     nbd_info("Delete request type %d, cfg: %s\n", delete->type,
              delete->cfgstring);
@@ -501,10 +503,25 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         goto err;
     }
 
+    /*
+     * Wait for about "NBD_RETRY_THREAD_THRESH * 50" microseconds to
+     * wait the dev->retry_thread to be totally stopped to avoid crash.
+     */
+    retry = 0;
+    while (dev->status == NBD_DEV_CONN_ST_UNMAPPING && retry < 50) {
+        g_usleep(NBD_RETRY_THREAD_THRESH);
+        retry++;
+    }
+
     pthread_mutex_lock(&dev->lock);
     if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
         nbd_fill_reply(rep, -EPERM, "Device %s is still mapped, please unmap it first!", key);
         nbd_err("Device %s is still mapped, please unmap it first!\n", key);
+        pthread_mutex_unlock(&dev->lock);
+        goto err;
+    } else if (dev->status == NBD_DEV_CONN_ST_MAPPING) {
+        nbd_fill_reply(rep, -EAGAIN, "Device %s is still unmapping, please try it again later!", key);
+        nbd_err("Device %s is still unmapping, please try it again first!\n", key);
         pthread_mutex_unlock(&dev->lock);
         goto err;
     }
@@ -517,6 +534,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     if (!handler->delete(dev, rep)) {
         if (rep->exit != -ENOENT) {
             nbd_err("Failed to delete device %s!\n", key);
+            pthread_mutex_unlock(&dev->lock);
             goto err;
         }
 
@@ -573,8 +591,12 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (dev) {
         if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
-            nbd_fill_reply(rep, -EBUSY, "%s already map to %s!", key, dev->nbd);
+            nbd_fill_reply(rep, -EBUSY, "%s already mapped to %s!", key, dev->nbd);
             nbd_err("%s already map to %s!\n", key, dev->nbd);
+            goto err;
+        } else if (dev->status == NBD_DEV_CONN_ST_MAPPING) {
+            nbd_fill_reply(rep, -EBUSY, "%s already in mapping state!", key);
+            nbd_err("%s already in mapping state!\n", key);
             goto err;
         } else if (dev->status == NBD_DEV_CONN_ST_DEAD) {
             nbd_fill_reply(rep, -EEXIST, "%s", dev->nbd);
@@ -634,6 +656,7 @@ map:
     save_ret = rep->exit;
     dev->timeout = map->timeout;
     pthread_mutex_lock(&dev->lock);
+    dev->status = NBD_DEV_CONN_ST_MAPPING;
     if (!handler->map(dev, rep)) {
         pthread_mutex_unlock(&dev->lock);
         goto err;
@@ -753,7 +776,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     }
 
     pthread_mutex_lock(&dev->lock);
-    dev->status = NBD_DEV_CONN_ST_CREATED;
+    dev->status = NBD_DEV_CONN_ST_UNMAPPING;
     dev->nbd[0] = '\0';
     dev->time[0] = '\0';
     nbd_update_json_config_file(dev, true);
@@ -885,15 +908,15 @@ static gpointer nbd_request_retry(gpointer data)
     gint64 current_time;
 
     while (!dev->stop_retry_thread) {
-        g_usleep(60000);
+        g_usleep(NBD_RETRY_THREAD_THRESH);
         pthread_mutex_lock(&dev->retry_lock);
         list_for_each_entry_safe(req, tmp, &dev->retry_io_queue, entry) {
             current_time = g_get_monotonic_time();
             if (current_time >= req->timer_expires) {
                 list_del(&req->entry);
                 dev->handler->handle_request(req, NULL);
-                }
             }
+        }
         pthread_mutex_unlock(&dev->retry_lock);
     }
 
@@ -901,8 +924,8 @@ static gpointer nbd_request_retry(gpointer data)
     list_for_each_entry_safe(req, tmp, &dev->retry_io_queue, entry) {
         list_del(&req->entry);
         req->done(req, -EIO);
-        }
-     pthread_mutex_unlock(&dev->retry_lock);
+    }
+    pthread_mutex_unlock(&dev->retry_lock);
 
     return NULL;
 }
@@ -915,15 +938,19 @@ void nbd_handle_request_done(struct nbd_handler_request *req, int ret)
     if (ret == -EAGAIN && dev->timeout) {
         gint64 current_time;
         gint64 expire_interval = 2 * G_USEC_PER_SEC;
+
         if (!req->retry_end_time)
             req->retry_end_time = req->io_start_time + (dev->timeout * G_USEC_PER_SEC);
+
         current_time = g_get_monotonic_time();
         if (current_time + expire_interval >= req->retry_end_time) {
             ret = -EIO;
             goto done;
         }
+
         req->timer_expires = current_time + expire_interval;
         INIT_LIST_HEAD(&req->entry);
+
         pthread_mutex_lock(&dev->retry_lock);
         list_add_tail(&req->entry, &dev->retry_io_queue);
         pthread_mutex_unlock(&dev->retry_lock);
@@ -1094,12 +1121,19 @@ int nbd_handle_request(int sock, int threads)
 err:
     free(key);
     g_thread_pool_free(thread_pool, false, true);
+
     if (dev->retry_thread) {
         dev->stop_retry_thread = 1;
         g_thread_join(dev->retry_thread);
         dev->retry_thread = 0;
         dev->stop_retry_thread = 0;
     }
+
+    /* After unmap, the status will be back to created */
+    pthread_mutex_lock(&dev->lock);
+    dev->status = NBD_DEV_CONN_ST_CREATED;
+    pthread_mutex_unlock(&dev->lock);
+
     close(sock);
     return ret;
 }
