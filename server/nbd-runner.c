@@ -329,7 +329,7 @@ int main (int argc, char **argv)
         }
     }
 
-    if (nbd_setup_log(nbd_cfg->log_dir))
+    if (nbd_setup_log(nbd_cfg->log_dir, true))
         goto out;
 
     nbd_crit("Starting...\n");

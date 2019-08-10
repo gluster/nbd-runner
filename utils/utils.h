@@ -41,8 +41,8 @@
 "or later), or the GNU General Public License, version 2 (GPLv2),\n"\
 "in all cases as published by the Free Software Foundation."
 
-#define NBD_RPC_SVC_PORT     24110
-#define NBD_MAP_SVC_PORT     24111
+#define NBD_RPC_SVC_PORT     25110
+#define NBD_MAP_SVC_PORT     25111
 
 #define NBD_DEFAULT_SECTOR_SIZE  512
 

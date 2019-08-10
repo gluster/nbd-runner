@@ -1,7 +1,7 @@
 [Unit]
 Description=Network Block Device Clid Daemon
-Wants=network-online.target
-After=network-online.target
+Wants=network-online.target nbd-runner.service
+After=network-online.target nbd-runner.service
 
 [Service]
 Type=simple

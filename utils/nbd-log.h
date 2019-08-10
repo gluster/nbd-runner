@@ -40,7 +40,7 @@
 
 struct nbd_device;
 
-int nbd_setup_log(char *log_dir);
+int nbd_setup_log(char *log_dir, bool server);
 void nbd_destroy_log(void);
 void nbd_set_log_level(int level);
 

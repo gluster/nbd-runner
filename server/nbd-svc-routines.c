@@ -758,7 +758,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     if (unmap->nbd[0]) {
         dev = g_hash_table_lookup(nbd_nbds_hash, unmap->nbd);
         if (!dev) {
-            nbd_fill_reply(rep, -errno, "There is no maping for '%s'!",
+            nbd_fill_reply(rep, -EEXIST, "there is no maping for '%s'!",
                            unmap->nbd);
             nbd_warn("There is no maping for '%s'!\n", unmap->nbd);
             goto out;
@@ -838,7 +838,8 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     {
         dev = value;
         pthread_mutex_lock(&dev->lock);
-        if (list->htype != dev->htype) {
+        /* NBD_BACKSTORE_MAX for the mapping restore in nbd-clid */
+        if (list->htype != NBD_BACKSTORE_MAX && list->htype != dev->htype) {
             pthread_mutex_unlock(&dev->lock);
             continue;
         }
