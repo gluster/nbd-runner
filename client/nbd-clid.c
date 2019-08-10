@@ -460,6 +460,7 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readon
 {
     CLIENT *clnt = NULL;
     struct nbd_premap *map;
+    struct nbd_postmap postmap = {0,};
     struct nbd_response rep = {0,};
     struct addrinfo *res = NULL;
     int sock = RPC_ANYSOCK;
@@ -576,10 +577,22 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readon
     }
 
 err:
-    if (ret)
-        nbd_err("Map failed!\n");
-    else
+    if (ret) {
+        nbd_err("Map failed, %s!\n", rep.buf);
+        if (clnt) {
+            if (rep.buf)
+                clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response, (char *)&rep);
+        }
+
+        postmap.htype = htype;
+        strcpy(postmap.cfgstring, cfg);
+        if (nbd_postmap_1(&postmap, &rep, clnt) != RPC_SUCCESS) {
+            if (rep.exit && rep.buf)
+                nbd_err("nbd_postmap_1 failed: %s!\n", rep.buf);
+        }
+    } else {
         nbd_info("Map succeeded!\n");
+    }
 
     /* We will keep the sockfd opened if succeeded */
     if (sockfd >= 0)

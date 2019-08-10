@@ -735,11 +735,17 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
     }
 
     pthread_mutex_lock(&dev->lock);
-    dev->status = NBD_DEV_CONN_ST_MAPPED;
-    strcpy(dev->time, map->time);
-    strcpy(dev->nbd, map->nbd);
-    nbd = strdup(dev->nbd);
-    g_hash_table_insert(nbd_nbds_hash, nbd, dev);
+    if (!map->nbd[0]) {
+        /* Rollback to CREATED state */
+        nbd_info("Map failed and falling back to CREATED state!\n");
+        dev->status = NBD_DEV_CONN_ST_CREATED;
+    } else {
+        dev->status = NBD_DEV_CONN_ST_MAPPED;
+        strcpy(dev->time, map->time);
+        strcpy(dev->nbd, map->nbd);
+        nbd = strdup(dev->nbd);
+        g_hash_table_insert(nbd_nbds_hash, nbd, dev);
+    }
     nbd_update_json_config_file(dev, true);
     pthread_mutex_unlock(&dev->lock);
 
