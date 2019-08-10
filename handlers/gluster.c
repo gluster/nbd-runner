@@ -499,7 +499,7 @@ static void glfs_async_cbk(glfs_fd_t *gfd, ssize_t ret,
 {
     struct nbd_handler_request *req = data;
 
-    req->done(req, ret);
+    req->done(req, -errno);
 }
 
 static void glfs_handle_request(gpointer data, gpointer user_data)
