@@ -422,9 +422,13 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     nbd_update_json_config_file(dev, false);
     g_hash_table_insert(nbd_devices_hash, key, dev);
 
+    nbd_info("Create successed!\n");
+
     return true;
 
 err_create:
+    nbd_err("Create failed!\n");
+
     pthread_mutex_destroy(&dev->sock_lock);
     pthread_mutex_destroy(&dev->lock);
     pthread_mutex_destroy(&dev->retry_lock);
@@ -549,6 +553,10 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     g_hash_table_remove(nbd_devices_hash, key);
 
 err:
+    if (rep->exit)
+        nbd_info("Delete successed!\n");
+    else
+        nbd_err("Delete failed!\n");
     free(key);
     return true;
 }
@@ -680,6 +688,10 @@ map:
     snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_MAP_SVC_PORT);
 
 err:
+    if (!rep->exit || rep->exit == -EEXIST)
+        nbd_info("Premap successed!\n");
+    else
+        nbd_err("Premap failed!\n");
     if (!inserted)
         free(key);
     return true;
@@ -701,21 +713,21 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
     if (!rep->buf) {
         nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!\n");
         nbd_err("No memory for rep->buf!\n");
-        return true;
+        goto err;
     }
 
     key = strdup(cfg);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", cfg);
         nbd_err("Invalid cfgstring %s!\n", cfg);
-        return true;
+        goto err;
     }
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (!dev) {
         nbd_fill_reply(rep, -ENOENT, "Device is none exist!");
         nbd_err("Device is none exist!\n");
-        return true;
+        goto err;
     }
 
     pthread_mutex_lock(&dev->lock);
@@ -727,6 +739,11 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
     nbd_update_json_config_file(dev, true);
     pthread_mutex_unlock(&dev->lock);
 
+err:
+    if (rep->exit)
+        nbd_err("Postmap failed!\n");
+    else
+        nbd_info("Postmap successed!\n");
     return true;
 }
 
@@ -744,7 +761,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     if (!rep->buf) {
         nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!\n");
         nbd_err("No memory for rep->buf!\n");
-        return true;
+        goto out;
     }
 
     if (!unmap->nbd[0] && !unmap->cfgstring[0]) {
@@ -789,6 +806,10 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     pthread_mutex_unlock(&dev->lock);
 
 out:
+    if (rep->exit)
+        nbd_err("Unmap failed!\n");
+    else
+        nbd_info("Unmap successed!\n");
     free(key);
     return true;
 }
@@ -815,14 +836,14 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     if (!rep->buf) {
         nbd_fill_reply(rep, -ENOMEM, "No memory for rep->buf!\n");
         nbd_err("No memory for rep->buf!\n");
-        return true;
+        goto err;
     }
 
     globalobj = json_object_new_object();
     if (!globalobj) {
         nbd_fill_reply(rep, -ENOMEM, "No memory for the gloablobj!");
         nbd_err("No memory for globalobj!\n");
-        return true;
+        goto err;
     }
 
     tmp = malloc(max);
@@ -902,6 +923,10 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     snprintf(rep->buf, l, "%s", json_object_to_json_string_ext(globalobj, JSON_C_TO_STRING_PRETTY));
 
 err:
+    if (rep->exit)
+        nbd_err("List failed!\n");
+    else
+        nbd_info("List successed!\n");
     json_object_put(globalobj);
     free(tmp);
     return true;

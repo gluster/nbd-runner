@@ -43,7 +43,7 @@ static pthread_mutex_t nbd_live_lock;
 static pthread_mutex_t nbd_lock;
 
 static void
-nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
+nbd_clid_create_backstore(handler_t htype, const char *cfg, ssize_t size,
                           bool prealloc, const char *rhost,
                           struct cli_reply **cli_rep)
 {
@@ -54,6 +54,9 @@ nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
     int sock = RPC_ANYSOCK;
     int len;
     int max_len = 1024;
+
+    nbd_info("Create request htype: %d, cfg: %s, prealloc: %d, size: %zu, rhost: %s\n",
+             htype, cfg, !!prealloc, size, rhost);
 
     create = calloc(1, sizeof(struct nbd_create));
     if (!create) {
@@ -114,7 +117,7 @@ err:
 }
 
 static void
-nbd_clid_delete_backstore(int htype, const char *cfg, const char *rhost,
+nbd_clid_delete_backstore(handler_t htype, const char *cfg, const char *rhost,
                           struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
@@ -124,6 +127,9 @@ nbd_clid_delete_backstore(int htype, const char *cfg, const char *rhost,
     int sock = RPC_ANYSOCK;
     int len;
     int max_len = 1024;
+
+    nbd_info("Delete request htype: %d, cfg: %s, rhost: %s\n",
+             htype, cfg, rhost);
 
     delete = calloc(1, sizeof(struct nbd_delete));
     if (!delete) {
@@ -238,7 +244,7 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
     struct nego_reply nrep;
     int count = 0;
     char *buf;
-    int ret;
+    int ret = 0;
 
     nbd_info("nbd_device_connect cfg: %s, nbd_index: %d, readonly: %d, size: %zu, blk_size: %zu, timeout: %d\n",
              cfg, nbd_index, readonly, size, blk_size, timeout);
@@ -257,12 +263,14 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
         } else {
             nbd_err("nego failed %d\n", nrep.exit);
         }
+        ret = nrep.exit;
         goto nla_put_failure;
     }
 
 retry:
     msg = nlmsg_alloc();
     if (!msg) {
+        ret = -errno;
         nbd_err("Couldn't allocate netlink message, %s!\n",
                 strerror(errno));
         goto nla_put_failure;
@@ -284,6 +292,7 @@ retry:
 
     sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
     if (!sock_attr) {
+        ret = -errno;
         nbd_err("Couldn't nest the socket!\n");
         goto nla_put_failure;
     }
@@ -391,9 +400,12 @@ static int unmap_device(struct nl_sock *netfd, int driver_id, int index)
         goto nla_put_failure;
     }
 
-    nbd_info("Unmap '/dev/nbd%d' succeeded!\n", index);
-
 nla_put_failure:
+    if (ret)
+        nbd_err("Unmap '/dev/nbd%d' failed!\n", index);
+    else
+        nbd_info("Unmap '/dev/nbd%d' succeeded!\n", index);
+
     return ret;
 }
 
@@ -435,7 +447,7 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
 }
 
 static void
-nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
+nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readonly,
                     const char *rhost, struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
@@ -550,9 +562,12 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
         goto err;
     }
 
-    nbd_info("Map succeeded!\n");
-
 err:
+    if (ret)
+        nbd_err("Map failed!\n");
+    else
+        nbd_info("Map succeeded!\n");
+
     /* We will keep the sockfd opened if succeeded */
     if (sockfd >= 0)
         close(sockfd);
@@ -570,7 +585,7 @@ err:
 }
 
 static void
-nbd_clid_unmap_device(int htype, const char *cfg, int nbd_index,
+nbd_clid_unmap_device(handler_t htype, const char *cfg, int nbd_index,
                       const char *rhost, struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
@@ -583,6 +598,9 @@ nbd_clid_unmap_device(int htype, const char *cfg, int nbd_index,
     int driver_id;
     int len;
     int ret;;
+
+    nbd_info("Unmap request htype: %d, cfg: %s, nbd_index: %d, rhost: %s\n",
+             htype, cfg, nbd_index, rhost);
 
     unmap = calloc(1, sizeof(struct nbd_unmap));
     if (!unmap) {
@@ -721,6 +739,7 @@ nbd_clid_list_devices(handler_t htype, const char *rhost, struct cli_reply **cli
         goto nla_put_failure;
     }
 
+    nbd_info("List successed!\n");
     nbd_clid_fill_reply(cli_rep, 0, "%s", rep.buf);
 
 nla_put_failure:
