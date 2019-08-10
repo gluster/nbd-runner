@@ -34,7 +34,7 @@
 #define NBD_CLID_PID_FILE_DEFAULT "/run/nbd-clid.pid"
 
 static void
-nbd_clid_create_backstore(int type, const char *cfg, ssize_t size,
+nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
                           bool prealloc, const char *rhost,
                           struct cli_reply **cli_rep)
 {
@@ -55,7 +55,7 @@ nbd_clid_create_backstore(int type, const char *cfg, ssize_t size,
         return;
     }
 
-    create->type = type;
+    create->htype = htype;
     create->size = size;
     create->prealloc = prealloc;
 
@@ -117,7 +117,7 @@ err:
 }
 
 static void
-nbd_clid_delete_backstore(int type, const char *cfg, const char *rhost,
+nbd_clid_delete_backstore(int htype, const char *cfg, const char *rhost,
                           struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
@@ -136,7 +136,7 @@ nbd_clid_delete_backstore(int type, const char *cfg, const char *rhost,
         return;
     }
 
-    delete->type = type;
+    delete->htype = htype;
 
     len = snprintf(delete->cfgstring, max_len, "%s", cfg);
     if (len < 0) {
@@ -364,7 +364,7 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
     index = nla_get_u32(msg_attr[NBD_ATTR_INDEX]);
     nbd_info("Connected /dev/nbd%d\n", (int)index);
 
-    map.type = args->type;
+    map.htype = args->htype;
     snprintf(map.nbd, NBD_DLEN_MAX, "/dev/nbd%d", index);
     time_string_now(map.time);
     strcpy(map.cfgstring, args->cfg);
@@ -379,7 +379,7 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
 }
 
 static void
-nbd_clid_map_device(int type, const char *cfg, int nbd_index, bool readonly,
+nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
                     const char *rhost, struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
@@ -408,7 +408,7 @@ nbd_clid_map_device(int type, const char *cfg, int nbd_index, bool readonly,
         return;
     }
 
-    map->type = type;
+    map->htype = htype;
     map->readonly = readonly;
     map->timeout = timeout;
 
@@ -445,7 +445,7 @@ nbd_clid_map_device(int type, const char *cfg, int nbd_index, bool readonly,
     }
 
     /* Setup netlink to configure the nbd device */
-    netfd = nbd_setup_netlink(&driver_id, map_nl_callback, type, map->cfgstring,
+    netfd = nbd_setup_netlink(&driver_id, map_nl_callback, htype, map->cfgstring,
                               clnt, &ret);
     if (!netfd) {
         nbd_clid_fill_reply(cli_rep, ret, "nbd_setup_netlink failed");
@@ -517,7 +517,7 @@ err:
 }
 
 static void
-nbd_clid_unmap_device(int type, const char *cfg, int nbd_index,
+nbd_clid_unmap_device(int htype, const char *cfg, int nbd_index,
                       const char *rhost, struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
@@ -540,7 +540,7 @@ nbd_clid_unmap_device(int type, const char *cfg, int nbd_index,
         return;
     }
 
-    unmap->type = type;
+    unmap->htype = htype;
 
     if (nbd_index < -1)
         nbd_index = -1;
@@ -609,7 +609,7 @@ nbd_clid_unmap_device(int type, const char *cfg, int nbd_index,
         }
     }
 
-    netfd = nbd_setup_netlink(&driver_id, genl_handle_msg, type, NULL, NULL,
+    netfd = nbd_setup_netlink(&driver_id, genl_handle_msg, htype, NULL, NULL,
                               &ret);
     if (!netfd) {
         nbd_clid_fill_reply(cli_rep, ret, "setup netlink failed!");
@@ -633,14 +633,14 @@ err:
 }
 
 static void
-nbd_clid_list_devices(int type, const char *rhost, struct cli_reply **cli_rep)
+nbd_clid_list_devices(int htype, const char *rhost, struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
     struct addrinfo *res;
     struct nbd_response rep = {0,};
     char *host = NULL;
     int sock = RPC_ANYSOCK;
-    struct nbd_list list = {.type = type};
+    struct nbd_list list = {.htype = htype};
     int driver_id;
     int ind;
     int ret = -1;
@@ -791,25 +791,25 @@ static int nbd_clid_ipc_handle(int fd)
 
     switch (req.cmd) {
     case NBD_CLI_CREATE:
-        nbd_clid_create_backstore(req.type, req.create.cfgstring,
+        nbd_clid_create_backstore(req.htype, req.create.cfgstring,
                                   req.create.size, req.create.prealloc,
                                   req.rhost, &cli_rep);
         break;
     case NBD_CLI_DELETE:
-        nbd_clid_delete_backstore(req.type, req.delete.cfgstring, req.rhost,
+        nbd_clid_delete_backstore(req.htype, req.delete.cfgstring, req.rhost,
                                   &cli_rep);
         break;
     case NBD_CLI_MAP:
-        nbd_clid_map_device(req.type, req.map.cfgstring,
+        nbd_clid_map_device(req.htype, req.map.cfgstring,
                             req.map.nbd_index, req.map.readonly,
                             req.rhost, &cli_rep);
         break;
     case NBD_CLI_UNMAP:
-        nbd_clid_unmap_device(req.type, req.unmap.cfgstring,
+        nbd_clid_unmap_device(req.htype, req.unmap.cfgstring,
                               req.unmap.nbd_index, req.rhost, &cli_rep);
         break;
     case NBD_CLI_LIST:
-        nbd_clid_list_devices(req.type, req.rhost, &cli_rep);
+        nbd_clid_list_devices(req.htype, req.rhost, &cli_rep);
         break;
     default:
         break;

@@ -18,39 +18,39 @@ enum handler_t {
 #define DLEN_MAX  16
 
 struct nbd_create {
-    handler_t     type;
+    handler_t     htype;
     u_quad_t      size;
     bool          prealloc;
     char          cfgstring[CFGS_MAX];
 };
 
 struct nbd_delete {
-    handler_t     type;
+    handler_t     htype;
     char          cfgstring[CFGS_MAX];
 };
 
 struct nbd_premap {
-    handler_t     type;
+    handler_t     htype;
     bool          readonly;
     int           timeout;
     char          cfgstring[CFGS_MAX];
 };
 
 struct nbd_postmap {
-    handler_t     type;
+    handler_t     htype;
     char          nbd[DLEN_MAX];
     char          time[TLEN_MAX];
     char          cfgstring[CFGS_MAX];
 };
 
 struct nbd_unmap {
-    handler_t     type;
+    handler_t     htype;
     char          nbd[DLEN_MAX];
     char          cfgstring[CFGS_MAX];
 };
 
 struct nbd_list {
-    handler_t     type;
+    handler_t     htype;
 };
 
 struct nbd_response {

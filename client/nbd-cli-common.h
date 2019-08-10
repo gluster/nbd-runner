@@ -83,7 +83,7 @@ struct cli_cmd {
 struct cli_request {
     nbd_cli_cmd_t cmd;
 
-    handler_t type;
+    handler_t htype;
 
     union {
         struct {
@@ -113,7 +113,7 @@ struct cli_request {
 };
 
 struct map_args {
-    int type;
+    int htype;
     char *cfg;
     CLIENT *clnt;
 };

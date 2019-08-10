@@ -225,7 +225,7 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
      *
      * NOTE: the dummy options are private extra ones
      */
-    json_object_object_add(devobj, "type", json_object_new_int64(dev->type));
+    json_object_object_add(devobj, "type", json_object_new_int64(dev->htype));
     json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
     json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
     json_object_object_add(devobj, "size", json_object_new_int64(dev->size));
@@ -276,7 +276,7 @@ static int nbd_parse_from_json_config_file(void)
             }
 
             json_object_object_get_ex(devobj, "type", &obj);
-            dev->type = json_object_get_int64(obj);
+            dev->htype = json_object_get_int64(obj);
 
             json_object_object_get_ex(devobj, "nbd", &obj);
             tmp = json_object_get_string(obj);
@@ -309,10 +309,10 @@ static int nbd_parse_from_json_config_file(void)
             strcpy(dev->bstore, key);
 
             nbd_dbg("key: %s, type: %d, nbd: %s, maptime: %s, size: %zd, blksize: %zd, prealloc: %d, readonly: %d\n",
-                    key, dev->type, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
-            handler = g_hash_table_lookup(nbd_handler_hash, &dev->type);
+                    key, dev->htype, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
+            handler = g_hash_table_lookup(nbd_handler_hash, &dev->htype);
             if (!handler) {
-                nbd_err("handler type %d is not registered!\n", dev->type);
+                nbd_err("handler type %d is not registered!\n", dev->htype);
                 free(dev);
             } else {
                 dev->handler = handler;
@@ -346,7 +346,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     char *key = NULL;
 
     nbd_info("Create request type: %d, cfg: %s, size: %zu, prealloc: %d\n",
-             create->type, create->cfgstring, create->size, create->prealloc);
+             create->htype, create->cfgstring, create->size, create->prealloc);
 
     rep->exit = 0;
 
@@ -357,12 +357,12 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
         return true;
     }
 
-    handler = g_hash_table_lookup(nbd_handler_hash, &create->type);
+    handler = g_hash_table_lookup(nbd_handler_hash, &create->htype);
     if (!handler) {
         nbd_fill_reply(rep, -EINVAL, "Invalid handler or the handler is not loaded: %d!",
-                       create->type);
+                       create->htype);
         nbd_err("Invalid handler or the handler is not loaded: %d!\n",
-                create->type);
+                create->htype);
         return true;
     }
 
@@ -397,7 +397,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     pthread_mutex_init(&dev->sock_lock, NULL);
     pthread_mutex_init(&dev->lock, NULL);
     pthread_mutex_init(&dev->retry_lock, NULL);
-    dev->type = create->type;
+    dev->htype = create->htype;
     dev->handler = handler;
     dev->size = create->size;
     dev->prealloc = create->prealloc;
@@ -446,7 +446,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     char *key = NULL;
     int retry;
 
-    nbd_info("Delete request type %d, cfg: %s\n", delete->type,
+    nbd_info("Delete request type %d, cfg: %s\n", delete->htype,
              delete->cfgstring);
 
     rep->exit = 0;
@@ -458,12 +458,12 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         return true;
     }
 
-    handler = g_hash_table_lookup(nbd_handler_hash, &delete->type);
+    handler = g_hash_table_lookup(nbd_handler_hash, &delete->htype);
     if (!handler) {
         nbd_fill_reply(rep, -EINVAL, "Invalid handler or the handler is not loaded: %d!",
-                       delete->type);
+                       delete->htype);
         nbd_err("Invalid handler or the handler is not loaded: %d!\n",
-                delete->type);
+                delete->htype);
         goto err;
     }
 
@@ -563,7 +563,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     int save_ret;
 
     nbd_info("Premap request type: %d, cfg: %s, readonly: %d, timeout: %d\n",
-             map->type, map->cfgstring, map->readonly, map->timeout);
+             map->htype, map->cfgstring, map->readonly, map->timeout);
 
     rep->exit = 0;
 
@@ -574,12 +574,12 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         return true;
     }
 
-    handler = g_hash_table_lookup(nbd_handler_hash, &map->type);
+    handler = g_hash_table_lookup(nbd_handler_hash, &map->htype);
     if (!handler) {
         nbd_fill_reply(rep, -EINVAL, "Invalid handler or the handler is not loaded: %d!",
-                       map->type);
+                       map->htype);
         nbd_err("Invalid handler or the handler is not loaded: %d!",
-                map->type);
+                map->htype);
         goto err;
     }
 
@@ -634,7 +634,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         }
 
         dev->status = NBD_DEV_CONN_ST_CREATED;
-        dev->type = map->type;
+        dev->htype = map->htype;
         dev->handler = handler;
         dev->readonly = map->readonly;
         dev->size = handler->get_size(dev, rep);
@@ -694,7 +694,7 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
     char *nbd;
 
     nbd_info("Postmap request type: %d, cfg: %s, nbd: %s, time: %s\n",
-             map->type, map->cfgstring, map->nbd, map->time);
+             map->htype, map->cfgstring, map->nbd, map->time);
 
     rep->exit = 0;
 
@@ -736,7 +736,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     struct nbd_device *dev;
     char *key = NULL;
 
-    nbd_info("Unmap request type: %d, cfg: %s, nbd: %s\n", unmap->type,
+    nbd_info("Unmap request type: %d, cfg: %s, nbd: %s\n", unmap->htype,
              unmap->cfgstring, unmap->nbd);
 
     rep->exit = 0;
@@ -808,7 +808,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     const char *st;
     int max = max(4096, max(NBD_DLEN_MAX, NBD_TLEN_MAX));
 
-    nbd_info("List request type: %d\n", list->type);
+    nbd_info("List request type: %d\n", list->htype);
 
     rep->exit = 0;
 
@@ -838,7 +838,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     {
         dev = value;
         pthread_mutex_lock(&dev->lock);
-        if (list->type != dev->type) {
+        if (list->htype != dev->htype) {
             pthread_mutex_unlock(&dev->lock);
             continue;
         }
@@ -858,7 +858,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
          */
         l += strlen(dev->nbd) + 5;
         l += strlen(key) + 11;
-        l += snprintf(tmp, max, "%d", dev->type) + 8;
+        l += snprintf(tmp, max, "%d", dev->htype) + 8;
         l += strlen(dev->time) + 13;
         l += snprintf(tmp, max, "%zd", dev->size) + 8;
         l += snprintf(tmp, max, "%zd", dev->blksize) + 11;
@@ -877,7 +877,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
             goto err;
         }
 
-        json_object_object_add(devobj, "type", json_object_new_int64(dev->type));
+        json_object_object_add(devobj, "type", json_object_new_int64(dev->htype));
         json_object_object_add(devobj, "nbd", json_object_new_string(dev->nbd));
         json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
         json_object_object_add(devobj, "size", json_object_new_int64(dev->size));
