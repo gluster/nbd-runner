@@ -90,23 +90,23 @@ struct cli_request {
             u_quad_t size;
             bool_t prealloc;
             char cfgstring[1024];
-        } nbd_create;
+        } create;
 
         struct {
             char cfgstring[1024];
-        } nbd_delete;
+        } delete;
 
         struct {
             bool_t readonly;
             int timeout;
             int nbd_index;
             char cfgstring[1024];
-        } nbd_map;
+        } map;
 
         struct {
             int nbd_index;
             char cfgstring[1024];
-        } nbd_unmap;
+        } unmap;
     };
 
 	char rhost[255];

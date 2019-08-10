@@ -127,34 +127,6 @@ static void nbd_fini_iohost(GPtrArray *iohost)
 }
 
 /*
- * Prase the key from the cfgstring.
- *
- * For exmaple, with extra private options it will be like:
- * "key=myvolume/myfile;option1;option2"
- *
- * Or if there is no any extra private option it will be like:
- * "key=myvolume/myfile"
- *
- * And the hash key "myvolume/myfile" will be returned.
- */
-static char *nbd_get_hash_key(const char *cfgstring)
-{
-    char *sep;
-    int len;
-
-    if (strncmp(cfgstring, "key=", 4))
-        return NULL;
-
-    sep = strchr(cfgstring, ';');
-    if (!sep)
-        return strdup(cfgstring + 4);
-
-    len = sep - cfgstring - 4;
-
-    return strndup(cfgstring + 4, len);
-}
-
-/*
  * Delete the device config from the config json file
  */
 static int nbd_config_delete_backstore(struct nbd_device *dev, const char *key)
@@ -346,7 +318,7 @@ static int nbd_parse_from_json_config_file(void)
 
                 if (handler->load_json) {
                     ktmp = malloc(NBD_CFGS_MAX);
-                    snprintf(ktmp, NBD_CFGS_MAX, "key=%s", key);
+                    snprintf(ktmp, NBD_CFGS_MAX, "%s", key);
                     handler->load_json(dev, devobj, ktmp);
                     free(ktmp);
                 }
@@ -372,6 +344,9 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
     struct nbd_handler *handler;
     char *key = NULL;
 
+    nbd_info("Create request type: %d, cfg: %s, size: %zu, prealloc: %d\n",
+             create->type, create->cfgstring, create->size, create->prealloc);
+
     rep->exit = 0;
 
     rep->buf = malloc(NBD_EXIT_MAX);
@@ -390,7 +365,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
         return true;
     }
 
-    key = nbd_get_hash_key(create->cfgstring);
+    key = strdup(create->cfgstring);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", create->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", create->cfgstring);
@@ -468,6 +443,9 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
     struct nbd_handler *handler;
     char *key = NULL;
 
+    nbd_info("Delete request type %d, cfg: %s\n", delete->type,
+             delete->cfgstring);
+
     rep->exit = 0;
 
     rep->buf = malloc(NBD_EXIT_MAX);
@@ -486,7 +464,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         goto err;
     }
 
-    key = nbd_get_hash_key(delete->cfgstring);
+    key = strdup(delete->cfgstring);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", delete->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", delete->cfgstring);
@@ -564,6 +542,9 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     bool inserted = false;
     int save_ret;
 
+    nbd_info("Premap request type: %d, cfg: %s, readonly: %d, timeout: %d\n",
+             map->type, map->cfgstring, map->readonly, map->timeout);
+
     rep->exit = 0;
 
     rep->buf = malloc(NBD_EXIT_MAX);
@@ -582,7 +563,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         goto err;
     }
 
-    key = nbd_get_hash_key(map->cfgstring);
+    key = strdup(map->cfgstring);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", map->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", map->cfgstring);
@@ -683,6 +664,9 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
     char *key;
     char *nbd;
 
+    nbd_info("Postmap request type: %d, cfg: %s, nbd: %s, time: %s\n",
+             map->type, map->cfgstring, map->nbd, map->time);
+
     rep->exit = 0;
 
     rep->buf = calloc(1, NBD_EXIT_MAX);
@@ -692,7 +676,7 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
         return true;
     }
 
-    key = nbd_get_hash_key(cfg);
+    key = strdup(cfg);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", cfg);
         nbd_err("Invalid cfgstring %s!\n", cfg);
@@ -723,6 +707,9 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
     struct nbd_device *dev;
     char *key = NULL;
 
+    nbd_info("Unmap request type: %d, cfg: %s, nbd: %s\n", unmap->type,
+             unmap->cfgstring, unmap->nbd);
+
     rep->exit = 0;
 
     rep->buf = calloc(1, NBD_EXIT_MAX);
@@ -748,7 +735,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
             goto out;
         }
     } else {
-        key = nbd_get_hash_key(unmap->cfgstring);
+        key = strdup(unmap->cfgstring);
         if (!key) {
             nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", unmap->cfgstring);
             nbd_err("Invalid cfgstring %s!\n", unmap->cfgstring);
@@ -791,6 +778,8 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
     char *tmp = NULL;
     const char *st;
     int max = max(4096, max(NBD_DLEN_MAX, NBD_TLEN_MAX));
+
+    nbd_info("List request type: %d\n", list->type);
 
     rep->exit = 0;
 
@@ -985,7 +974,7 @@ int nbd_handle_request(int sock, int threads)
         goto err;
     }
 
-    key = nbd_get_hash_key(cfg);
+    key = strdup(cfg);
     if (!key) {
         nrep.exit = -EINVAL;
         buf = calloc(1, 4096);

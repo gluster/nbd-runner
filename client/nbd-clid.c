@@ -59,16 +59,6 @@ nbd_clid_create_backstore(int type, const char *cfg, ssize_t size,
     create->size = size;
     create->prealloc = prealloc;
 
-    /*
-     * It won't touch the cfgstring from the command line, except
-     * adding the "key=" prefix and ';' at the end.
-     *
-     * After this the cfgsting will be like:
-     * "key=volume/filepath;dummy1=value1;dummy2;dummy3=value3;"
-     *
-     * And the dummy1, dummy2 and dummy3 will be the handler's private
-     * extra options.
-     */
     len = snprintf(create->cfgstring, max_len, "%s", cfg);
     if (len < 0) {
         nbd_clid_fill_reply(cli_rep, -errno, "snprintf error for cfgstring, %s!",
@@ -76,7 +66,6 @@ nbd_clid_create_backstore(int type, const char *cfg, ssize_t size,
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
         goto err;
     }
-    create->cfgstring[len++] = ';';
 
     if (rhost)
         host = strdup(rhost);
@@ -429,7 +418,6 @@ nbd_clid_map_device(int type, const char *cfg, int nbd_index, bool readonly,
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
         goto err;
     }
-    map->cfgstring[len++] = ';';
 
     if (rhost)
         host = strdup(rhost);
@@ -566,7 +554,6 @@ nbd_clid_unmap_device(int type, const char *cfg, int nbd_index,
             nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
             goto err;
         }
-        unmap->cfgstring[len++] = ';';
     }
 
     if (rhost)
@@ -616,8 +603,8 @@ nbd_clid_unmap_device(int type, const char *cfg, int nbd_index,
          */
         if (nbd_index < 0) {
             nbd_clid_fill_reply(cli_rep, -EINVAL, "%s is not mapped!",
-                                unmap->cfgstring + strlen("key="));
-            nbd_err("%s is not mapped!\n", unmap->cfgstring + strlen("key="));
+                                unmap->cfgstring);
+            nbd_err("%s is not mapped!\n", unmap->cfgstring);
             goto err;
         }
     }
@@ -804,22 +791,22 @@ static int nbd_clid_ipc_handle(int fd)
 
     switch (req.cmd) {
     case NBD_CLI_CREATE:
-        nbd_clid_create_backstore(req.type, req.nbd_create.cfgstring,
-                                  req.nbd_create.size, req.nbd_create.prealloc,
+        nbd_clid_create_backstore(req.type, req.create.cfgstring,
+                                  req.create.size, req.create.prealloc,
                                   req.rhost, &cli_rep);
         break;
     case NBD_CLI_DELETE:
-        nbd_clid_delete_backstore(req.type, req.nbd_delete.cfgstring, req.rhost,
+        nbd_clid_delete_backstore(req.type, req.delete.cfgstring, req.rhost,
                                   &cli_rep);
         break;
     case NBD_CLI_MAP:
-        nbd_clid_map_device(req.type, req.nbd_map.cfgstring,
-                            req.nbd_map.nbd_index, req.nbd_map.readonly,
+        nbd_clid_map_device(req.type, req.map.cfgstring,
+                            req.map.nbd_index, req.map.readonly,
                             req.rhost, &cli_rep);
         break;
     case NBD_CLI_UNMAP:
-        nbd_clid_unmap_device(req.type, req.nbd_unmap.cfgstring,
-                              req.nbd_unmap.nbd_index, req.rhost, &cli_rep);
+        nbd_clid_unmap_device(req.type, req.unmap.cfgstring,
+                              req.unmap.nbd_index, req.rhost, &cli_rep);
         break;
     case NBD_CLI_LIST:
         nbd_clid_list_devices(req.type, req.rhost, &cli_rep);
