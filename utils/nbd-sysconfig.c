@@ -400,6 +400,8 @@ struct nbd_config* nbd_load_config(bool server)
     snprintf(cfg->log_dir, PATH_MAX, "%s", NBD_LOG_DIR_DEFAULT);
     if (server)
         snprintf(cfg->ghost, NBD_HOST_MAX, "%s", NBD_HOST_LOCAL_DEFAULT);
+    else
+        snprintf(cfg->rhost, NBD_HOST_MAX, NBD_HOST_LOCAL_DEFAULT);
 
     if (_nbd_load_config(cfg, server))
         nbd_err("Failed to load config, will use the default settings!\n");

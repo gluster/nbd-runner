@@ -12,7 +12,7 @@ EXTRA_DIST = autogen.sh README.md COPYING-GPLV2 COPYING-LGPLV3     \
 
 systemd_DATA = nbd-runner.service nbd-clid.service
 
-man8_MANS = nbd-runner.8 nbd-cli.8
+man8_MANS = nbd-runner.8 nbd-cli.8 nbd-clid.8
 
 install-data-local:
 	$(mkdir_p) $(DESTDIR)${sysconfigdir}

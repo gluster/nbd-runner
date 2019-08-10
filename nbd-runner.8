@@ -3,50 +3,52 @@
 .B nbd-runner
 .SH DESCRIPTION
 .B nbd-runner
-is a daemon that handles the userspace side of the NBD(Network Block Device)
-backstore.
+is a daemon that handles the cmd requests from nbd-clid and the IO requests from nbd.ko in userspace for Gluster/Azblk/Ceph backstores.
 
 .SH SYNOPSIS
 .B nbd-runner [OPTION]
 
 .SH OPTIONS
 .TP
-.B help
+.B -h, --help
 Display help for nbd-runner command
 
 .TP
-.B threads <NUMBER>
+.B -t, --threads=<NUMBER>
 Specify the IO thread number for each mapped backstore, 1 as default
 
 .TP
-.B rhost <RUNNER_HOST>
-Specify the listenning IP for the nbd-runner server to receive/reply the control
-commands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default
+.B -r, --rhost=<RUNNER_HOST>
+Specify the listening IP address for the RPC Control command requests from nbd-clid/nbd-cli side, such as create/delete/map/unmap/list commands, INADDR_ANY as default.
 
 .TP
-.B ihost <IO_HOST>
+.B -i, --ihost=<IO_HOST>
 Specify the listenning IP for the nbd-runner server to receive/reply the NBD device's
 IO operations(WRITE/READ/FLUSH/TRIM, etc), INADDR_ANY as default
 
 .TP
-.B ghost <IO_HOST>
+.B -G, --ghost=<IO_HOST>
 Specify the Gluster server IP for the volume to connect to, 'localhost' as default
 
 .TP
-.B version
+.B -u, --uid=<UID>
+Run as uid, default is current user
+
+.TP
+.B -g, --gid=<GID>
+Run as gid, default is current user group
+
+.TP
+.B -v, --version
 Show version info and exit
 
 .TP
 .B NOTE:
-The RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands
-route different from the IOs route via different NICs, or just omit them as default
-
-
-
+The RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands route different from the IOs route via different NICs, or just omit them as default
 
 
 .SH SEE ALSO
-.BR gluster (8),
+.BR nbd-clid (8),
 .BR nbd-cli (8),
 
 .SH AUTHOR

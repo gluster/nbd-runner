@@ -1,37 +1,45 @@
 # nbd-runner
 
-A daemon that handles the userspace side of the NBD(Network Block Device) backstore.
+The userspace side utility to handle the NBD(Network Block Device) stuff for Gluster/Azblk/Ceph, etc.
 
-# nbd-cli
+# nbd-runner service
+
+A server side daemon, which will handle the cmd requests from the nbd-clid and the IO requests from the nbd.ko.
+
+# nbd-clid service
+
+A client side daemon, which will handle the cmd requests from nbd-cli and do the stale connections restore when the node or the nbd-runner is reboot
+
+# nbd-cli commands
 
 A cli utility, which aims at making backstore creation/deletion/mapping/unmaping/listing.
 
 # One simple graph:
 
 ```script
-                         nbd-runner                                   nbd-cli
-                  +----------------------+                     +---------------------+
-                  |                      |                     |                     |
-                  |                      |                     |                     |
-+-----------+     |      RUNNER HOST IP  |  RPC control route  | create/delete       |
-|           |     |      listen on       <---------------------> map/unmap/list, etc |
-|  Gluster  <----->      TCP/24110 port  |                     |  +                  |
-|           |     |                      |                     |  |                  |
-+-----------+     |                      |                     |  |                  |
-                  |                      |                     |  | MAP will         |
-                  |                      |                     |  | setup            |
-                  |                      |                     |  | the NBD          |
-                  |                      |                     |  | devices          |
-                  |                      |                     |  |                  |
-+-----------+     |                      |                     |  |                  |
-|           |     |                      |                     |  |                  |
-|   Ceph    <----->                      |                     |  |          READ    |
-|           |     |       IO HOST IP     | MAPPED NBD(IO) route|  v          WRITE   |
-+-----------+     |       listen on      <-------------------->+ /dev/nbdXX  FLUSH   |
-                  |       TCP/24111 port |                     |             TRIM    |
-                  |                      |                     |             ...     |
-                  |                      |                     |                     |
-                  +----------------------+                     +---------------------+
+                      nbd-runner                            nbd-clid
+                 +-----------------+                 +-------------------+
+                 |                 |                 |                   |
+                 |                 |                 |                   |
++-----------+    | RUNNER HOST IP  |  RPC control    | create/delete     |
+|           |    | listening on    <-----------------> map/unmap/list    |
+|  Gluster  <----> TCP/24110       |     route       |  +                |
+|           |    |                 |                 |  |                |
++-----------+    |                 |                 |  |                |
++-----------+    |                 |                 |  | MAP will       |
+|           |    |                 |                 |  | setup          | socket
+|   Azblk   <---->                 |                 |  | the NBD        <--------> nbd-cli
+|           |    |                 |                 |  | devices        |
++-----------+    |                 |                 |  |                |
++-----------+    |                 |                 |  |                |
+|           |    |                 |                 |  |                |
+|   Ceph    <---->                 |                 |  |          READ  |
+|           |    |  IO HOST IP     |  MAPPED NBD(IO) |  v          WRITE |
++-----------+    |  listening on   <-----------------> /dev/nbdXX  FLUSH |
+                 |  TCP/24111      |      route      |             TRIM  |
+                 |                 |                 |             ...   |
+                 |                 |                 |                   |
+                 +-----------------+                 +-------------------+
 
 ```
 <b>NOTE:</b> The 'RUNNER HOST IP' and the 'IO HOST IP' could be same or different, and the 'nbd-runner' and 'nbd-cli' could run on the same node or in different nodes, both are up to your use case. And please make sure that the 'nbd-runner' runs on one of the gluster/ceph server nodes.
@@ -62,33 +70,66 @@ $ make install
 - [x] *The kernel or the nbd.ko module must be new enough, which have add the netlink feature supported*
 - [x] *Open 24110 and 24111(nbd-runnerd) 111(rpcbind) ports in your firewall*
 
-<b>Daemon</b>: run nbd-runner on the node where you can access the gluster through gfapi
+<b>nbd-runner service</b>: run nbd-runner on the node where you can access the gluster through gfapi or the zablk
 ```script
-$ nbd-runner help
+$ nbd-runner --help
 Usage:
 	nbd-runner [<args>]
 
 Commands:
-	help
+	-h, --help
 		Display help for nbd-runner command
 
-	threads <NUMBER>
+	-t, --threads=<NUMBER>
 		Specify the IO thread number for each mapped backstore, 1 as default
 
-	rpchost <RUNNER_HOST>
+	-r, --rhost=<RUNNER_HOST>
 		Specify the listenning IP for the nbd-runner server to receive/reply the control
 		commands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default
 
-	iohost <IO_HOST>
+	-i, --ihost=<IO_HOST>
 		Specify the listenning IP for the nbd-runner server to receive/reply the NBD device's
 		IO operations(WRITE/READ/FLUSH/TRIM, etc), INADDR_ANY as default
 
-	version
+	-G, --ghost=<IO_HOST>
+		Specify the Gluster server IP for the volume to connect to, 'localhost' as default
+
+	-u, --uid=<UID>
+		Run as uid, default is current user
+
+	-g, --gid=<GID>
+		Run as gid, default is current user group
+
+	-v, --version
 		Show version info and exit.
 
 	NOTE:
 		The RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands
 		route different from the IOs route via different NICs, or just omit them as default
+```
+
+<b>nbd-clid service</b>: run nbd-clid on the client node where you will use the /dev/nbdX devices
+```script
+Usage:
+	nbd-clid [<args>]
+
+Commands:
+	-r, --rhost=<RUNNER_HOST>
+		Specify the listenning IP for the nbd-runner server who are handling the
+		commands of create/delete/map/unmap/list, etc from nbd-clid and IO requests
+		from nbd.ko, 'localhost' as default
+
+	-u, --uid=<UID>
+		Run as uid, default is current user
+
+	-g, --gid=<GID>
+		Run as gid, default is current user group
+
+	-h, --help
+		Display this help and exit
+
+	-v, --version
+		Display version and exit
 ```
 
 <b>CLI</b>: you can choose to run nbd-cli from any node where the newer nbd.ko module is availible
@@ -208,7 +249,7 @@ There must have one entry point named "handler_init", it will be:
 
 5. You will see the mapped NBD device returned and displayed, or you can check the mapped device info by:
 
-    `$ nbd-cli gluster list <map|unmap|create|dead|live|all> <host RUNNER_HOST>`
+    `$ nbd-cli gluster list <inuse|free|create|dead|live|all> <host RUNNER_HOST>`
 
 6. We expose the file in the gluster volume as NBD device using nbd-runner, exporting the target file as block device via /dev/nbdXX
 
@@ -235,8 +276,8 @@ Usage:
 	gluster unmap <nbd-device|VOLUME/FILEPATH> [host RUNNER_HOST]
 		Unmap the nbd device or VOLUME/FILEPATH, RUNNER_HOST will be 'localhost' as default
 
-	gluster list [map|unmap|create|dead|live|all] [host RUNNER_HOST]
-		List the mapped|unmapped NBD devices or the backstores which are in created state or
+	gluster list [inuse|free|create|dead|live|all] [host RUNNER_HOST]
+		List the inused|free NBD devices or the backstores which are in created state or
 		which the connections are in dead|live state, 'all' as default. 'create' means the
 		backstores are just created or unmapped. 'dead' means the socket connection is lost,
 		which mainly dues to the nbd-runner service was restart without unmapping. 'live' means
@@ -277,7 +318,7 @@ The Azure block driver allows the creation, deletion, and mapping of an NBD devi
 
 4. You will see the mapped NBD device returned and displayed or you can check the mapped device info by:
 
-    `$ nbd-cli azblk list <map|unmap|create|dead|live|all> <host RUNNER_HOST>`
+    `$ nbd-cli azblk list <inuse|free|create|dead|live|all> <host RUNNER_HOST>`
 
 <b> Azblk CLI</b>: the azblk specified cli commands
 ```script
@@ -306,8 +347,8 @@ Usage:
 	azblk unmap <nbd-device|<account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]
 		Unmap the nbd device or account/container/vhd, RUNNER_HOST will be 'localhost' as default
 
-	azblk list [map|unmap|create|dead|live|all] [host RUNNER_HOST]
-		List the mapped|unmapped NBD devices or the backstores which are in created state or
+	azblk list [inuse|free|create|dead|live|all] [host RUNNER_HOST]
+		List the inused|free NBD devices or the backstores which are in created state or
 		which the connections are in dead|live state, 'all' as default. 'create' means the
 		backstores are just created or unmapped. 'dead' means the socket connection is lost,
 		which mainly dues to the nbd-runner service was restart without unmapping. 'live' means

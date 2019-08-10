@@ -46,27 +46,31 @@ extern int iport;
 
 static void usage(void)
 {
-    nbd_info("Usage:\n"
-             "\tnbd-runner [<args>]\n\n"
-             "Commands:\n"
-             "\thelp\n"
-             "\t\tDisplay help for nbd-runner command\n\n"
-             "\tthreads <NUMBER>\n"
-             "\t\tSpecify the IO thread number for each mapped backstore, 1 as default\n\n"
-             "\trhost <RUNNER_HOST>\n"
-             "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the control\n"
-             "\t\tcommands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default\n\n"
-             "\tihost <IO_HOST>\n"
-             "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the NBD device's\n"
-             "\t\tIO operations(WRITE/READ/FLUSH/TRIM, etc), INADDR_ANY as default\n\n"
-             "\tghost <IO_HOST>\n"
-             "\t\tSpecify the Gluster server IP for the volume to connect to, 'localhost' as default\n\n"
-             "\tversion\n"
-             "\t\tShow version info and exit.\n\n"
-             "\tNOTE:\n"
-             "\t\tThe RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands\n"
-             "\t\troute different from the IOs route via different NICs, or just omit them as default\n"
-            );
+    printf("Usage:\n"
+           "\tnbd-runner [<args>]\n\n"
+           "Commands:\n"
+           "\t-h, --help\n"
+           "\t\tDisplay help for nbd-runner command\n\n"
+           "\t-t, --threads=<NUMBER>\n"
+           "\t\tSpecify the IO thread number for each mapped backstore, 1 as default\n\n"
+           "\t-r, --rhost=<RUNNER_HOST>\n"
+           "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the control\n"
+           "\t\tcommands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default\n\n"
+           "\t-i, --ihost=<IO_HOST>\n"
+           "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the NBD device's\n"
+           "\t\tIO operations(WRITE/READ/FLUSH/TRIM, etc), INADDR_ANY as default\n\n"
+           "\t-G, --ghost=<IO_HOST>\n"
+           "\t\tSpecify the Gluster server IP for the volume to connect to, 'localhost' as default\n\n"
+           "\t-u, --uid=<UID>\n"
+           "\t\tRun as uid, default is current user\n\n"
+           "\t-g, --gid=<GID>\n"
+           "\t\tRun as gid, default is current user group\n\n"
+           "\t-v, --version\n"
+           "\t\tShow version info and exit.\n\n"
+           "\tNOTE:\n"
+           "\t\tThe RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands\n"
+           "\t\troute different from the IOs route via different NICs, or just omit them as default\n"
+          );
 }
 
 static void *worker_thread(void *arg)
@@ -235,6 +239,18 @@ out:
     return NULL;
 }
 
+static struct option const long_options[] = {
+    {"help", no_argument, NULL, 'h'},
+    {"threads", required_argument, NULL, 't'},
+    {"rhost", required_argument, NULL, 'r'},
+    {"ihost", required_argument, NULL, 'i'},
+    {"ghost", required_argument, NULL, 'G'},
+    {"uid", required_argument, NULL, 'u'},
+    {"gid", required_argument, NULL, 'g'},
+    {"version", no_argument, NULL, 'v'},
+    {NULL, 0, NULL, 0},
+};
+
 int main (int argc, char **argv)
 {
     int lockfd = -1;
@@ -242,7 +258,11 @@ int main (int argc, char **argv)
     pthread_t map_svc_threadid;
     struct flock lock = {0, };
     int threads = NBD_DEF_THREADS;
+	int ch, longindex;
     int ret = EXIT_FAILURE;
+	uid_t uid = 0;
+    gid_t gid = 0;
+	pid_t pid;
     int ind;
 
     nbd_cfg = nbd_load_config(true);
@@ -251,57 +271,40 @@ int main (int argc, char **argv)
         goto out;
     }
 
-    ind = 1;
-    while (ind < argc) {
-        if (!strcmp("ihost", argv[ind])) {
-            if (ind + 1 >= argc) {
-                nbd_err("Invalid argument '<ihost IO_HOST>'!\n");
+	while ((ch = getopt_long(argc, argv, "ht:r:i:G:u:g:v", long_options, &longindex)) >= 0) {
+		switch (ch) {
+		case 'r':
+            snprintf(nbd_cfg->rhost, NBD_HOST_MAX, "%s", optarg);
+
+            if (!nbd_is_valid_host(optarg)) {
+                nbd_err("Invalid rhost IP %s!\n", optarg);
                 goto out;
             }
+			break;
+        case 'i':
+            snprintf(nbd_cfg->ihost, NBD_HOST_MAX, "%s", optarg);
 
-            if (!nbd_is_valid_host(argv[ind + 1])) {
-                nbd_err("Invalid IP %s!\n", argv[ind + 1]);
+            if (!nbd_is_valid_host(optarg)) {
+                nbd_err("Invalid ihost IP %s!\n", optarg);
                 goto out;
             }
+			break;
+        case 'G':
+            snprintf(nbd_cfg->ghost, NBD_HOST_MAX, "%s", optarg);
 
-            snprintf(nbd_cfg->ihost, NBD_HOST_MAX, "%s", argv[ind + 1]);
-
-            ind += 2;
-        } else if (!strcmp("rhost", argv[ind])) {
-            if (ind + 1 >= argc) {
-                nbd_err("Invalid argument 'rhost <RUNNER_HOST>'!\n\n");
+            if (!nbd_is_valid_host(optarg)) {
+                nbd_err("Invalid ghost IP %s!\n", optarg);
                 goto out;
             }
-
-            if (!nbd_is_valid_host(argv[ind + 1])) {
-                nbd_err("Invalid IP %s!\n", argv[ind + 1]);
-                goto out;
-            }
-
-            snprintf(nbd_cfg->rhost, NBD_HOST_MAX, "%s", argv[ind + 1]);
-
-            ind += 2;
-        } else if (!strcmp("ghost", argv[ind])) {
-            if (ind + 1 >= argc) {
-                nbd_err("Invalid argument '<ghost IO_HOST>'!\n");
-                goto out;
-            }
-
-            if (!nbd_is_valid_host(argv[ind + 1])) {
-                nbd_err("Invalid IP %s!\n", argv[ind + 1]);
-                goto out;
-            }
-
-            snprintf(nbd_cfg->ghost, NBD_HOST_MAX, "%s", argv[ind + 1]);
-
-            ind += 2;
-        } else if (!strcmp("threads", argv[ind])) {
-            if (ind + 1 >= argc) {
-                nbd_err("Invalid argument 'threads <NUM>'!\n\n");
-                goto out;
-            }
-
-            threads = atoi(argv[ind + 1]);
+			break;
+		case 'g':
+			gid = strtoul(optarg, NULL, 10);
+			break;
+		case 'u':
+			uid = strtoul(optarg, NULL, 10);
+			break;
+        case 't':
+            threads = atoi(optarg);
             if (threads < NBD_MIN_THREADS) {
                 nbd_err("Currently the min threads are %d, will set it to %d!\n",
                         NBD_MIN_THREADS, NBD_MIN_THREADS);
@@ -313,19 +316,17 @@ int main (int argc, char **argv)
                         NBD_MAX_THREADS, NBD_MAX_THREADS);
                 threads = NBD_MAX_THREADS;
             }
-
-            ind += 2;
-        } else if (!strcmp("version", argv[ind])) {
-            nbd_info("nbd-runner (%s)\n\n", VERSION);
-            nbd_info("%s\n", NBD_LICENSE_INFO);
-            goto out;
-        } else if (!strcmp("help", argv[ind])) {
-            usage();
-            goto out;
-        } else {
-            nbd_err("Invalid argument '%s'!\n\n", argv[ind]);
-            usage();
-            goto out;
+            break;
+		case 'v':
+            printf("nbd-clid (%s)\n\n", VERSION);
+            printf("%s\n", NBD_LICENSE_INFO);
+			exit(0);
+		case 'h':
+			usage();
+			exit(0);
+		default:
+		    nbd_err("Try 'nbd-clid -h/--help' for more information.\n");
+			exit(1);
         }
     }
 
@@ -333,6 +334,23 @@ int main (int argc, char **argv)
         goto out;
 
     nbd_crit("Starting...\n");
+
+    if (gid && setgid(gid) < 0) {
+        nbd_err("Failed to setgid to %d\n", gid);
+        goto out;
+    }
+
+    if ((geteuid() == 0) && (getgroups(0, NULL))) {
+        if (setgroups(0, NULL) != 0) {
+            nbd_err("Failed to drop supplementary group ids\n");
+            goto out;
+        }
+    }
+
+    if (uid && setuid(uid) < 0) {
+        nbd_err("Failed to setuid to %d\n", uid);
+        goto out;
+    }
 
     /* make sure only one nbd-runner daemon is running */
     lockfd = creat(NBD_LOCK_FILE, S_IRUSR | S_IWUSR);

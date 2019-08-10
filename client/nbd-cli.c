@@ -831,13 +831,13 @@ static void nbd_unregister_backstores(GPtrArray *cmds_list)
 
 static void usage(void)
 {
-    nbd_info("Usage:\n\n"
-             "\tgluster help\n\t\tDisplay help for gluster commands\n\n"
-             "\tazblk help\n\t\tDisplay help for azblk commands\n\n"
-             "\tceph help [TODO]\n\t\tDisplay help for ceph commands\n\n"
-             "\tglobal help [TODO]\n\t\tDisplay help for global commands\n\n"
-             "\tversion\n\t\tDisplay the version of nbd-cli\n\n"
-            );
+    printf("Usage:\n\n"
+           "\tgluster help\n\t\tDisplay help for gluster commands\n\n"
+           "\tazblk help\n\t\tDisplay help for azblk commands\n\n"
+           "\tceph help [TODO]\n\t\tDisplay help for ceph commands\n\n"
+           "\tversion\n\t\tDisplay the version of nbd-cli\n\n"
+           "\thelp\n\t\tDisplay the usage of nbd-cli\n\n"
+          );
 }
 
 typedef enum {
@@ -930,14 +930,18 @@ int main(int argc, char *argv[])
             usage();
             goto out;
         case NBD_OPT_VERSION:
-            nbd_info("nbd-cli (%s)\n\n", VERSION);
-            nbd_info("%s\n", NBD_LICENSE_INFO);
+            printf("nbd-cli (%s)\n\n", VERSION);
+            printf("%s\n", NBD_LICENSE_INFO);
             goto out;
         case NBD_OPT_MAX:
         default:
             htype = nbd_cli_get_handler_type(argv[1]);
             if (htype == NBD_BACKSTORE_MAX) {
-                nbd_err("Invalid handler type, try 'nbd-cli --help' for more information!\n");
+                printf("Invalid handler type, try 'nbd-cli help' for more information!\n");
+                exit(1);
+            }
+            if (htype == NBD_BACKSTORE_CEPH) {
+                printf("Ceph is not support yet!\n");
                 exit(1);
             }
         }
