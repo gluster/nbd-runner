@@ -56,12 +56,16 @@ static struct glfs *nbd_volume_init(char *volume, nbd_response *rep)
     struct glfs *glfs;
     char *key;
     int ret;
+    int eno;
 
     if (rep)
         rep->exit = 0;
 
-    if (!volume)
+    if (!volume) {
+        nbd_fill_reply(rep, -EINVAL, "Invalid volume (nil)");
+        nbd_err("Invalid volume (nil)\n");
         return NULL;
+    }
 
     key = volume;
 
@@ -71,48 +75,51 @@ static struct glfs *nbd_volume_init(char *volume, nbd_response *rep)
 
     glfs = glfs_new(volume);
     if (!glfs) {
-        nbd_fill_reply(rep, -errno, "Not able to Initialize volume %s, %s",
-                       volume, strerror(errno));
+        eno = errno;
+        nbd_fill_reply(rep, -eno, "Not able to Initialize volume %s, %s",
+                       volume, strerror(eno));
         nbd_err("Not able to Initialize volume %s, %s\n",
-                volume, strerror(errno));
+                volume, strerror(eno));
         goto out;
     }
 
     ret = glfs_set_volfile_server(glfs, "tcp", glfs_host, 24007);
     if (ret) {
-        nbd_fill_reply(rep, -errno,
+        eno = errno;
+        nbd_fill_reply(rep, -eno,
                        "Not able to add Volfile server for volume %s, %s",
-                       volume, strerror(errno));
+                       volume, strerror(eno));
         nbd_err("Not able to add Volfile server for volume %s, %s\n",
-                volume, strerror(errno));
+                volume, strerror(eno));
         goto out;
     }
 
     ret = glfs_set_logging(glfs, NBD_GFAPI_LOG_FILE, NBD_GFAPI_LOG_LEVEL);
     if (ret) {
-        nbd_fill_reply(rep, -errno, "Not able to add logging for volume %s, %s",
-                       volume, strerror(errno));
+        eno = errno;
+        nbd_fill_reply(rep, -eno, "Not able to add logging for volume %s, %s",
+                       volume, strerror(eno));
         nbd_err("Not able to add logging for volume %s, %s\n",
-                volume, strerror(errno));
+                volume, strerror(eno));
         goto out;
     }
 
     ret = glfs_init(glfs);
     if (ret) {
-        if (errno == ENOENT) {
-            nbd_fill_reply(rep, -errno, "Volume %s does not exist",
+        eno = errno;
+        if (eno == ENOENT) {
+            nbd_fill_reply(rep, -eno, "Volume %s does not exist",
                            volume);
             nbd_err("Volume %s does not exist\n", volume);
-        } else if (errno == EIO) {
-            nbd_fill_reply(rep, -errno, "Check if volume %s is operational",
+        } else if (eno == EIO) {
+            nbd_fill_reply(rep, -eno, "Check if volume %s is operational",
                            volume);
-            nbd_err("Check if volume %s is operational\n",
-                    volume);
+            nbd_err("Check if volume %s is operational\n", volume);
         } else {
-            nbd_fill_reply(rep, -errno, "Not able to initialize volume %s, %s",
-                           volume, strerror(errno));
+            nbd_fill_reply(rep, -eno, "Not able to initialize volume %s, %s",
+                           volume, strerror(eno));
             nbd_err("Not able to initialize volume %s, %s\n",
-                    volume, strerror(errno));
+                    volume, strerror(eno));
         }
         goto out;
     }
@@ -252,8 +259,10 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
     fd = glfs_creat(glfs, info->path, O_WRONLY | O_CREAT | O_EXCL | O_SYNC,
                     S_IRUSR | S_IWUSR);
     if (!fd) {
-        nbd_fill_reply(rep, -errno, "Failed to create file %s on volume %s!",
-                       info->path, info->volume);
+        int e;
+        e = errno;
+        nbd_fill_reply(rep, -e, "Failed to create file %s on volume %s, %s!",
+                       info->path, info->volume, strerror(e));
         nbd_err("Failed to create file %s on volume %s!\n",
                 info->path, info->volume);
         goto err;
@@ -301,6 +310,7 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
     struct glfs_info *info = dev->priv;
     struct glfs *glfs = NULL;
     bool ret = false;
+    int eno;
 
     if (rep)
         rep->exit = 0;
@@ -312,18 +322,20 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
     }
 
     if (glfs_access(glfs, info->path, F_OK)) {
-        nbd_fill_reply(rep, -ENOENT, "file %s is not exist in volume %s!",
-                       info->path, info->volume);
-        nbd_err("file %s is not exist in volume %s!\n",
-                 info->path, info->volume);
+        eno = errno;
+        nbd_fill_reply(rep, -eno, "glfs_access %s/%s failed, %s!",
+                       info->volume, info->path, strerror(eno));
+        nbd_err("glfs_access %s/%s failed, %s!\n", info->volume, info->path,
+                strerror(eno));
         goto err;
     }
 
     if (glfs_unlink(glfs, info->path) < 0) {
-        nbd_fill_reply(rep, -errno, "failed to delete file %s in volume %s!",
-                       info->path, info->volume);
-        nbd_err("failed to delete file %s in volume %s!",
-                 info->path, info->volume);
+        eno = errno;
+        nbd_fill_reply(rep, -eno, "glfs_unlik %s/%s failed, %s!",
+                       info->volume, info->path, strerror(eno));
+        nbd_err("glfs_unlik %s/%s failed, %s!", info->path, info->volume,
+                strerror(eno));
         goto err;
     }
 
