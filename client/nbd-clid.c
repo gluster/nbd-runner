@@ -40,6 +40,7 @@
 
 static pthread_cond_t nbd_live_cond;
 static pthread_mutex_t nbd_live_lock;
+static pthread_mutex_t nbd_lock;
 
 static void
 nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
@@ -785,10 +786,11 @@ retry:
             goto out;
         }
 
+        pthread_mutex_lock(&nbd_lock);
         globalobj = json_tokener_parse((char *)cli_rep->buf);
-        if (!globalobj && errno == ENOMEM) {
-            nbd_err("json_tokener_parse failed, No memory!\n");
-            goto out;
+        if (!globalobj) {
+            nbd_info("There is no any stale devices or connections exist!\n");
+            goto unlock;
         }
 
         json_object_object_foreach(globalobj, objkey, devobj) {
@@ -802,6 +804,7 @@ retry:
                 tmp = json_object_get_string(obj);
                 if (sscanf(tmp, "/dev/nbd%d", &nbd_index) != 1) {
                     nbd_err("Invalid nbd-device, %s!\n", strerror(errno));
+                    pthread_mutex_unlock(&nbd_lock);
                     goto out;
                 }
 
@@ -815,11 +818,14 @@ retry:
                 nbd_clid_map_device(htype, cfg, nbd_index, readonly,
                         nbd_cfg->rhost, &cli_rep);
                 if (cli_rep && cli_rep->exit) {
+                    pthread_mutex_unlock(&nbd_lock);
                     nbd_err("nbd_clid_map_device failed, %s!\n", cli_rep->buf);
                     goto out;
                 }
             }
         }
+unlock:
+        pthread_mutex_unlock(&nbd_lock);
 
         pthread_mutex_lock(&nbd_live_lock);
         pthread_cond_wait(&nbd_live_cond, &nbd_live_lock);
@@ -936,22 +942,30 @@ static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
 
     switch (req.cmd) {
     case NBD_CLI_CREATE:
+        pthread_mutex_lock(&nbd_lock);
         nbd_clid_create_backstore(req.htype, req.create.cfgstring,
                                   req.create.size, req.create.prealloc,
                                   rhost, &cli_rep);
+        pthread_mutex_unlock(&nbd_lock);
         break;
     case NBD_CLI_DELETE:
+        pthread_mutex_lock(&nbd_lock);
         nbd_clid_delete_backstore(req.htype, req.delete.cfgstring, rhost,
                                   &cli_rep);
+        pthread_mutex_unlock(&nbd_lock);
         break;
     case NBD_CLI_MAP:
+        pthread_mutex_lock(&nbd_lock);
         nbd_clid_map_device(req.htype, req.map.cfgstring,
                             req.map.nbd_index, req.map.readonly,
                             rhost, &cli_rep);
+        pthread_mutex_unlock(&nbd_lock);
         break;
     case NBD_CLI_UNMAP:
+        pthread_mutex_lock(&nbd_lock);
         nbd_clid_unmap_device(req.htype, req.unmap.cfgstring,
                               req.unmap.nbd_index, rhost, &cli_rep);
+        pthread_mutex_unlock(&nbd_lock);
         break;
     case NBD_CLI_LIST:
         nbd_clid_list_devices(req.htype, rhost, &cli_rep, false);
@@ -1115,6 +1129,7 @@ int main(int argc, char *argv[])
         goto out;
     }
 
+    pthread_mutex_init(&nbd_lock, NULL);
     pthread_mutex_init(&nbd_live_lock, NULL);
     pthread_cond_init(&nbd_live_cond, NULL);
 
@@ -1139,6 +1154,9 @@ int main(int argc, char *argv[])
 
     ret = 0;
 out:
+    pthread_mutex_destroy(&nbd_lock);
+    pthread_mutex_destroy(&nbd_live_lock);
+    pthread_cond_destroy(&nbd_live_cond);
 	nbd_ipc_close(clid_ipc_fd);
     nbd_free_config(nbd_cfg);
     exit(ret);
