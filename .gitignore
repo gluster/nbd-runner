@@ -27,8 +27,8 @@ extra/rpmbuild/
 extra/*rpm
 *.patch
 
-cli/nbd-cli
-daemon/nbd-runner
+client/nbd-cli
+server/nbd-runner
 nbd-runner.service
 
 core.*

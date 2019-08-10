@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = rpc utils cli daemon handlers
+SUBDIRS = rpc utils client server handlers
 
 DISTCLEANFILES = Makefile.in autom4te.cache nbd-runner.service
 
