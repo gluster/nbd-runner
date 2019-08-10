@@ -407,6 +407,42 @@ err:
     return ret;
 }
 
+static const char power_letter[] =
+{
+    0,    /* byte */
+    'K',  /* kibi ('k' for kilo is a special case) */
+    'M',  /* mega or mebi */
+    'G',  /* giga or gibi */
+    'T',  /* tera or tebi */
+    'P',  /* peta or pebi */
+    'E',  /* exa or exbi */
+    'Z',  /* zetta or 2**70 */
+    'Y'   /* yotta or 2**80 */
+};
+
+static char *hr_size(ssize_t size)
+{
+  char *sizep;
+  size_t i = 0;
+  size_t rem = 0;
+
+  while (size >= 1024) {
+      rem = (size % 1024);
+      size /= 1024;
+      i++;
+  }
+
+  if (!rem) {
+      if (asprintf(&sizep, "%zu(%c)", size, power_letter[i]) < 0)
+          sizep = NULL;
+  } else {
+      if (asprintf(&sizep, "%.1f(%c)", size + rem / 1024.0, power_letter[i]) < 0)
+          sizep = NULL;
+  }
+
+  return sizep;
+}
+
 static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
 {
     json_object *globalobj = NULL;
@@ -416,7 +452,7 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
     gpointer key, value, stp;
     const char *tmp, *tmp1;
     int status;
-    unsigned long long size;
+    char *sizep;
 
     if (!info) {
         nbd_err("Invalid argument and info is NULL!\n");
@@ -451,11 +487,15 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                     json_object_object_get_ex(devobj, "status", &obj);
                     tmp = json_object_get_string(obj);
                     json_object_object_get_ex(devobj, "size", &obj);
-                    size = json_object_get_int64(obj);
+                    sizep = hr_size(json_object_get_int64(obj));
+                    if (!sizep) {
+                        nbd_err("failed to get sizep, no memory!\n");
+                        goto err;
+                    }
                     if (!strcmp(tmp, "dead"))
-                        nbd_info("%-15s%-15llu%s\n", "Dead", size, objkey);
+                        nbd_info("%-15s%7s%-8s%s\n", "Dead", sizep, "", objkey);
                     else if (!strcmp(tmp, "mapped"))
-                        nbd_info("%-15s%-15llu%s\n", "Live", size, objkey);
+                        nbd_info("%-15s%7s%-8s%s\n", "Live", sizep, "", objkey);
                     else
                         nbd_info("%-15s%-15s%s", "--", "--", "--");
                 }
@@ -500,9 +540,13 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                 tmp = json_object_get_string(obj);
                 if (!strcmp(tmp, "created")) {
                     json_object_object_get_ex(devobj, "size", &obj);
-                    size = json_object_get_int64(obj);
-                    nbd_info("%-20s%-15s%-25s%-15s%-15llu%s\n", "--", "--", "--",
-                            "Created", size, objkey);
+                    sizep = hr_size(json_object_get_int64(obj));
+                    if (!sizep) {
+                        nbd_err("failed to get sizep, no memory!\n");
+                        goto err;
+                    }
+                    nbd_info("%-20s%-15s%-25s%-15s%7s%-8s%s\n", "--", "--", "--",
+                            "Created", sizep, "", objkey);
                 }
             }
         }
@@ -524,9 +568,13 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                     json_object_object_get_ex(devobj, "maptime", &obj);
                     tmp = json_object_get_string(obj);
                     json_object_object_get_ex(devobj, "size", &obj);
-                    size = json_object_get_int64(obj);
-                    nbd_info("%-25s%-15s%-15llu%s\n", tmp ? tmp : "--",
-                             "Dead", size, objkey);
+                    sizep = hr_size(json_object_get_int64(obj));
+                    if (!sizep) {
+                        nbd_err("failed to get sizep, no memory!\n");
+                        goto err;
+                    }
+                    nbd_info("%-25s%-15s%7s%-8s%s\n", tmp ? tmp : "--",
+                             "Dead", sizep, "", objkey);
                 }
             }
         }
@@ -553,8 +601,12 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                     nbd_info("%-25s", tmp ? tmp : "--");
 
                     json_object_object_get_ex(devobj, "size", &obj);
-                    size = json_object_get_int64(obj);
-                    nbd_info("%-15s%-15llu%s\n", "Live", size, objkey);
+                    sizep = hr_size(json_object_get_int64(obj));
+                    if (!sizep) {
+                        nbd_err("failed to get sizep, no memory!\n");
+                        goto err;
+                    }
+                    nbd_info("%-15s%7s%-8s%s\n", "Live", sizep, "", objkey);
                 }
             }
         }
@@ -580,17 +632,21 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                     json_object_object_get_ex(devobj, "status", &obj);
                     tmp = json_object_get_string(obj);
                     json_object_object_get_ex(devobj, "size", &obj);
-                    size = json_object_get_int64(obj);
+                    sizep = hr_size(json_object_get_int64(obj));
+                    if (!sizep) {
+                        nbd_err("failed to get sizep, no memory!\n");
+                        goto err;
+                    }
                     if (!strcmp(tmp, "dead"))
-                        nbd_info("%-15s%-15llu%s\n", "Dead", size, objkey);
+                        nbd_info("%-15s%7s%-8s%s\n", "Dead", sizep, "", objkey);
                     else if (!strcmp(tmp, "mapping"))
-                        nbd_info("%-15s%-15llu%s\n", "Mapping", size, objkey);
+                        nbd_info("%-15s%7s%-8s%s\n", "Mapping", sizep, "", objkey);
                     else if (!strcmp(tmp, "mapped"))
-                        nbd_info("%-15s%-15llu%s\n", "Live", size, objkey);
+                        nbd_info("%-15s%7s%-8s%s\n", "Live", sizep, "", objkey);
                     else if (!strcmp(tmp, "unmapping"))
-                        nbd_info("%-15s%-15llu%s\n", "Unpapping", size, objkey);
+                        nbd_info("%-15s%7s%-8s%s\n", "Unpapping", sizep, "", objkey);
                     else
-                        nbd_info("%-15s%-15s%s\n", "--", "--", "--");
+                        nbd_info("%-15s%7s%-8s%s\n", "--", "--", "", "--");
                 } else {
                     nbd_info("%-20s%-15s%-25s", "--", "--", "--");
                     json_object_object_get_ex(devobj, "status", &obj);
@@ -605,8 +661,12 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                         nbd_info("%-15s", "--");
 
                     json_object_object_get_ex(devobj, "size", &obj);
-                    size = json_object_get_int64(obj);
-                    nbd_info("%-15llu%s\n", size, objkey);
+                    sizep = hr_size(json_object_get_int64(obj));
+                    if (!sizep) {
+                        nbd_err("failed to get sizep, no memory!\n");
+                        goto err;
+                    }
+                    nbd_info("%7s%-8s%s\n", sizep, "", objkey);
                 }
             }
         }
