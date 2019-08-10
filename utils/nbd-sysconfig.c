@@ -334,19 +334,27 @@ static void nbd_parse_options(struct nbd_config *cfg, char *buf, int len)
     nbd_conf_set_options(cfg);
 }
 
-static int _nbd_load_config(struct nbd_config *cfg)
+static int _nbd_load_config(struct nbd_config *cfg, bool server)
 {
     int ret = -1;
     int fd, len;
-    char *buf;
+    char *buf, *file;
     int i;
 
     buf = calloc(1, NBD_MAX_CFG_FILE_SIZE);
     if (!buf)
         return -ENOMEM;
 
+    if (server)
+        file = strdup(NBD_CONFIG_SERV_DEFAULT);
+    else
+        file = strdup(NBD_CONFIG_CLID_DEFAULT);
+
+    if (!file)
+        goto out;
+
     for (i = 0; i < 5; i++) {
-        if ((fd = open(NBD_CONFIG_FILE_DEFAULT, O_RDONLY)) == -1) {
+        if ((fd = open(file, O_RDONLY)) == -1) {
             /* give a moment for editor to restore
              * the conf-file after edit and save */
             sleep(1);
@@ -355,16 +363,15 @@ static int _nbd_load_config(struct nbd_config *cfg)
         break;
     }
     if (fd == -1) {
-        nbd_err("Failed to open file '%s', %m\n",
-                NBD_CONFIG_FILE_DEFAULT);
-        goto free_buf;
+        nbd_err("Failed to open file '%s', %m\n", file);
+        goto out;
     }
 
     len = nbd_read_config(fd, buf, NBD_MAX_CFG_FILE_SIZE);
     close(fd);
     if (len < 0) {
-        nbd_err("Failed to read file '%s'\n", NBD_CONFIG_FILE_DEFAULT);
-        goto free_buf;
+        nbd_err("Failed to read file '%s'\n", file);
+        goto out;
     }
 
     buf[len] = '\0';
@@ -372,12 +379,13 @@ static int _nbd_load_config(struct nbd_config *cfg)
     nbd_parse_options(cfg, buf, len);
 
     ret = 0;
-free_buf:
+out:
     free(buf);
+    free(file);
     return ret;
 }
 
-struct nbd_config* nbd_load_config(void)
+struct nbd_config* nbd_load_config(bool server)
 {
     struct nbd_config *cfg;
 
@@ -392,7 +400,7 @@ struct nbd_config* nbd_load_config(void)
     snprintf(cfg->log_dir, PATH_MAX, "%s", NBD_LOG_DIR_DEFAULT);
     snprintf(cfg->ghost, NBD_HOST_MAX, "%s", NBD_HOST_LOCAL_DEFAULT);
 
-    if (_nbd_load_config(cfg))
+    if (_nbd_load_config(cfg, server))
         nbd_err("Failed to load config, will use the default settings!\n");
 
     return cfg;

@@ -245,7 +245,7 @@ int main (int argc, char **argv)
     int ret = EXIT_FAILURE;
     int ind;
 
-    nbd_cfg = nbd_load_config();
+    nbd_cfg = nbd_load_config(true);
     if (!nbd_cfg) {
         nbd_err("nbd_initialize_config failed!\n");
         goto out;
