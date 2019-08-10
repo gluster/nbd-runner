@@ -22,7 +22,8 @@
 #include "config.h"
 
 #define NBD_CONFIG_DIR_DEFAULT "/etc/sysconfig"
-#define NBD_CONFIG_FILE_DEFAULT NBD_CONFIG_DIR_DEFAULT"/nbd-runner"
+#define NBD_CONFIG_SERV_DEFAULT NBD_CONFIG_DIR_DEFAULT"/nbd-runner"
+#define NBD_CONFIG_CLID_DEFAULT NBD_CONFIG_DIR_DEFAULT"/nbd-clid"
 
 #define NBD_HOST_LOCAL_DEFAULT "localhost"
 
@@ -65,7 +66,7 @@ static const char *const log_level_lookup[] = {
 	[NBD_CONF_LOG_DEBUG_IO]         = "DEBUG IO",
 };
 
-struct nbd_config* nbd_load_config(void);
+struct nbd_config* nbd_load_config(bool server);
 void nbd_free_config(struct nbd_config *cfg);
 
 #endif /* __NBD_CONFIG_H */
