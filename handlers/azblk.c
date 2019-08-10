@@ -535,7 +535,7 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
 
     azdev->dev = dev;
 
-    str = (char *)cfgstring + 4; // skip over key=
+    str = (char *)cfgstring;
 
     /* First locate the url */
 

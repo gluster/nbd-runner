@@ -165,8 +165,7 @@ static bool glfs_cfg_parse(struct nbd_device *dev, const char *cfg,
         goto err;
     }
 
-    /* skip the "key=" */
-    tmp = strdup(cfg + 4);
+    tmp = strdup(cfg);
     if (!tmp) {
         nbd_fill_reply(rep, -ENOMEM, "No memory for tmp!");
         nbd_err("No memory for tmp\n");

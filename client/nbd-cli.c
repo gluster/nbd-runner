@@ -15,7 +15,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <errno.h>
-#include <libkmod.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <linux/nbd.h>
@@ -91,24 +90,14 @@ nbd_cli_create_backstore(int sock, int count, char **options, handler_t handler)
 
     req.type = handler;
     req.cmd = NBD_CLI_CREATE;
+    req.create.prealloc = false;
 
-    /*
-     * It won't touch the cfgstring from the command line, except
-     * adding the "key=" prefix and ';' at the end.
-     *
-     * After this the cfgsting will be like:
-     * "key=volume/filepath;dummy1=value1;dummy2;dummy3=value3;"
-     *
-     * And the dummy1, dummy2 and dummy3 will be the handler's private
-     * extra options.
-     */
-    len = snprintf(req.nbd_create.cfgstring, max_len, "key=%s", options[0]);
+    len = snprintf(req.create.cfgstring, max_len, "%s", options[0]);
     if (len < 0) {
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
         ret = -errno;
         goto err;
     }
-    req.nbd_create.cfgstring[len++] = ';';
 
     ind = 1;
     while (ind < count) {
@@ -129,7 +118,7 @@ nbd_cli_create_backstore(int sock, int count, char **options, handler_t handler)
 
             ind += 2;
         } else if (!strcmp("prealloc", options[ind])) {
-            req.nbd_create.prealloc = true;
+            req.create.prealloc = true;
             ind += 1;
         } else if (!strcmp("size", options[ind])) {
             if (ind + 1 >= count) {
@@ -151,7 +140,7 @@ nbd_cli_create_backstore(int sock, int count, char **options, handler_t handler)
                 goto err;
             }
 
-            req.nbd_create.size = size;
+            req.create.size = size;
 
             ind += 2;
         } else {
@@ -200,7 +189,7 @@ nbd_cli_delete_backstore(int sock, int count, char **options, handler_t handler)
     req.type = handler;
     req.cmd = NBD_CLI_DELETE;
 
-    len = snprintf(req.nbd_delete.cfgstring, max_len, "key=%s", options[0]);
+    len = snprintf(req.delete.cfgstring, max_len, "%s", options[0]);
     if (len < 0) {
         ret = -errno;
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
@@ -266,19 +255,21 @@ nbd_cli_map_device(int sock, int count, char **options, handler_t handler)
 
     req.type = handler;
     req.cmd = NBD_CLI_MAP;
+    req.map.nbd_index = -1;
+    req.map.readonly = false;
+    req.map.timeout = 0;
 
-    len = snprintf(req.nbd_map.cfgstring, max_len, "key=%s", options[0]);
+    len = snprintf(req.map.cfgstring, max_len, "%s", options[0]);
     if (len < 0) {
         ret = -errno;
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
         goto err;
     }
-    req.nbd_map.cfgstring[len++] = ';';
 
     ind = 1;
     while (ind < count) {
         if (!strncmp("/dev/nbd", options[ind], strlen("/dev/nbd"))) {
-            if (sscanf(options[ind], "/dev/nbd%d", &req.nbd_map.nbd_index) != 1) {
+            if (sscanf(options[ind], "/dev/nbd%d", &req.map.nbd_index) != 1) {
                 ret = -errno;
                 nbd_err("Invalid nbd-device!\n");
                 goto err;
@@ -300,7 +291,7 @@ nbd_cli_map_device(int sock, int count, char **options, handler_t handler)
 
             ind += 2;
         } else if (!strcmp("readonly", options[ind])) {
-            req.nbd_map.readonly = true;
+            req.map.readonly = true;
             ind += 1;
         } else if (!strcmp("timeout", options[ind])) {
             if (ind + 1 >= count) {
@@ -314,7 +305,7 @@ nbd_cli_map_device(int sock, int count, char **options, handler_t handler)
                 nbd_err("Invalid timeout value!\n");
                 goto err;
             }
-            req.nbd_map.timeout = timeout;
+            req.map.timeout = timeout;
 
             ind += 2;
         } else {
@@ -363,22 +354,22 @@ nbd_cli_unmap_device(int sock, int count, char **options, handler_t handler)
 
     req.type = handler;
     req.cmd = NBD_CLI_UNMAP;
+    req.unmap.nbd_index = -1;
 
     ind = 0;
     if (!strncmp("/dev/nbd", options[ind], strlen("/dev/nbd"))) {
-        if (sscanf(options[ind], "/dev/nbd%d", &req.nbd_unmap.nbd_index) != 1) {
+        if (sscanf(options[ind], "/dev/nbd%d", &req.unmap.nbd_index) != 1) {
             ret = -errno;
             nbd_err("Invalid nbd-device!\n");
             goto err;
         }
     } else {
-        len = snprintf(req.nbd_unmap.cfgstring, max_len, "key=%s", options[ind]);
+        len = snprintf(req.unmap.cfgstring, max_len, "%s", options[ind]);
         if (len < 0) {
             ret = -errno;
             nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
             goto err;
         }
-        req.nbd_unmap.cfgstring[len++] = ';';
     }
 
     ind = 1;
@@ -993,12 +984,11 @@ static gboolean nbd_cli_cmd_find(gconstpointer a, gconstpointer b)
 int main(int argc, char *argv[])
 {
     nbd_cli_opt_command cmd;
-    struct cli_cmd *clicmd;
     int ret = EXIT_FAILURE;
+    struct cli_cmd *clicmd;
     handler_t handler;
     char **options;
     int count;
-    int len;
     int sock;
     int ind;
 
