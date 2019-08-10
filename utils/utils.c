@@ -180,18 +180,24 @@ dev_status_t nbd_dev_status_lookup(const char *st)
 {
     if (!strcmp(st, "created"))
         return NBD_DEV_CONN_ST_CREATED;
+    else if (!strcmp(st, "mapping"))
+        return NBD_DEV_CONN_ST_MAPPING;
     else if (!strcmp(st, "mapped"))
         return NBD_DEV_CONN_ST_MAPPED;
     else if (!strcmp(st, "dead"))
         return NBD_DEV_CONN_ST_DEAD;
+    else if (!strcmp(st, "unmapping"))
+        return NBD_DEV_CONN_ST_UNMAPPING;
 
     return NBD_DEV_CONN_ST_MAX;
 }
 
 static const char *const dev_status_lookup[] = {
     [NBD_DEV_CONN_ST_CREATED]       = "created",
+    [NBD_DEV_CONN_ST_MAPPING]       = "mapping",
     [NBD_DEV_CONN_ST_MAPPED]        = "mapped",
     [NBD_DEV_CONN_ST_DEAD]          = "dead",
+    [NBD_DEV_CONN_ST_UNMAPPING]     = "unmapping",
 
     [NBD_DEV_CONN_ST_MAX]           = NULL,
 };
