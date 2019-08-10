@@ -87,13 +87,17 @@ find %{buildroot}%{_libdir}/nbd-runner/ -name '*.la' -delete
 %files
 %{_sbindir}/nbd-runner
 %{_sbindir}/nbd-cli
+%{_sbindir}/nbd-clid
 %{_unitdir}/nbd-runner.service
+%{_unitdir}/nbd-clid.service
 %{_mandir}/man8/nbd-*.8.*
 %dir %{_libdir}/nbd-runner/
 %{_libdir}/nbd-runner/libutils.so*
 %doc README.md
 %license COPYING-GPLV2 COPYING-LGPLV3
+%config(noreplace) %{_sysconfdir}/sysconfig/nbd-clid
 %config(noreplace) %{_sysconfdir}/sysconfig/nbd-runner
+%ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-clid.log
 %ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-runner.log
 %ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-runner-glfs.log
 

@@ -27,6 +27,7 @@
 #include <libnl3/netlink/genl/mngt.h>
 #include <libnl3/netlink/genl/ctrl.h>
 #include <json-c/json.h>
+#include <gmodule.h>
 
 #include "nbd-cli-common.h"
 #include "config.h"
@@ -97,7 +98,7 @@ nbd_cli_create_backstore(int sock, int count, char **options, handler_t htype)
                 goto err;
             }
 
-            snprintf(req.rhost, 255, options[ind + 1]);
+            snprintf(req.rhost, 255, "%s", options[ind + 1]);
 
             if (!nbd_is_valid_host(req.rhost)) {
                 ret = -EINVAL;
@@ -140,7 +141,7 @@ nbd_cli_create_backstore(int sock, int count, char **options, handler_t htype)
     }
 
     if (!req.rhost[0])
-        snprintf(req.rhost, 255, "localhost");
+        snprintf(req.rhost, 255, "%s", "localhost");
 
     rep = nbd_request_and_wait(sock, &req);
     if (!rep) {
@@ -187,7 +188,7 @@ nbd_cli_delete_backstore(int sock, int count, char **options, handler_t htype)
 
     if (count == 3) {
         if(!strcmp("host", options[1])) {
-            snprintf(req.rhost, 255, options[2]);
+            snprintf(req.rhost, 255, "%s", options[2]);
 
             if (!nbd_is_valid_host(req.rhost)) {
                 ret = -EINVAL;
@@ -202,7 +203,7 @@ nbd_cli_delete_backstore(int sock, int count, char **options, handler_t htype)
     }
 
     if (!req.rhost[0])
-        snprintf(req.rhost, 255, "localhost");
+        snprintf(req.rhost, 255, "%s", "localhost");
 
     rep = nbd_request_and_wait(sock, &req);
     if (!rep) {
@@ -230,10 +231,7 @@ nbd_cli_map_device(int sock, int count, char **options, handler_t htype)
     int ret = 0;
     int len;
     int max_len = 1024;
-    int dev_index = -1;
-    int tmp_index;
-    int timeout = 30; //This is the default timeout value in kernel space for each IO request
-    bool readonly = false;
+    int timeout;
     int ind;
 
     /* strict check */
@@ -246,7 +244,8 @@ nbd_cli_map_device(int sock, int count, char **options, handler_t htype)
     req.cmd = NBD_CLI_MAP;
     req.map.nbd_index = -1;
     req.map.readonly = false;
-    req.map.timeout = 0;
+    /* This is the default in kernel space for each IO request */
+    req.map.timeout = 30;
 
     len = snprintf(req.map.cfgstring, max_len, "%s", options[0]);
     if (len < 0) {
@@ -271,7 +270,7 @@ nbd_cli_map_device(int sock, int count, char **options, handler_t htype)
                 goto err;
             }
 
-            snprintf(req.rhost, 255, options[ind + 1]);
+            snprintf(req.rhost, 255, "%s", options[ind + 1]);
 
             if (!nbd_is_valid_host(req.rhost)) {
                 nbd_err("Invalid host '%s'!\n", req.rhost);
@@ -305,7 +304,7 @@ nbd_cli_map_device(int sock, int count, char **options, handler_t htype)
     }
 
     if (!req.rhost[0])
-        snprintf(req.rhost, 255, "localhost");
+        snprintf(req.rhost, 255, "%s", "localhost");
 
     rep = nbd_request_and_wait(sock, &req);
     if (!rep) {
@@ -370,7 +369,7 @@ nbd_cli_unmap_device(int sock, int count, char **options, handler_t htype)
                 goto err;
             }
 
-            snprintf(req.rhost, 255, options[ind + 1]);
+            snprintf(req.rhost, 255, "%s", options[ind + 1]);
 
             if (!nbd_is_valid_host(req.rhost)) {
                 ret = -EINVAL;
@@ -387,7 +386,7 @@ nbd_cli_unmap_device(int sock, int count, char **options, handler_t htype)
     }
 
     if (!req.rhost[0])
-        snprintf(req.rhost, 255, "localhost");
+        snprintf(req.rhost, 255, "%s", "localhost");
 
     rep = nbd_request_and_wait(sock, &req);
     if (!rep) {
@@ -654,9 +653,9 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                     if (!strcmp(tmp, "created"))
                         nbd_info("%-15s", "Created");
                     else if (!strcmp(tmp, "mapping"))
-                        nbd_info("%-15s%", "Mapping");
+                        nbd_info("%-15s", "Mapping");
                     else if (!strcmp(tmp, "dead"))
-                        nbd_info("%-15s%", "Dead");
+                        nbd_info("%-15s", "Dead");
                     else
                         nbd_info("%-15s", "--");
 
@@ -713,12 +712,8 @@ nbd_cli_list_device(int sock, int count, char **options, handler_t htype)
     list_type ltype = NBD_LIST_ALL;
     struct cli_request req = {0, };
     struct cli_reply *rep = NULL;
-    struct nl_sock *netfd = NULL;
     GHashTable *list_hash = NULL;
-    struct nl_msg *msg;
-    int driver_id;
     int ret = 0;
-    int len;
     int ind;
 
     /* strict check */
@@ -740,7 +735,7 @@ nbd_cli_list_device(int sock, int count, char **options, handler_t htype)
                 goto out;
             }
 
-            snprintf(req.rhost, 255, options[ind + 1]);
+            snprintf(req.rhost, 255, "%s", options[ind + 1]);
 
             if (!nbd_is_valid_host(req.rhost)) {
                 ret = -EINVAL;
@@ -775,7 +770,7 @@ nbd_cli_list_device(int sock, int count, char **options, handler_t htype)
     }
 
     if (!req.rhost[0])
-        snprintf(req.rhost, 255, "localhost");
+        snprintf(req.rhost, 255, "%s", "localhost");
 
     rep = nbd_request_and_wait(sock, &req);
     if (!rep) {
@@ -797,7 +792,7 @@ nbd_cli_list_device(int sock, int count, char **options, handler_t htype)
         goto out;
     }
 
-    list_info(rep->buf, list_hash, ltype);
+    list_info((char *)rep->buf, list_hash, ltype);
     ret = 0;
 
 out:
@@ -825,10 +820,6 @@ nbd_cli_print_info(gpointer data, gpointer user_data)
 
 static int nbd_cli_help(void)
 {
-    GHashTableIter iter;
-    gpointer key, value;
-    int i;
-
     nbd_info("Usage:\n\n");
     g_ptr_array_foreach(cmds_list, nbd_cli_print_info, NULL);
     nbd_info("\n");
@@ -839,10 +830,6 @@ static int nbd_cli_help(void)
 static int
 nbd_register_cmds(GPtrArray *cmds_list, struct cli_cmd *cmds)
 {
-    char *key;
-    char *sep;
-    const char *p;
-    int len;
     int i;
 
     if (!cmds_list || !cmds)
@@ -914,14 +901,6 @@ static const char *const nbd_cli_opt_commands[] = {
     [NBD_OPT_MAX]            = NULL,
 };
 
-static const char *const nbd_cli_handlers[] = {
-	[NBD_BACKSTORE_GLUSTER]  = "gluster",
-	[NBD_BACKSTORE_CEPH]     = "ceph",
-	[NBD_BACKSTORE_AZBLK]    = "azblk",
-
-	[NBD_BACKSTORE_MAX]      = NULL,
-};
-
 static int nbd_cli_get_handler_type(const char *chtype)
 {
     handler_t htype;
@@ -973,7 +952,7 @@ int main(int argc, char *argv[])
     char **options;
     int count;
     int sock;
-    int ind;
+    guint ind;
 
     if (argc == 1) {
         usage();
@@ -995,21 +974,22 @@ int main(int argc, char *argv[])
             goto out;
         case NBD_OPT_MAX:
         default:
-            htype = nbd_cli_get_handler_type(argv[1]);
-            if (htype == NBD_BACKSTORE_MAX) {
-                printf("Invalid handler type, try 'nbd-cli help' for more information!\n");
-                exit(1);
-            }
-            if (htype == NBD_BACKSTORE_CEPH) {
-                printf("Ceph is not support yet!\n");
-                exit(1);
-            }
+            break;
         }
     }
 
     if (!nbd_minimal_kernel_version_check())
         goto out;
 
+    htype = nbd_cli_get_handler_type(argv[1]);
+    if (htype == NBD_BACKSTORE_MAX) {
+        printf("Invalid handler type, try 'nbd-cli help' for more information!\n");
+        exit(1);
+    }
+    if (htype == NBD_BACKSTORE_CEPH) {
+        printf("Ceph is not support yet!\n");
+        exit(1);
+    }
     cmds_list = nbd_register_backstores(htype);
     if (!cmds_list) {
         nbd_err("No command registered!\n");

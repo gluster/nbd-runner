@@ -14,6 +14,9 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <grp.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <rpc/pmap_clnt.h>
 #include <signal.h>
@@ -342,8 +345,6 @@ int main (int argc, char **argv)
     int ret = EXIT_FAILURE;
 	uid_t uid = 0;
     gid_t gid = 0;
-	pid_t pid;
-    int ind;
 
     nbd_cfg = nbd_load_config(true);
     if (!nbd_cfg) {

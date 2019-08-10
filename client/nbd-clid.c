@@ -12,6 +12,9 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <grp.h>
+#include <unistd.h>
 #include <linux/nbd.h>
 #include <netdb.h>
 #include <sys/socket.h>
@@ -23,6 +26,7 @@
 #include <libnl3/netlink/genl/ctrl.h>
 #include <json-c/json.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "rpc_nbd.h"
 #include "utils.h"
@@ -45,9 +49,8 @@ nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
     CLIENT *clnt = NULL;
     struct nbd_create *create;
     struct nbd_response rep = {0,};
-    struct addrinfo *res;
+    struct addrinfo *res = NULL;
     int sock = RPC_ANYSOCK;
-    int ind;
     int len;
     int max_len = 1024;
 
@@ -116,7 +119,7 @@ nbd_clid_delete_backstore(int htype, const char *cfg, const char *rhost,
     CLIENT *clnt = NULL;
     struct nbd_delete *delete;
     struct nbd_response rep = {0,};
-    struct addrinfo *res;
+    struct addrinfo *res = NULL;
     int sock = RPC_ANYSOCK;
     int len;
     int max_len = 1024;
@@ -408,18 +411,16 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
     CLIENT *clnt = NULL;
     struct nbd_premap *map;
     struct nbd_response rep = {0,};
-    struct addrinfo *res;
+    struct addrinfo *res = NULL;
     int sock = RPC_ANYSOCK;
     int tmp_index;
     int timeout = 30; //This is the default timeout value in kernel space for each IO request
     int ret = -EINVAL;
     int len;
-    int ind;
     int max_len = 1024;
     struct nl_sock *netfd = NULL;
     int driver_id;
     int sockfd = -1;
-    int count;
 
     nbd_info("Map request htype: %d, cfg: %s, nbd_index: %d, readonly: %d, rhost: %s\n",
              htype, cfg, nbd_index, readonly, rhost);
@@ -557,13 +558,12 @@ nbd_clid_unmap_device(int htype, const char *cfg, int nbd_index,
 {
     CLIENT *clnt = NULL;
     struct nbd_response rep = {0,};
-    struct addrinfo *res;
+    struct addrinfo *res = NULL;
     int sock = RPC_ANYSOCK;
     struct nbd_unmap *unmap = NULL;
     struct nl_sock *netfd = NULL;
     int max_len = 1024;
     int driver_id;
-    int ind;
     int len;
     int ret;;
 
@@ -670,10 +670,7 @@ nbd_clid_list_devices(handler_t htype, const char *rhost, struct cli_reply **cli
     struct nbd_response rep = {0,};
     int sock = RPC_ANYSOCK;
     struct nbd_list list = {.htype = htype};
-    int driver_id;
-    int ind, eno;
-    int ret = -1;
-    int count = 0;
+    int eno;
 
     nbd_info("List request htype: %d, do_retry: %d, rhost: %s\n",
              htype, do_retry, rhost);
@@ -756,7 +753,6 @@ static void *nbd_clid_connections_restore(void *arg)
     struct cli_reply *cli_rep = NULL;
     struct nbd_config *nbd_cfg = arg;
     json_object *globalobj = NULL;
-    json_object *dobj = NULL;
     json_object *obj = NULL;
     handler_t htype;
     bool readonly;
@@ -789,7 +785,7 @@ retry:
             goto out;
         }
 
-        globalobj = json_tokener_parse(cli_rep->buf);
+        globalobj = json_tokener_parse((char *)cli_rep->buf);
         if (!globalobj && errno == ENOMEM) {
             nbd_err("json_tokener_parse failed, No memory!\n");
             goto out;
@@ -916,7 +912,6 @@ static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
     struct cli_request req;
     struct cli_reply *cli_rep = NULL;
     const char *rhost = nbd_cfg->rhost;
-    char *buf;
     int ret = 0;
     int sock;
 
@@ -929,7 +924,7 @@ static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
     bzero(&req, sizeof(struct cli_request));
     ret = nbd_socket_read(sock, &req, sizeof(struct cli_request));
     if (ret != sizeof(struct cli_request)) {
-        nbd_err("Nigo failed, ret: %d, sizeof(struct cli_request): %d!\n",
+        nbd_err("Nigo failed, ret: %d, sizeof(struct cli_request): %lu!\n",
                 ret, sizeof(struct cli_request));
         ret = -1;
         goto out;
@@ -1036,10 +1031,7 @@ int main(int argc, char *argv[])
     pthread_t ping_threadid;
 	uid_t uid = 0;
     gid_t gid = 0;
-	pid_t pid;
-    char buf[32];
     int ret = -1;
-    int log_level;
 
     nbd_cfg = nbd_load_config(false);
     if (!nbd_cfg) {
@@ -1085,15 +1077,16 @@ int main(int argc, char *argv[])
     if (!nbd_minimal_kernel_version_check())
         goto out;
 
-    if (load_our_module() < 0)
+    if (load_our_module() < 0) {
         goto out;
+    }
 
 	sa_new.sa_handler = sig_handler;
 	sigemptyset(&sa_new.sa_mask);
 	sa_new.sa_flags = 0;
-	sigaction(SIGINT, &sa_new, &sa_old );
-	sigaction(SIGPIPE, &sa_new, &sa_old );
-	sigaction(SIGTERM, &sa_new, &sa_old );
+	sigaction(SIGINT, &sa_new, &sa_old);
+	sigaction(SIGPIPE, &sa_new, &sa_old);
+	sigaction(SIGTERM, &sa_new, &sa_old);
 
 	umask(0177);
 
