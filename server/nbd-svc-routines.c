@@ -599,25 +599,6 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     }
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
-    if (dev) {
-        if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
-            nbd_fill_reply(rep, -EBUSY, "%s already mapped to %s!", key, dev->nbd);
-            nbd_err("%s already map to %s!\n", key, dev->nbd);
-            goto err;
-        } else if (dev->status == NBD_DEV_CONN_ST_MAPPING) {
-            nbd_fill_reply(rep, -EBUSY, "%s already in mapping state!", key);
-            nbd_err("%s already in mapping state!\n", key);
-            goto err;
-        } else if (dev->status == NBD_DEV_CONN_ST_UNMAPPING) {
-            nbd_fill_reply(rep, -EBUSY, "%s is still in unmapping state!", key);
-            nbd_err("%s is still in in unmapping state!\n", key);
-            goto err;
-        } else if (dev->status == NBD_DEV_CONN_ST_DEAD) {
-            nbd_fill_reply(rep, -EEXIST, "%s", dev->nbd);
-            goto map;
-        }
-    }
-
     if (!dev) {
         /*
         * Since we allow to create the backstore directly
@@ -666,20 +647,40 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         inserted = true;
     }
 
-map:
-    save_ret = rep->exit;
-    dev->timeout = map->timeout;
     pthread_mutex_lock(&dev->lock);
-    dev->status = NBD_DEV_CONN_ST_MAPPING;
-    if (!handler->map(dev, rep)) {
-        pthread_mutex_unlock(&dev->lock);
+    switch (dev->status) {
+    case NBD_DEV_CONN_ST_MAPPED:
+        nbd_fill_reply(rep, -EBUSY, "%s already mapped to %s!", key, dev->nbd);
+        nbd_err("%s already map to %s!\n", key, dev->nbd);
+        goto err;
+    case NBD_DEV_CONN_ST_MAPPING:
+        nbd_fill_reply(rep, -EBUSY, "%s already in mapping state!", key);
+        nbd_err("%s already in mapping state!\n", key);
+        goto err;
+    case NBD_DEV_CONN_ST_UNMAPPING:
+        nbd_fill_reply(rep, -EBUSY, "%s is still in unmapping state!", key);
+        nbd_err("%s is still in in unmapping state!\n", key);
+        goto err;
+    case NBD_DEV_CONN_ST_CREATED:
+    case NBD_DEV_CONN_ST_DEAD:
+        nbd_fill_reply(rep, -EEXIST, "%s", dev->nbd);
+        break;
+    default:
+        nbd_fill_reply(rep, -EINVAL, "%s is in Unknown state %d!", key, dev->status);
+        nbd_err("%s is in Unknown state %d!\n", key, dev->status);
         goto err;
     }
 
+    save_ret = rep->exit;
+
+    if (!handler->map(dev, rep))
+        goto err;
+
+    dev->timeout = map->timeout;
+    dev->status = NBD_DEV_CONN_ST_MAPPING;
     rep->size = dev->size;
     rep->blksize = dev->blksize;
     INIT_LIST_HEAD(&dev->retry_io_queue);
-    pthread_mutex_unlock(&dev->lock);
 
     if (!rep->exit)
         rep->exit = save_ret;
@@ -689,6 +690,8 @@ map:
     snprintf(rep->port, NBD_PORT_MAX, "%d", iport);
 
 err:
+    pthread_mutex_unlock(&dev->lock);
+
     if (!rep->exit || rep->exit == -EEXIST)
         nbd_info("Premap successed!\n");
     else
@@ -1096,9 +1099,6 @@ int nbd_handle_request(int sock, int threads)
 
         if(request.type == htonl(NBD_CMD_DISC)) {
             nbd_dbg("Unmap request received for dev: %s!\n", key);
-            pthread_mutex_lock(&dev->lock);
-            dev->handler->unmap(dev);
-            pthread_mutex_unlock(&dev->lock);
             ret = 0;
             goto err;
         }
@@ -1163,6 +1163,7 @@ err:
 
     /* After unmap, the status will be back to created */
     pthread_mutex_lock(&dev->lock);
+    dev->handler->unmap(dev);
     dev->status = NBD_DEV_CONN_ST_CREATED;
     pthread_mutex_unlock(&dev->lock);
 

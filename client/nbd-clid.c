@@ -697,18 +697,17 @@ err:
 }
 
 static void
-nbd_clid_list_devices(handler_t htype, const char *rhost, struct cli_reply **cli_rep,
-                      bool do_retry)
+nbd_clid_list_devices(handler_t htype, const char *rhost, struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
     struct addrinfo *res;
     struct nbd_response rep = {0,};
-    int sock = RPC_ANYSOCK;
     struct nbd_list list = {.htype = htype};
+    int count = 0;
+    int sock;
     int eno;
 
-    nbd_info("List request htype: %d, do_retry: %d, rhost: %s\n",
-             htype, do_retry, rhost);
+    nbd_info("List request htype: %d, rhost: %s\n", htype, rhost);
 
     res = nbd_get_sock_addr(rhost, NBD_RPC_SVC_PORT);
     if (!res) {
@@ -717,10 +716,17 @@ nbd_clid_list_devices(handler_t htype, const char *rhost, struct cli_reply **cli
         goto nla_put_failure;
     }
 
+retry:
+    sock = RPC_ANYSOCK;
     clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
                           RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
         eno = errno;
+        if (eno == ECONNREFUSED && count++ < 50) {
+            g_usleep(100000);
+            goto retry;
+        }
+
         nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed!");
         nbd_err("clnttcp_create failed, %s!\n", strerror(eno));
         goto nla_put_failure;
@@ -751,6 +757,8 @@ nla_put_failure:
     freeaddrinfo(res);
 }
 
+static bool need_to_restore_again = false;
+
 static void *nbd_ping_liveness_start(void *arg)
 {
     struct nbd_config *nbd_cfg = arg;
@@ -770,11 +778,14 @@ static void *nbd_ping_liveness_start(void *arg)
 
         if (sock) {
             nbd_socket_read(sock, buf, 1024);
-            if(strcmp(timestamp, buf)) {
-                memcpy(timestamp, buf, 1024);
+            if(strcmp(timestamp, buf) || need_to_restore_again) {
+                if (!need_to_restore_again)
+                    memcpy(timestamp, buf, 1024);
+
                 pthread_mutex_lock(&nbd_live_lock);
                 pthread_cond_signal(&nbd_live_cond);
                 pthread_mutex_unlock(&nbd_live_lock);
+                need_to_restore_again = false;
             }
             close(sock);
         }
@@ -794,7 +805,8 @@ static void *nbd_clid_connections_restore(void *arg)
     bool readonly;
     const char *tmp, *cfg;
     int nbd_index;
-    int count = 0;
+
+    nbd_info("clid restore thread starting!\n");
 
     while (1) {
         /*
@@ -804,16 +816,10 @@ static void *nbd_clid_connections_restore(void *arg)
          * time or at the node's boot time, the nbd-runner may need to take
          * a while to get ready.
          */
-retry:
-        free(cli_rep);
-        nbd_clid_list_devices(NBD_BACKSTORE_MAX, nbd_cfg->rhost, &cli_rep, true);
+        nbd_clid_list_devices(NBD_BACKSTORE_MAX, nbd_cfg->rhost, &cli_rep);
         if (!cli_rep) {
             nbd_err("nbd_clid_list_devices failed, no memory!\n");
             return NULL;
-        }
-        if (cli_rep->exit == -ECONNREFUSED && count++ < 50) {
-            g_usleep(100000);
-            goto retry;
         }
 
         if (cli_rep->exit) {
@@ -840,8 +846,7 @@ retry:
                 tmp = json_object_get_string(obj);
                 if (sscanf(tmp, "/dev/nbd%d", &nbd_index) != 1) {
                     nbd_err("Invalid nbd-device, %s!\n", strerror(errno));
-                    pthread_mutex_unlock(&nbd_lock);
-                    goto out;
+                    continue;
                 }
 
                 json_object_object_get_ex(devobj, "readonly", &obj);
@@ -854,9 +859,14 @@ retry:
                 nbd_clid_map_device(htype, cfg, nbd_index, readonly,
                         nbd_cfg->rhost, &cli_rep);
                 if (cli_rep && cli_rep->exit) {
-                    pthread_mutex_unlock(&nbd_lock);
                     nbd_err("nbd_clid_map_device failed, %s!\n", cli_rep->buf);
-                    goto out;
+                    /*
+                     * There maybe something wrong in the server side,
+                     * such as for the gluster the volume may not ready
+                     * after the node is rebooted, try it again later.
+                     */
+                    need_to_restore_again = true;
+                    continue;
                 }
             }
         }
@@ -1004,7 +1014,7 @@ static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
         pthread_mutex_unlock(&nbd_lock);
         break;
     case NBD_CLI_LIST:
-        nbd_clid_list_devices(req.htype, rhost, &cli_rep, false);
+        nbd_clid_list_devices(req.htype, rhost, &cli_rep);
         break;
     default:
         break;
