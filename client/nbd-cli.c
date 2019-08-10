@@ -72,7 +72,7 @@ nbd_request_and_wait(int sock, struct cli_request *req)
 }
 
 static int
-nbd_cli_create_backstore(int sock, int count, char **options, handler_t handler)
+nbd_cli_create_backstore(int sock, int count, char **options, handler_t htype)
 {
     struct cli_request req = {0, };
     struct cli_reply *rep = NULL;
@@ -88,7 +88,7 @@ nbd_cli_create_backstore(int sock, int count, char **options, handler_t handler)
          return -EINVAL;
     }
 
-    req.type = handler;
+    req.htype = htype;
     req.cmd = NBD_CLI_CREATE;
     req.create.prealloc = false;
 
@@ -172,7 +172,7 @@ err:
 }
 
 static int
-nbd_cli_delete_backstore(int sock, int count, char **options, handler_t handler)
+nbd_cli_delete_backstore(int sock, int count, char **options, handler_t htype)
 {
     struct cli_request req = {0, };
     struct cli_reply *rep = NULL;
@@ -186,7 +186,7 @@ nbd_cli_delete_backstore(int sock, int count, char **options, handler_t handler)
          return -EINVAL;
     }
 
-    req.type = handler;
+    req.htype = htype;
     req.cmd = NBD_CLI_DELETE;
 
     len = snprintf(req.delete.cfgstring, max_len, "%s", options[0]);
@@ -234,7 +234,7 @@ err:
 }
 
 static int
-nbd_cli_map_device(int sock, int count, char **options, handler_t handler)
+nbd_cli_map_device(int sock, int count, char **options, handler_t htype)
 {
     struct cli_request req = {0, };
     struct cli_reply *rep = NULL;
@@ -253,7 +253,7 @@ nbd_cli_map_device(int sock, int count, char **options, handler_t handler)
          return -EINVAL;
     }
 
-    req.type = handler;
+    req.htype = htype;
     req.cmd = NBD_CLI_MAP;
     req.map.nbd_index = -1;
     req.map.readonly = false;
@@ -337,7 +337,7 @@ err:
 }
 
 static int
-nbd_cli_unmap_device(int sock, int count, char **options, handler_t handler)
+nbd_cli_unmap_device(int sock, int count, char **options, handler_t htype)
 {
     struct cli_request req = {0, };
     struct cli_reply *rep = NULL;
@@ -352,7 +352,7 @@ nbd_cli_unmap_device(int sock, int count, char **options, handler_t handler)
          return -EINVAL;
     }
 
-    req.type = handler;
+    req.htype = htype;
     req.cmd = NBD_CLI_UNMAP;
     req.unmap.nbd_index = -1;
 
@@ -698,7 +698,7 @@ err:
 }
 
 static int
-nbd_cli_list_device(int sock, int count, char **options, handler_t handler)
+nbd_cli_list_device(int sock, int count, char **options, handler_t htype)
 {
     list_type ltype = NBD_LIST_ALL;
     struct cli_request req = {0, };
@@ -717,7 +717,7 @@ nbd_cli_list_device(int sock, int count, char **options, handler_t handler)
          goto nla_put_failure;
     }
 
-    req.type = handler;
+    req.htype = htype;
     req.cmd = NBD_CLI_LIST;
 
     ind = 0;
@@ -787,7 +787,7 @@ nbd_cli_list_device(int sock, int count, char **options, handler_t handler)
         goto nla_put_failure;
     }
 
-    netfd = nbd_setup_netlink(&driver_id, list_nl_callback, handler, NULL, NULL, &ret);
+    netfd = nbd_setup_netlink(&driver_id, list_nl_callback, htype, NULL, NULL, &ret);
     if (!netfd)
         goto nla_put_failure;
 
@@ -871,7 +871,7 @@ nbd_register_cmds(GPtrArray *cmds_list, struct cli_cmd *cmds)
     return 0;
 }
 
-static GPtrArray *nbd_register_backstores(handler_t handler)
+static GPtrArray *nbd_register_backstores(handler_t htype)
 {
     GPtrArray *cmds_list;
 
@@ -881,13 +881,13 @@ static GPtrArray *nbd_register_backstores(handler_t handler)
         return NULL;
     }
 
-    if (handler == NBD_BACKSTORE_GLUSTER &&
+    if (htype == NBD_BACKSTORE_GLUSTER &&
         cli_cmd_gluster_register(cmds_list, nbd_register_cmds)) {
         nbd_err("failed to register gluster cmds!\n");
         goto err;
     }
 
-    if (handler == NBD_BACKSTORE_AZBLK &&
+    if (htype == NBD_BACKSTORE_AZBLK &&
         cli_cmd_azblk_register(cmds_list, nbd_register_cmds)) {
         nbd_err("failed to register azblk cmds!\n");
         goto err;
@@ -939,24 +939,24 @@ static const char *const nbd_cli_handlers[] = {
 	[NBD_BACKSTORE_MAX]      = NULL,
 };
 
-static int nbd_cli_get_handler_type(const char *chandler)
+static int nbd_cli_get_handler_type(const char *chtype)
 {
-    handler_t handler;
+    handler_t htype;
 
-    if (!chandler)
+    if (!chtype)
         return NBD_BACKSTORE_MAX;
 
-    if (!strcmp(chandler, "gluster")) {
-	    handler = NBD_BACKSTORE_GLUSTER;
-    } else if (!strcmp(chandler, "azblk")) {
-	    handler = NBD_BACKSTORE_AZBLK;
-    } else if (!strcmp(chandler, "ceph")) {
-	    handler = NBD_BACKSTORE_CEPH;
+    if (!strcmp(chtype, "gluster")) {
+	    htype = NBD_BACKSTORE_GLUSTER;
+    } else if (!strcmp(chtype, "azblk")) {
+	    htype = NBD_BACKSTORE_AZBLK;
+    } else if (!strcmp(chtype, "ceph")) {
+	    htype = NBD_BACKSTORE_CEPH;
     } else {
-        handler = NBD_BACKSTORE_MAX;
+        htype = NBD_BACKSTORE_MAX;
     }
 
-    return handler;
+    return htype;
 }
 
 static int nbd_cli_command_lookup(const char *command)
@@ -986,7 +986,7 @@ int main(int argc, char *argv[])
     nbd_cli_opt_command cmd;
     int ret = EXIT_FAILURE;
     struct cli_cmd *clicmd;
-    handler_t handler;
+    handler_t htype;
     char **options;
     int count;
     int sock;
@@ -1012,8 +1012,8 @@ int main(int argc, char *argv[])
             goto out;
         case NBD_OPT_MAX:
         default:
-            handler = nbd_cli_get_handler_type(argv[1]);
-            if (handler == NBD_BACKSTORE_MAX) {
+            htype = nbd_cli_get_handler_type(argv[1]);
+            if (htype == NBD_BACKSTORE_MAX) {
                 nbd_err("Invalid handler type, try 'nbd-cli --help' for more information!\n");
                 exit(1);
             }
@@ -1023,7 +1023,7 @@ int main(int argc, char *argv[])
     if (!nbd_minimal_kernel_version_check())
         goto out;
 
-    cmds_list = nbd_register_backstores(handler);
+    cmds_list = nbd_register_backstores(htype);
     if (!cmds_list) {
         nbd_err("No command registered!\n");
         goto out;
@@ -1060,19 +1060,19 @@ int main(int argc, char *argv[])
 
     switch (clicmd->cmd) {
     case NBD_CLI_CREATE:
-        nbd_cli_create_backstore(sock, count, options, handler);
+        nbd_cli_create_backstore(sock, count, options, htype);
         break;
     case NBD_CLI_DELETE:
-        nbd_cli_delete_backstore(sock, count, options, handler);
+        nbd_cli_delete_backstore(sock, count, options, htype);
         break;
     case NBD_CLI_MAP:
-        nbd_cli_map_device(sock, count, options, handler);
+        nbd_cli_map_device(sock, count, options, htype);
         break;
     case NBD_CLI_UNMAP:
-        nbd_cli_unmap_device(sock, count, options, handler);
+        nbd_cli_unmap_device(sock, count, options, htype);
         break;
     case NBD_CLI_LIST:
-        nbd_cli_list_device(sock, count, options, handler);
+        nbd_cli_list_device(sock, count, options, htype);
         break;
     case NBD_CLI_HELP:
     case NBD_CLI_MAX:

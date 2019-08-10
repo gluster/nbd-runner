@@ -25,7 +25,7 @@
 #include "list.h"
 
 struct nbd_device {
-    handler_t type;
+    handler_t htype;
     struct nbd_handler *handler;
 
     int sockfd;

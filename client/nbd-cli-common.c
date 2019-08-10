@@ -53,7 +53,7 @@ struct addrinfo *nbd_get_sock_addr(const char *host)
   return res;
 }
 
-struct nl_sock *nbd_setup_netlink(int *driver_id, list_nl_cbk_t fn, int type,
+struct nl_sock *nbd_setup_netlink(int *driver_id, list_nl_cbk_t fn, int htype,
                                   char *cfg, CLIENT *clnt, int *ret)
 {
     struct map_args *args;
@@ -73,7 +73,7 @@ struct nl_sock *nbd_setup_netlink(int *driver_id, list_nl_cbk_t fn, int type,
         return NULL;
     }
 
-    args->type = type;
+    args->htype = htype;
     args->cfg = cfg;
     args->clnt = clnt;
     netfd = nl_socket_alloc();
