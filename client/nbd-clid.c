@@ -22,6 +22,7 @@
 #include <libnl3/netlink/genl/mngt.h>
 #include <libnl3/netlink/genl/ctrl.h>
 #include <json-c/json.h>
+#include <pthread.h>
 
 #include "rpc_nbd.h"
 #include "utils.h"
@@ -32,6 +33,9 @@
 #include "ipc.h"
 
 #define NBD_CLID_PID_FILE_DEFAULT "/run/nbd-clid.pid"
+
+static pthread_cond_t nbd_live_cond;
+static pthread_mutex_t nbd_live_lock;
 
 static void
 nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
@@ -66,7 +70,7 @@ nbd_clid_create_backstore(int htype, const char *cfg, ssize_t size,
         goto err;
     }
 
-    res = nbd_get_sock_addr(rhost);
+    res = nbd_get_sock_addr(rhost, NBD_RPC_SVC_PORT);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -101,6 +105,7 @@ err:
         clnt_destroy(clnt);
     }
 
+    freeaddrinfo(res);
     free(create);
 }
 
@@ -132,7 +137,7 @@ nbd_clid_delete_backstore(int htype, const char *cfg, const char *rhost,
         goto err;
     }
 
-    res = nbd_get_sock_addr(rhost);
+    res = nbd_get_sock_addr(rhost, NBD_RPC_SVC_PORT);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -167,6 +172,7 @@ err:
         clnt_destroy(clnt);
     }
 
+    freeaddrinfo(res);
     free(delete);
 }
 
@@ -252,7 +258,7 @@ nla_put_failure:
 
 static int nbd_connect_to_server(char *host, int port)
 {
-    struct sockaddr_in addr;
+    struct addrinfo *res = NULL;
     int sock;
     int ret;
 
@@ -261,26 +267,33 @@ static int nbd_connect_to_server(char *host, int port)
         return -EINVAL;
     }
 
+    nbd_dbg("host: %s, port %d\n", host, port);
+
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0){
         nbd_err("failed to create socket: %s\n", strerror(errno));
         return sock;
     }
 
-    bzero(&addr, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr(host);
-    addr.sin_port = htons(port);
+    res = nbd_get_sock_addr(host, port);
+    if (!res) {
+        nbd_err("failed to get sock addr for '%s:%d'!\n", host, port);
+        ret = -EINVAL;
+        goto err;
+    }
 
-    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (connect(sock, (struct sockaddr_in *)res->ai_addr, sizeof(struct sockaddr_in)) < 0) {
         ret = -errno;
         nbd_err("connect error: %s\n", strerror(errno));
         goto err;
     }
 
+    freeaddrinfo(res);
     return sock;
 
 err:
+    if (res)
+        freeaddrinfo(res);
     close(sock);
     return ret;
 }
@@ -432,7 +445,7 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
         goto err;
     }
 
-    res = nbd_get_sock_addr(rhost);
+    res = nbd_get_sock_addr(rhost, NBD_RPC_SVC_PORT);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -534,6 +547,7 @@ err:
         clnt_destroy(clnt);
     }
 
+    freeaddrinfo(res);
     free(map);
 }
 
@@ -576,7 +590,7 @@ nbd_clid_unmap_device(int htype, const char *cfg, int nbd_index,
         }
     }
 
-    res = nbd_get_sock_addr(rhost);
+    res = nbd_get_sock_addr(rhost, NBD_RPC_SVC_PORT);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -643,6 +657,7 @@ err:
         clnt_destroy(clnt);
     }
 
+    freeaddrinfo(res);
     free(unmap);
 }
 
@@ -663,7 +678,7 @@ nbd_clid_list_devices(handler_t htype, const char *rhost, struct cli_reply **cli
     nbd_info("List request htype: %d, do_retry: %d, rhost: %s\n",
              htype, do_retry, rhost);
 
-    res = nbd_get_sock_addr(rhost);
+    res = nbd_get_sock_addr(rhost, NBD_RPC_SVC_PORT);
     if (!res) {
         nbd_clid_fill_reply(cli_rep, -ENOMEM, "failed to get sock addr!");
         nbd_err("failed to get sock addr!\n");
@@ -700,6 +715,40 @@ nla_put_failure:
             clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response, (char *)&rep);
         clnt_destroy(clnt);
     }
+    freeaddrinfo(res);
+}
+
+static void *nbd_ping_liveness_start(void *arg)
+{
+    struct nbd_config *nbd_cfg = arg;
+    char timestamp[1024] = {0};
+    char buf[1024];
+    int sock;
+
+    nbd_info("rhost: %s, ping_interval is %d\n", nbd_cfg->rhost, nbd_cfg->ping_interval);
+
+    while (1) {
+        sock = nbd_connect_to_server(nbd_cfg->rhost, NBD_PING_SVC_PORT);
+        if (sock < 0) {
+            nbd_err("The nbd-runner daemon is down, sock: %d!\n", sock);
+        }
+
+        if (sock) {
+            nbd_socket_read(sock, buf, 1024);
+            if(strcmp(timestamp, buf)) {
+                memcpy(timestamp, buf, 1024);
+                pthread_mutex_lock(&nbd_live_lock);
+                pthread_cond_signal(&nbd_live_cond);
+                pthread_mutex_unlock(&nbd_live_lock);
+            }
+            close(sock);
+        }
+
+        sleep(nbd_cfg->ping_interval);
+    }
+
+    nbd_info("nbd ping liveness thread exits!\n");
+    return NULL;
 }
 
 static void *nbd_clid_connections_restore(void *arg)
@@ -715,66 +764,74 @@ static void *nbd_clid_connections_restore(void *arg)
     int nbd_index;
     int count = 0;
 
-    /*
-     * Retry and wait 5 seconds
-     *
-     * Currently if we restart the nbd-runner and nbd-clid at the same
-     * time or at the node's boot time, the nbd-runner may need to take
-     * a while to get ready.
-     */
+    while (1) {
+        /*
+         * Retry and wait 5 seconds
+         *
+         * Currently if we restart the nbd-runner and nbd-clid at the same
+         * time or at the node's boot time, the nbd-runner may need to take
+         * a while to get ready.
+         */
 retry:
-    free(cli_rep);
-    nbd_clid_list_devices(NBD_BACKSTORE_MAX, nbd_cfg->rhost, &cli_rep, true);
-    if (!cli_rep) {
-        nbd_err("nbd_clid_list_devices failed, no memory!\n");
-        return NULL;
-    }
-    if (cli_rep->exit == -ECONNREFUSED && count++ < 50) {
-        g_usleep(100000);
-        goto retry;
-    }
+        free(cli_rep);
+        nbd_clid_list_devices(NBD_BACKSTORE_MAX, nbd_cfg->rhost, &cli_rep, true);
+        if (!cli_rep) {
+            nbd_err("nbd_clid_list_devices failed, no memory!\n");
+            return NULL;
+        }
+        if (cli_rep->exit == -ECONNREFUSED && count++ < 50) {
+            g_usleep(100000);
+            goto retry;
+        }
 
-    if (cli_rep->exit) {
-        nbd_err("nbd_clid_list_devices failed, %s!\n", cli_rep->buf);
-        goto out;
-    }
+        if (cli_rep->exit) {
+            nbd_err("nbd_clid_list_devices failed, %s!\n", cli_rep->buf);
+            goto out;
+        }
 
-    globalobj = json_tokener_parse(cli_rep->buf);
-    if (!globalobj && errno == ENOMEM) {
-        nbd_err("json_tokener_parse failed, No memory!\n");
-        goto out;
-    }
+        globalobj = json_tokener_parse(cli_rep->buf);
+        if (!globalobj && errno == ENOMEM) {
+            nbd_err("json_tokener_parse failed, No memory!\n");
+            goto out;
+        }
 
-    json_object_object_foreach(globalobj, objkey, devobj) {
-        json_object_object_get_ex(devobj, "status", &obj);
-        tmp = json_object_get_string(obj);
-        if (!strcmp(tmp, "dead")) {
-            json_object_object_get_ex(devobj, "type", &obj);
-            htype = json_object_get_int64(obj);
-
-            json_object_object_get_ex(devobj, "nbd", &obj);
+        json_object_object_foreach(globalobj, objkey, devobj) {
+            json_object_object_get_ex(devobj, "status", &obj);
             tmp = json_object_get_string(obj);
-            if (sscanf(tmp, "/dev/nbd%d", &nbd_index) != 1) {
-                nbd_err("Invalid nbd-device, %s!\n", strerror(errno));
-                goto out;
-            }
+            if (!strcmp(tmp, "dead")) {
+                json_object_object_get_ex(devobj, "type", &obj);
+                htype = json_object_get_int64(obj);
 
-            json_object_object_get_ex(devobj, "readonly", &obj);
-            readonly = json_object_get_boolean(obj);
+                json_object_object_get_ex(devobj, "nbd", &obj);
+                tmp = json_object_get_string(obj);
+                if (sscanf(tmp, "/dev/nbd%d", &nbd_index) != 1) {
+                    nbd_err("Invalid nbd-device, %s!\n", strerror(errno));
+                    goto out;
+                }
 
-            cfg = objkey;
+                json_object_object_get_ex(devobj, "readonly", &obj);
+                readonly = json_object_get_boolean(obj);
 
-            free(cli_rep);
-            cli_rep = NULL;
-            nbd_clid_map_device(htype, cfg, nbd_index, readonly,
-                                nbd_cfg->rhost, &cli_rep);
-            if (cli_rep && cli_rep->exit) {
-                nbd_err("nbd_clid_map_device failed, %s!\n", cli_rep->buf);
-                goto out;
+                cfg = objkey;
+
+                free(cli_rep);
+                cli_rep = NULL;
+                nbd_clid_map_device(htype, cfg, nbd_index, readonly,
+                        nbd_cfg->rhost, &cli_rep);
+                if (cli_rep && cli_rep->exit) {
+                    nbd_err("nbd_clid_map_device failed, %s!\n", cli_rep->buf);
+                    goto out;
+                }
             }
         }
 
+        pthread_mutex_lock(&nbd_live_lock);
+        pthread_cond_wait(&nbd_live_cond, &nbd_live_lock);
+        pthread_mutex_unlock(&nbd_live_lock);
+
+        nbd_info("nbd-runner daemon is restarted, restore the connection again!\n");
     }
+    nbd_info("nbd restore thread exits!\n");
 out:
     if (globalobj)
         json_object_put(globalobj);
@@ -927,6 +984,7 @@ static void nbd_event_loop(int fd, const struct nbd_config *nbd_cfg)
     struct timespec tmo;
     int ret;
 
+    nbd_info("Starting the event loop!\n");
 	do {
         memset(&tmo, 0, sizeof(tmo));
         tmo.tv_sec = 5;
@@ -975,6 +1033,7 @@ int main(int argc, char *argv[])
     int clid_ipc_fd = -1;
     struct nbd_config *nbd_cfg;
     pthread_t restore_threadid;
+    pthread_t ping_threadid;
 	uid_t uid = 0;
     gid_t gid = 0;
 	pid_t pid;
@@ -991,7 +1050,7 @@ int main(int argc, char *argv[])
     if (nbd_setup_log(nbd_cfg->log_dir, false))
         goto out;
 
-    nbd_crit("Starting...\n");
+    nbd_info("Starting...\n");
 
 	while ((ch = getopt_long(argc, argv, "r:u:g:vh", long_options,
 				 &longindex)) >= 0) {
@@ -1063,6 +1122,9 @@ int main(int argc, char *argv[])
         goto out;
     }
 
+    pthread_mutex_init(&nbd_live_lock, NULL);
+    pthread_cond_init(&nbd_live_cond, NULL);
+
     /*
      * Restore the stale connetions in the background
      *
@@ -1071,11 +1133,17 @@ int main(int argc, char *argv[])
      */
     pthread_create(&restore_threadid, NULL, nbd_clid_connections_restore, nbd_cfg);
 
+    pthread_create(&ping_threadid, NULL, nbd_ping_liveness_start, nbd_cfg);
+
 	nbd_event_loop(clid_ipc_fd, nbd_cfg);
 
-    pthread_join(restore_threadid, NULL);
+    nbd_info("Stopping...\n");
 
-    nbd_crit("Stopping...\n");
+    pthread_cancel(restore_threadid);
+    pthread_cancel(ping_threadid);
+    pthread_join(restore_threadid, NULL);
+    pthread_join(ping_threadid, NULL);
+
     ret = 0;
 out:
 	nbd_ipc_close(clid_ipc_fd);

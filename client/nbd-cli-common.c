@@ -42,19 +42,19 @@ static void free_value(gpointer value)
     free(value);
 }
 
-struct addrinfo *nbd_get_sock_addr(const char *host)
+struct addrinfo *nbd_get_sock_addr(const char *host, int port)
 {
   int ret;
   struct addrinfo hints, *res;
-  char port[32];
+  char pport[32];
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
 
-  snprintf(port, 32, "%d", NBD_RPC_SVC_PORT);
+  snprintf(pport, 32, "%d", port);
 
-  ret = getaddrinfo(host, port, &hints, &res);
+  ret = getaddrinfo(host, pport, &hints, &res);
   if (ret) {
     nbd_err("getaddrinfo(%s) failed (%s)", host, gai_strerror(ret));
     return NULL;

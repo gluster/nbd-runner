@@ -25,20 +25,44 @@
 #define NBD_CONFIG_SERV_DEFAULT NBD_CONFIG_DIR_DEFAULT"/nbd-runner"
 #define NBD_CONFIG_CLID_DEFAULT NBD_CONFIG_DIR_DEFAULT"/nbd-clid"
 
-#define NBD_HOST_LOCAL_DEFAULT "localhost"
+#define NBD_HOST_LOCAL_DEFAULT    "localhost"
+#define NBD_PING_INTERVAL_DEFAULT 5 /* seconds */
 
 struct nbd_config {
     int log_level;
 
     char log_dir[PATH_MAX];
 
+    /*
+     * The default value will be:
+     * INADDR_ANY for nbd-runner.service
+     * 'localhost' for nbd-clid.service
+     */
     char rhost[NBD_HOST_MAX];
 
     /*
-     * The ihost and ghost only for the nbd-runner.service
+     * The ihost only for the nbd-runner.service
+     *
+     * The ihost could be the same with the rhost, and if
+     * there only has one nic/ipaddr in the node, they certainly
+     * will be the same.
+     *
+     * And in the case there has more than 1 nic in your node,
+     * you can specify 2 different ipaddr in the sysconfig file
+     * or the via the command line to improve the perf ?
      */
-    char ihost[NBD_HOST_MAX];
-    char ghost[NBD_HOST_MAX];
+    char ihost[NBD_HOST_MAX]; /* INADDR_ANY as default */
+
+    /*
+     * The ghost only for the gluster handler in nbd-runner.service
+     */
+    char ghost[NBD_HOST_MAX]; /* 'localhost' as default */
+
+    /*
+     * The ping instavel about the liveness of the nbd-runner daemon
+     * This is only for nbd-clid.service
+     */
+    int ping_interval;
 };
 
 /*

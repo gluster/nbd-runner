@@ -124,7 +124,7 @@ typedef int (*cmd_fn_t)(GPtrArray *, struct cli_cmd *);
 int cli_cmd_gluster_register(GPtrArray *cmds, cmd_fn_t fn);
 int cli_cmd_azblk_register(GPtrArray *cmds, cmd_fn_t fn);
 
-struct addrinfo *nbd_get_sock_addr(const char *host);
+struct addrinfo *nbd_get_sock_addr(const char *host, int port);
 
 int nbd_get_device_list(GHashTable **list_hash);
 

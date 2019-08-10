@@ -23,3 +23,9 @@
 # nbd-cli [gluster|ceph|...] create/delete/map/unmap/list commands
 # will try to connect to it. "localhost" as default.
 # rhost = ""
+#
+# Ping Time Interval
+# This is the time interval to check whether the nbd-runner daemon
+# is alive/restarted or not, if so the nbd-clid will try to restore
+# the stale dead connections. 5 seconds as default.
+# ping_interval = 5

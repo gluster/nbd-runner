@@ -175,6 +175,8 @@ static void nbd_conf_set_options(struct nbd_config *cfg)
     NBD_PARSE_CFG_STR(cfg, ihost);
     NBD_PARSE_CFG_STR(cfg, rhost);
     NBD_PARSE_CFG_STR(cfg, ghost);
+
+    NBD_PARSE_CFG_INT(cfg, ping_interval);
     /* add your new config options */
 }
 
@@ -398,10 +400,16 @@ struct nbd_config* nbd_load_config(bool server)
 
     cfg->log_level = NBD_CONF_LOG_INFO;
     snprintf(cfg->log_dir, PATH_MAX, "%s", NBD_LOG_DIR_DEFAULT);
+
+    /* for the nbd-runner service only */
     if (server)
         snprintf(cfg->ghost, NBD_HOST_MAX, "%s", NBD_HOST_LOCAL_DEFAULT);
-    else
+
+    /* for the nbd-clid service only */
+    if (!server) {
         snprintf(cfg->rhost, NBD_HOST_MAX, NBD_HOST_LOCAL_DEFAULT);
+        cfg->ping_interval = NBD_PING_INTERVAL_DEFAULT;
+    }
 
     if (_nbd_load_config(cfg, server))
         nbd_err("Failed to load config, will use the default settings!\n");
