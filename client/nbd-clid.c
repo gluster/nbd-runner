@@ -180,6 +180,52 @@ err:
     free(delete);
 }
 
+/*
+ * Return values:
+ * 1,   means inused
+ * 0,   means nbd device is not exist or already in free state
+ * < 0, means something is wrong when checking the status
+ */
+static int nbd_check_device_status(struct cli_reply **cli_rep, int nbd_index)
+{
+    GHashTable *list_hash = NULL;
+    char nbd[64] = {0};
+    gpointer status;
+    int ret = 1;
+
+    ret = nbd_get_device_list(&list_hash);
+    if (ret) {
+        nbd_clid_fill_reply(cli_rep, ret, "nbd_get_device_list failed!");
+        nbd_err("nbd_get_device_list failed!\n");
+        goto out;
+    }
+
+    /* Check whether the /dev/nbdX is already unmapped/exist or not */
+    sprintf(nbd, "/dev/nbd%d", nbd_index);
+    status = g_hash_table_lookup(list_hash, nbd);
+    if (!status) {
+        nbd_clid_fill_reply(cli_rep, 0, "/dev/nbd%d is not exist in nbd.ko!",
+                            nbd_index);
+        nbd_info("/dev/nbd%d is not exist in nbd.ko!\n", nbd_index);
+        ret = 0;
+        goto out;
+    }
+    if (*(int *)status == 0) {
+        nbd_clid_fill_reply(cli_rep, 0, "/dev/nbd%d is not mapped or already unmapped!",
+                            nbd_index);
+        nbd_info("/dev/nbd%d is not mapped or already unmapped!\n", nbd_index);
+        ret = 0;
+        goto out;
+    }
+
+    ret = 1;
+out:
+    if (list_hash)
+        g_hash_table_destroy(list_hash);
+
+    return ret;
+}
+
 static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
                               int driver_id, ssize_t size, ssize_t blk_size,
                               int timeout, int nbd_index, bool readonly)
@@ -190,6 +236,7 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
     int flags = readonly ? NBD_FLAG_READ_ONLY : 0;
     struct nego_request nhdr;
     struct nego_reply nrep;
+    int count = 0;
     char *buf;
     int ret;
 
@@ -213,6 +260,7 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
         goto nla_put_failure;
     }
 
+retry:
     msg = nlmsg_alloc();
     if (!msg) {
         nbd_err("Couldn't allocate netlink message, %s!\n",
@@ -250,14 +298,34 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
     nla_nest_end(msg, sock_attr);
 
     if ((ret = nl_send_sync(netfd, msg)) < 0) {
-        nbd_err("Failed to setup device, check dmesg, %d!\n", ret);
-        goto nla_put_failure;
+        if (nbd_index == -1 || count++ >= 500) {
+            nbd_err("Failed to setup device, check dmesg, %d!\n", ret);
+            goto nla_put_failure;
+        }
+
+        /*
+         * There is one problem that when trying to check the nbd device
+         * NBD_CMD_STATUS and at the same time insert the nbd.ko module,
+         * we can randomly get some of the 16 /dev/nbd{0~15} are connected,
+         * but they are not. This is because that the udev service in user
+         * space will try to open /dev/nbd{0~15} devices to do some sanity
+         * check when they are added in "__init nbd_init()" and then close
+         * it asynchronousely.
+         *
+         * And the NBD_CMD_DISCONNECT still has the similiar problem, so
+         * we need to wait for a while.
+         *
+         * TBD: This should be fixed in kernel space. And here as one work
+         * around we just hard code it and wait at most 5 seconds.
+         */
+        g_usleep(10000);
+        goto retry;
     }
 
     return 0;
 
 nla_put_failure:
-    return -1;
+    return ret;
 }
 
 static int nbd_connect_to_server(char *host, int port)
@@ -299,45 +367,6 @@ err:
     if (res)
         freeaddrinfo(res);
     close(sock);
-    return ret;
-}
-
-static int nbd_check_device_status(struct cli_reply **cli_rep, int nbd_index)
-{
-    GHashTable *list_hash = NULL;
-    char nbd[64] = {0};
-    gpointer status;
-    int ret;
-
-    ret = nbd_get_device_list(&list_hash);
-    if (ret) {
-        nbd_clid_fill_reply(cli_rep, ret, "nbd_get_device_list failed!");
-        nbd_err("nbd_get_device_list failed!\n");
-        goto out;
-    }
-
-    /* Check whether the /dev/nbdX is already unmapped/exist or not */
-    sprintf(nbd, "/dev/nbd%d", nbd_index);
-    status = g_hash_table_lookup(list_hash, nbd);
-    if (!status) {
-        nbd_clid_fill_reply(cli_rep, -EEXIST, "/dev/nbd%d is not exist in nbd.ko!",
-                            nbd_index);
-        nbd_err("/dev/nbd%d is not exist in nbd.ko!\n", nbd_index);
-        ret = -EEXIST;
-        goto out;
-    }
-    if (*(int *)status == 0) {
-        nbd_clid_fill_reply(cli_rep, -EINVAL, "/dev/nbd%d is not mapped or already unmapped!",
-                            nbd_index);
-        nbd_err("/dev/nbd%d is not mapped or already unmapped!\n", nbd_index);
-        ret = -ENOENT;
-        goto out;
-    }
-
-out:
-    if (list_hash)
-        g_hash_table_destroy(list_hash);
-
     return ret;
 }
 
@@ -483,7 +512,8 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
             goto err;
         }
 
-        if (!nbd_check_device_status(cli_rep, nbd_index)) {
+        ret = nbd_check_device_status(cli_rep, nbd_index);
+        if (ret == 1) {
             ret = unmap_device(netfd, driver_id, tmp_index);
             if (ret) {
                 nbd_clid_fill_reply(cli_rep, ret, "unmap /dev/nbd%d failed!",
@@ -491,23 +521,9 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
                 nbd_err("unmap /dev/nbd%d failed!\n", tmp_index);
                 goto err;
             }
-
-            /*
-             * There is one problem that when trying to check the nbd device
-             * NBD_CMD_STATUS and at the same time insert the nbd.ko module,
-             * we can randomly get some of the 16 /dev/nbd{0~15} are connected,
-             * but they are not. This is because that the udev service in user
-             * space will try to open /dev/nbd{0~15} devices to do some sanity
-             * check when they are added in "__init nbd_init()" and then close
-             * it asynchronousely.
-             *
-             * And the NBD_CMD_DISCONNECT still has the similiar problem, so
-             * we need to wait for a while.
-             *
-             * TBD: This should be fixed in kernel space. And here as one work
-             * around we just hard code it and wait 1 seconds.
-             */
-            g_usleep(1000000);
+        } else if (ret < 0) {
+            nbd_err("nbd_check_device_status failed!\n");
+            goto err;
         }
     } else if (rep.exit && rep.buf) {
         nbd_clid_fill_reply(cli_rep, rep.exit, "Map failed: %s", rep.buf);
@@ -530,7 +546,7 @@ nbd_clid_map_device(int htype, const char *cfg, int nbd_index, bool readonly,
                              rep.blksize, timeout, nbd_index, readonly);
     if (ret < 0) {
         nbd_clid_fill_reply(cli_rep, ret, "failed to init the /dev/nbd device!");
-        nbd_err("failed to init the /dev/nbd device!\n");
+        nbd_err("failed to init the /dev/nbd device, ret: %d!\n", ret);
         goto err;
     }
 
@@ -636,7 +652,7 @@ nbd_clid_unmap_device(int htype, const char *cfg, int nbd_index,
         }
     }
 
-    if (nbd_check_device_status(cli_rep, nbd_index))
+    if (nbd_check_device_status(cli_rep, nbd_index) <= 0)
         goto err;
 
     netfd = nbd_setup_netlink(&driver_id, genl_handle_msg, htype, NULL, NULL,
@@ -796,6 +812,7 @@ retry:
         json_object_object_foreach(globalobj, objkey, devobj) {
             json_object_object_get_ex(devobj, "status", &obj);
             tmp = json_object_get_string(obj);
+            nbd_info("objkey: %s, status: %s\n", objkey, tmp);
             if (!strcmp(tmp, "dead")) {
                 json_object_object_get_ex(devobj, "type", &obj);
                 htype = json_object_get_int64(obj);
