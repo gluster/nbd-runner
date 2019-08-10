@@ -41,6 +41,7 @@
 "or later), or the GNU General Public License, version 2 (GPLv2),\n"\
 "in all cases as published by the Free Software Foundation."
 
+#define NBD_PING_SVC_PORT    24109
 #define NBD_RPC_SVC_PORT     24110
 #define NBD_MAP_SVC_PORT     24111
 

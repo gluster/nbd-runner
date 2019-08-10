@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <event.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 #include "utils.h"
 #include "nbd-log.h"
@@ -107,17 +108,94 @@ static void event_handler(int listenfd, short event, void *arg)
         nbd_err("failed to detach thread: %s!\n", strerror(errno));
 }
 
+/* If there has any error, will kill the whole process */
+static void *nbd_live_svc_thread_start(void *arg)
+{
+    struct sockaddr_in sin = {0,};
+    int listenfd;
+    int opt = 1;
+    time_t tm;
+    char timestamp[1024] = {0};
+
+    time(&tm);
+    sprintf(timestamp, "%s", ctime((&tm)));
+
+    listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(listenfd < 0){
+        nbd_err("failed to create socket: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        nbd_err("setsocket set option to re-use address failed, %s\n",
+                strerror(errno));
+        exit(1);
+    }
+
+    sin.sin_family = AF_INET;
+    if (nbd_cfg->rhost[0]) {
+        if (inet_pton(AF_INET, nbd_cfg->rhost, (void *)&sin.sin_addr.s_addr) < 0)
+        {
+            nbd_err("failed to convert %s to binary form!\n", nbd_cfg->rhost);
+            exit(1);
+        }
+    } else {
+        sin.sin_addr.s_addr = htonl(INADDR_ANY);
+    }
+
+    sin.sin_port = htons(NBD_PING_SVC_PORT);
+
+    if (bind(listenfd, (struct sockaddr*)&sin, sizeof(struct sockaddr)) < 0) {
+        nbd_warn("bind on port %d failed, %s\n", NBD_PING_SVC_PORT, strerror(errno));
+        exit(1);
+    }
+
+    if (listen(listenfd, 16) < 0) {
+        nbd_err("failed to start listening on a socket: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    while (1) {
+        int sock;
+
+        sock = accept(listenfd, NULL, NULL);
+        if (sock == -1) {
+            if (errno == EINTR)
+                goto out;
+            nbd_err("Failed to accept!\n");
+            exit(1);
+        }
+
+        nbd_socket_write(sock, timestamp, 1024);
+
+        close(sock);
+    }
+
+    nbd_info("nbd live thread exits!\n");
+
+out:
+    close(listenfd);
+    return NULL;
+}
+
 static void *nbd_map_svc_thread_start(void *arg)
 {
     struct sockaddr_in sin = {0,};
     struct event_base *base;
     struct event listen_ev;
     int listenfd;
+    int opt = 1;
 
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
     if(listenfd < 0){
         nbd_err("failed to create socket: %s\n", strerror(errno));
         return NULL;
+    }
+
+    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        nbd_err("setsocket set option to re-use address failed, %s\n",
+                strerror(errno));
+        goto err;
     }
 
     sin.sin_family = AF_INET;
@@ -158,7 +236,7 @@ again:
     event_add(&listen_ev, NULL);
     event_base_dispatch(base);
 
-    nbd_info("nbd server exits!\n");
+    nbd_info("nbd map thread exits!\n");
 
     event_del(&listen_ev);
     event_base_free(base);
@@ -229,6 +307,7 @@ static void *nbd_rpc_svc_thread_start(void *arg)
 
     svc_run();
 
+    nbd_info("nbd rpc thread exits!\n");
 out:
     if (transp)
         svc_destroy(transp);
@@ -256,6 +335,7 @@ int main (int argc, char **argv)
     int lockfd = -1;
     pthread_t rpc_svc_threadid;
     pthread_t map_svc_threadid;
+    pthread_t live_svc_threadid;
     struct flock lock = {0, };
     int threads = NBD_DEF_THREADS;
 	int ch, longindex;
@@ -373,8 +453,11 @@ int main (int argc, char **argv)
 
     pmap_unset(RPC_NBD, RPC_NBD_VERS);
 
+    pthread_create(&live_svc_threadid, NULL, nbd_live_svc_thread_start, NULL);
     pthread_create(&map_svc_threadid, NULL, nbd_map_svc_thread_start, &threads);
     pthread_create(&rpc_svc_threadid, NULL, nbd_rpc_svc_thread_start, NULL);
+
+    pthread_join(live_svc_threadid, NULL);
     pthread_join(map_svc_threadid, NULL);
     pthread_join(rpc_svc_threadid, NULL);
 
