@@ -110,6 +110,12 @@ struct nego_reply {
     __u8  error[0];
 };
 
+struct cli_reply {
+    __u32 exit;
+    __u32 len;
+    __u8  buf[0];
+};
+
 const char *nbd_dev_status_lookup_str(dev_status_t st);
 dev_status_t nbd_dev_status_lookup(const char *st);
 bool nbd_valid_size(const char *value);

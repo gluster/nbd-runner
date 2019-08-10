@@ -17,89 +17,40 @@
 #include "rpc_nbd.h"
 #include "utils/utils.h"
 #include "nbd-log.h"
-#include "nbd-cli-cmd.h"
-
-struct cli_cmd azblk_cmds[];
-
-static int azblk_help_routine(int count, char **options)
-{
-    int i;
-
-    nbd_info("Usage: \n\n");
-    for (i = 0; azblk_cmds[i].pattern; i++) {
-        if (azblk_cmds[i].disable)
-            continue;
-
-        nbd_info("\t%s\n", azblk_cmds[i].pattern);
-        nbd_info("\t\t%s\n\n", azblk_cmds[i].desc);
-    }
-    nbd_info("\n");
-
-    return 0;
-}
-
-static int azblk_create_routine(int count, char **options)
-{
-    return nbd_create_backstore(count, options, NBD_BACKSTORE_AZBLK);
-}
-
-static int azblk_delete_routine(int count, char **options)
-{
-    return nbd_delete_backstore(count, options, NBD_BACKSTORE_AZBLK);
-}
-
-static int azblk_map_routine(int count, char **options)
-{
-    return nbd_map_device(count, options, NBD_BACKSTORE_AZBLK);
-}
-
-static int azblk_unmap_routine(int count, char **options)
-{
-    return nbd_unmap_device(count, options, NBD_BACKSTORE_AZBLK);
-}
-
-static int azblk_list_routine(int count, char **options)
-{
-    return nbd_list_devices(count, options, NBD_BACKSTORE_AZBLK);
-}
+#include "nbd-cli-common.h"
 
 struct cli_cmd azblk_cmds[] = {
-    {.pattern = "azblk",
-     .call    = azblk_help_routine,
-     .desc    = "Display help for azblk commands",
-     .disable = true,
-    },
-    {.pattern = "azblk help",
-     .call    = azblk_help_routine,
+    {.pattern = "help",
+     .cmd     = NBD_CLI_HELP,
      .desc    = "Display help for azblk commands",
     },
-    {.pattern = "azblk create <'account.blob.core.windows.net/container/vhd[;option1][;option2']> [prealloc] <size SIZE> [host RUNNER_HOST]",
-     .call    = azblk_create_routine,
+    {.pattern = "create <'account.blob.core.windows.net/container/vhd[;option1][;option2']> [prealloc] <size SIZE> [host RUNNER_HOST]",
+     .cmd     = NBD_CLI_CREATE,
      .desc    = "Create the vhd file in your storage account container, prealloc is false as default, and the SIZE is valid\n\t\twith B, K(iB), M(iB), G(iB), T(iB), RUNNER_HOST will be 'localhost' as default\n\n\t\tValid options:\n\t\tsas=SAS_STRING\n\t\tlease=LEASE_ID\n\t\thttp https is the default",
     },
-    {.pattern = "azblk delete <account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]",
-     .call    = azblk_delete_routine,
+    {.pattern = "delete <account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]",
+     .cmd     = NBD_CLI_DELETE,
      .desc    = "Delete the vhd file from your storage account container, RUNNER_HOST will be 'localhost' as default.\n\t\tWARNING: Deleting the vhd file will also remove all of it's snapshots.",
     },
-    {.pattern = "azblk map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]",
-     .call    = azblk_map_routine,
+    {.pattern = "map <account.blob.core.windows.net/container/vhd> [nbd-device] [timeout TIME] [readonly] [host RUNNER_HOST]",
+     .cmd     = NBD_CLI_MAP,
      .desc    = "Map the vhd to the nbd device, as default the socket connection timeout is 30 seconds,\n\t\t none readonly, RUNNER_HOST will be 'localhost' as default",
     },
-    {.pattern = "azblk unmap <nbd-device|<account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]",
-     .call    = azblk_unmap_routine,
+    {.pattern = "unmap <nbd-device|<account.blob.core.windows.net/container/vhd> [host RUNNER_HOST]",
+     .cmd     = NBD_CLI_UNMAP,
      .desc    = "Unmap the nbd device or account/container/vhd, RUNNER_HOST will be 'localhost' as default",
     },
-    {.pattern = "azblk list [map|unmap|create|dead|live|all] [host RUNNER_HOST]",
-     .call    = azblk_list_routine,
+    {.pattern = "list [map|unmap|create|dead|live|all] [host RUNNER_HOST]",
+     .cmd     = NBD_CLI_LIST,
      .desc    = "List the mapped|unmapped NBD devices or the created|dead|live backstores, all as\n\t\tdefault. 'create' means the backstores are just created or unmapped. 'dead' means\n\t\tthe IO connection is lost, this is mainly due to the nbd-runner service is restart\n\t\twithout unmapping. 'live' means everything is okay for both mapped and IO connection,\n\t\tRUNNER_HOST will be 'localhost' as default"
     },
     {.pattern = NULL,
-     .call    = NULL,
+     .cmd     = NBD_CLI_MAX,
      .desc    = NULL,
     },
 };
 
-int cli_cmd_azblk_register(GHashTable *cmds_hash)
+int cli_cmd_azblk_register(GPtrArray *cmds_list, cmd_fn_t fn)
 {
-    return nbd_register_cmds(cmds_hash, azblk_cmds);
+    return fn(cmds_list, azblk_cmds);
 }

@@ -978,7 +978,7 @@ int nbd_handle_request(int sock, int threads)
         goto err;
     }
 
-    cfg = calloc(1, 4096);
+    cfg = calloc(1, nhdr.len + 1);
     ret = nbd_socket_read(sock, cfg, nhdr.len);
     if (ret != nhdr.len) {
         ret = -1;

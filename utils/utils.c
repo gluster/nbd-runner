@@ -224,3 +224,13 @@ bool nbd_is_valid_host(const char *host)
     free(tmp);
     return true;
 }
+
+int nbd_setup_abstract_addr(struct sockaddr_un *addr, char *unix_sock_name)
+{
+    memset(addr, 0, sizeof(*addr));
+    addr->sun_family = AF_LOCAL;
+    strlcpy(addr->sun_path + 1, unix_sock_name, sizeof(addr->sun_path) - 1);
+    return offsetof(struct sockaddr_un, sun_path) +
+        strlen(addr->sun_path + 1) + 1;
+}
+

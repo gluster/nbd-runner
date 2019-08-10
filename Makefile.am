@@ -2,27 +2,34 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = rpc utils client server handlers
 
-DISTCLEANFILES = Makefile.in autom4te.cache nbd-runner.service
+DISTCLEANFILES = Makefile.in autom4te.cache nbd-runner.service     \
+				 nbd-clid.service
 
 EXTRA_DIST = autogen.sh README.md COPYING-GPLV2 COPYING-LGPLV3     \
 			 INSTALL nbd-runner.sysconfig.in nbd-runner.service.in \
-			 build-aux/pkg-version nbd-runner.8 nbd-cli.8
+			 nbd-clid.service.in build-aux/pkg-version nbd-runner.8\
+			 nbd-cli.8
 
-systemd_DATA = nbd-runner.service
+systemd_DATA = nbd-runner.service nbd-clid.service
 
 man8_MANS = nbd-runner.8 nbd-cli.8
 
 install-data-local:
 	$(mkdir_p) $(DESTDIR)${sysconfigdir}
 	$(INSTALL_DATA) nbd-runner.sysconfig.in $(DESTDIR)${sysconfigdir}/nbd-runner
+	$(INSTALL_DATA) nbd-clid.sysconfig.in $(DESTDIR)${sysconfigdir}/nbd-clid
 	$(mkdir_p) $(DESTDIR)${NBD_LOG_DIR_DEFAULT}
 	touch $(DESTDIR)$(NBD_LOG_DIR_DEFAULT)/nbd-runner.log
+	touch $(DESTDIR)$(NBD_LOG_DIR_DEFAULT)/nbd-clid.log
 	touch $(DESTDIR)$(NBD_LOG_DIR_DEFAULT)/nbd-runner-glfs.log
 
 
 uninstall-local:
 	rm -f $(DESTDIR)${sysconfigdir}/nbd-runner
+	rm -f $(DESTDIR)${sysconfigdir}/nbd-cli
+	rm -f $(DESTDIR)${sysconfigdir}/nbd-clid
 	rm -f $(DESTDIR)${systemddir}/nbd-runner.service
+	rm -f $(DESTDIR)${systemddir}/nbd-clid.service
 
 gitclean: clean distclean
 	find . -path gnulib -prune -name Makefile.in -exec rm -f {} \;
