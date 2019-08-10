@@ -49,7 +49,6 @@ static GHashTable *nbd_devices_hash;
 static GHashTable *nbd_nbds_hash;
 
 static char *ihost;
-int iport = NBD_MAP_SVC_PORT;
 
 #define NBD_NL_VERSION 1
 #define NBD_RETRY_THREAD_THRESH 60000
@@ -678,7 +677,7 @@ map:
 
     /* Currently we will use the first host */
     snprintf(rep->host, NBD_HOST_MAX, "%s", ihost);
-    snprintf(rep->port, NBD_PORT_MAX, "%d", iport);
+    snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_MAP_SVC_PORT);
 
 err:
     if (!inserted)

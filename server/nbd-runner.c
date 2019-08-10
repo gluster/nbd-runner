@@ -46,8 +46,6 @@ struct io_thread_data {
     int sockfd;
 };
 
-extern int iport;
-
 static void usage(void)
 {
     printf("Usage:\n"
@@ -212,13 +210,11 @@ static void *nbd_map_svc_thread_start(void *arg)
         sin.sin_addr.s_addr = htonl(INADDR_ANY);
     }
 
-again:
-    sin.sin_port = htons(iport);
+    sin.sin_port = htons(NBD_MAP_SVC_PORT);
 
     if (bind(listenfd, (struct sockaddr*)&sin, sizeof(struct sockaddr)) < 0) {
-        nbd_warn("bind on port %d failed, %s\n", iport, strerror(errno));
-        nbd_warn("will try to use port %d!\n", ++iport);
-        goto again;
+        nbd_warn("bind on port %d failed, %s\n", NBD_MAP_SVC_PORT, strerror(errno));
+        goto err;
     }
 
     if (listen(listenfd, 16) < 0) {
