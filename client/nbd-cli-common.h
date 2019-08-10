@@ -48,8 +48,8 @@
 
 typedef enum {
     /* These are for the NBD device stats */
-    NBD_LIST_MAPPED,
-    NBD_LIST_UNMAPPED,
+    NBD_LIST_INUSE,
+    NBD_LIST_FREE,
 
     /* The followings are for the backstore state */
     NBD_LIST_CREATED,
@@ -112,10 +112,11 @@ struct cli_request {
 	char rhost[255];
 };
 
-struct map_args {
+struct nl_cbk_args {
     int htype;
     char *cfg;
     CLIENT *clnt;
+    GHashTable *list_hash;
 };
 
 /* This is used to register the backstores */
@@ -125,8 +126,11 @@ int cli_cmd_azblk_register(GPtrArray *cmds, cmd_fn_t fn);
 
 struct addrinfo *nbd_get_sock_addr(const char *host);
 
+int nbd_get_device_list(GHashTable **list_hash);
+
 typedef int (*list_nl_cbk_t)(struct nl_msg *, void *);
-struct nl_sock *nbd_setup_netlink(int *driver_id, list_nl_cbk_t fn, int type,
-                                  char *cfg, CLIENT *clnt, int *ret);
+struct nl_sock *nbd_setup_netlink(int *driver_id, list_nl_cbk_t fn, handler_t htype,
+                                  char *cfg, CLIENT *clnt, GHashTable *list_hash,
+                                  int *ret);
 int load_our_module(void);
 #endif /* __NBD_CLI_COMMON_H */

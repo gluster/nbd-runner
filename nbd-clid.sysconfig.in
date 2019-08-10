@@ -17,20 +17,9 @@
 # uncomment it and set your own path:
 # log_dir = "/var/log/nbd-runner"
 #
-# IO Host Address
-# The default listening IP address for NBD devices' connection to
-# do the IOs, as default will listen on INADDR_ANY, uncomment it
-# and set your own IP:
-# ihost = ""
-#
 # Runner Host Address
 # The default listening IP address for RPC Control commands, such
 # as the nbd-cli [gluster|ceph|...] create/delete/map/unmap/list,
 # as default will listen on INADDR_ANY, uncomment it and set your
 # own IP:
 # rhost = ""
-#
-# Gluster Host Address
-# The default Gluster cluster server IP address to initialize the
-# volume, "localhost" as default, uncomment it and set your own IP:
-# ghost = "localhost"

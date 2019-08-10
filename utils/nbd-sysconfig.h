@@ -32,9 +32,16 @@ struct nbd_config {
 
     char log_dir[PATH_MAX];
 
+    /*
+     * The ihost and ghost only for the nbd-runner.service
+     */
     char ihost[NBD_HOST_MAX];
-    char rhost[NBD_HOST_MAX];
     char ghost[NBD_HOST_MAX];
+
+    /*
+     * The rhost only for the nbd-clid.service
+     */
+    char rhost[NBD_HOST_MAX];
 };
 
 /*

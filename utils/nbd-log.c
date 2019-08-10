@@ -33,7 +33,8 @@
 #define LOG_ENTRYS (1024 * 32)
 
 #define NBD_LOG_FILENAME_MAX    32
-#define NBD_LOG_FILENAME    "nbd-runner.log"
+#define NBD_LOG_RUNNER_FILENAME    "nbd-runner.log"
+#define NBD_LOG_CLID_FILENAME      "nbd-clid.log"
 
 typedef int (*log_output_fn_t)(int priority, const char *timestamp,
                                const char *str, void *data);
@@ -713,7 +714,7 @@ unlock:
     return ret;
 }
 
-int nbd_setup_log(char *log_dir)
+int nbd_setup_log(char *log_dir, bool server)
 {
     int ret;
 
@@ -740,12 +741,12 @@ int nbd_setup_log(char *log_dir)
         nbd_err("create syslog output error \n");
 
     ret = create_file_output(nbd_logbuf, NBD_LOG_DEBUG_IO,
-            NBD_LOG_FILENAME);
+                             server ? NBD_LOG_RUNNER_FILENAME: NBD_LOG_CLID_FILENAME);
     if (ret < 0)
         nbd_err("create file output error \n");
 
     ret = pthread_create(&nbd_logbuf->thread_id, NULL, log_thread_start,
-            NULL);
+                         NULL);
     if (ret) {
         log_cleanup(nbd_logbuf);
         return ret;
