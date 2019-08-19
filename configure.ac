@@ -119,6 +119,12 @@ fi
 AC_CHECK_LIB([dl], [dlopen], [LIB_DL=-ldl])                                                                                                                             
 AC_SUBST(LIB_DL)
 
+# This is only used for the travis build
+AC_ARG_WITH([travis],
+            [AS_HELP_STRING([--with-travis=ARG], [Enable/Disable travis build, default ARG=no])],
+            [with_travis=$withval],
+            [with_travis=no])
+
 # Checks for libraries.
 AC_ARG_WITH([gluster],
             [AS_HELP_STRING([--with-gluster=ARG], [Enable/Disable gluster handler, default ARG=yes])],
@@ -128,13 +134,20 @@ AC_ARG_WITH([gluster],
 AM_CONDITIONAL([WITH_GLUSTER], [test x$with_gluster = xyes])
 
 if test "x$with_gluster" = "xyes"; then
-    # glusterfs-api versions have a prefix of "7."
-    PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.6],
-                      [AC_DEFINE(GFAPI_VERSION760, 1, [Define to 1 if gfapi >=7.6.0])],
-                      [PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.3.6],,
-                                         [AC_MSG_ERROR([gfapi library >= 3.6 is required to build gluster-block])])])   
-                      AC_SUBST(GFAPI_CFLAGS)
-                      AC_SUBST(GFAPI_LIBS)
+    if test "$with_travis" = "yes"; then
+        # glusterfs-api versions have a prefix of "7."
+        PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.6],
+                          [AC_DEFINE(GFAPI_VERSION760, 1, [Define to 1 if gfapi >=7.6.0])],
+                          [PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.3.6],,
+                                             [AC_MSG_ERROR([gfapi library >= 3.6 is required to build gluster-block])])])   
+    else
+        # glusterfs-api versions have a prefix of "7."
+        PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.6.6],
+                          [AC_DEFINE(GFAPI_VERSION766, 1, [Define to 1 if gfapi >=7.6.6])],
+                          [AC_MSG_ERROR([gfapi library >= 6.6 is required to build gluster-block])])
+    fi
+    AC_SUBST(GFAPI_CFLAGS)
+    AC_SUBST(GFAPI_LIBS)
 fi
 
 AC_CHECK_LIB([pthread], [pthread_mutex_init],[PTHREAD="-lpthread"],
@@ -204,6 +217,7 @@ cat <<EOF
   Gluster handler...: $with_gluster
   Azblk handler.....: $with_azblk
   Use TIRPC.........: $with_tirpc
+  Travis build......: $with_travis
   C Compiler........: $CC $CFLAGS $CPPFLAGS
   Linker............: $LD $LDFLAGS $LIBS
 ---------------------------------------------

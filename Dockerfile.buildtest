@@ -21,7 +21,7 @@ RUN true \
 # build
 RUN true \
  && ./autogen.sh \
- && ./configure --with-gfapi6=no --with-clang=yes \
+ && ./configure --with-travis=yes --with-clang=yes \
  && make \
  && make check \
  && make install \
