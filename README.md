@@ -52,7 +52,7 @@ nbd-runner is licensed to you under your choice of the GNU Lesser General Public
 <pre>
 $ git clone https://github.com/gluster/nbd-runner.git
 $ cd nbd-runner/
-$ dnf install autoconf automake libtool kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
+$ dnf install autoconf automake make libtool kmod-devel libnl3-devel libevent-devel glib2-devel json-c-devel
 $ dnf install libtirpc-devel rpcgen # only on Fedora or some other Distributions that the glibc version >= 2.26
 $ dnf install glusterfs-api-devel # only when the --with-gluster=yes or absent you need to install this
 $ dnf install libcurl-devel libuv-devel # only when the --with-azure=yes or absent you need to install this
