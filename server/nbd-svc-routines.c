@@ -685,7 +685,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     if (!rep->exit)
         rep->exit = save_ret;
 
-    /* Currently we will use the first host */
+    /* Currently we will use the first none 'localhost' ip addr */
     snprintf(rep->host, NBD_HOST_MAX, "%s", ihost);
     snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_MAP_SVC_PORT);
 

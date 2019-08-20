@@ -998,7 +998,7 @@ static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
 
     sock = accept(fd, NULL, NULL);
     if (sock < 0) {
-        nbd_err("Failed to accept!\n");
+        nbd_err("Failed to accept, %m!\n");
         return -1;
     }
 
@@ -1078,9 +1078,13 @@ static void nbd_event_loop(int fd, const struct nbd_config *nbd_cfg)
         pfd.revents = 0;
 
 		ret = ppoll(&pfd, 1, &tmo, NULL);
+
+        if (event_loop_stop)
+            goto out;
+
 		if (ret == -1) {
-			nbd_err("ppoll returned %d\n", ret);
-            return;
+			nbd_err("ppoll returned -1, %d\n", errno);
+            goto out;
         }
 
         if (!ret)
@@ -1088,17 +1092,22 @@ static void nbd_event_loop(int fd, const struct nbd_config *nbd_cfg)
 
         if (pfd.revents != POLLIN) {
 			nbd_err("ppoll received unexpected revent: 0x%x\n", pfd.revents);
-            return;
+            goto out;
         }
 
         if (nbd_clid_ipc_handle(fd, nbd_cfg)) {
-            return;
+            goto out;
         }
 	} while (!event_loop_stop);
+
+out:
+    nbd_info("Stopping the event loop!\n");
 }
 
 static void sig_handler(int signo)
 {
+    nbd_info("Have received signal!\n");
+
     switch (signo) {
     case SIGINT:
     case SIGTERM:
@@ -1188,19 +1197,19 @@ int main(int argc, char *argv[])
         goto out;
 
     if (gid && setgid(gid) < 0) {
-        nbd_err("Failed to setgid to %d\n", gid);
+        nbd_err("Failed to setgid to %d, %m\n", gid);
         goto out;
     }
 
     if ((geteuid() == 0) && (getgroups(0, NULL))) {
         if (setgroups(0, NULL) != 0) {
-            nbd_err("Failed to drop supplementary group ids\n");
+            nbd_err("Failed to drop supplementary group ids, %m\n");
             goto out;
         }
     }
 
     if (uid && setuid(uid) < 0) {
-        nbd_err("Failed to setuid to %d\n", uid);
+        nbd_err("Failed to setuid to %d, %m\n", uid);
         goto out;
     }
 

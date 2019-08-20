@@ -40,7 +40,7 @@ int nbd_ipc_listen(void)
 
 	fd = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (fd < 0) {
-		nbd_err("Failed to create ipc socket!\n");
+		nbd_err("Failed to create ipc socket, %m!\n");
 		return fd;
 	}
 
@@ -57,7 +57,7 @@ int nbd_ipc_listen(void)
 	}
 
 	if ((ret = listen(fd, 32)) < 0) {
-		nbd_err("Failed to listen ipc socket!\n");
+		nbd_err("Failed to listen ipc socket, %m!\n");
         goto err;
 	}
 
