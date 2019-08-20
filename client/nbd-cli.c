@@ -82,6 +82,13 @@ nbd_cli_create_backstore(int sock, int count, char **options, handler_t htype)
     req.cmd = NBD_CLI_CREATE;
     req.create.prealloc = false;
 
+    /*
+     * The cfgsting will be like:
+     * key_string;opt1;opt2;...
+     *
+     * for example:
+     * volume/filepath;dummy1=value1;dummy2;dummy3=value3
+     */
     len = snprintf(req.create.cfgstring, max_len, "%s", options[0]);
     if (len < 0) {
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));

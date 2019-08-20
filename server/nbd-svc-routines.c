@@ -53,6 +53,31 @@ static char *ihost;
 #define NBD_NL_VERSION 1
 #define NBD_RETRY_THREAD_THRESH 60000
 
+/*
+ * Prase the key from the cfgstring.
+ *
+ * For exmaple, with extra private options it will be like:
+ * "myvolume/myfile;option1;option2"
+ *
+ * Or if there is no any extra private option it will be like:
+ * "myvolume/myfile"
+ *
+ * And the hash key "myvolume/myfile" will be returned.
+ */
+static char *nbd_get_hash_key(const char *cfgstring)
+{
+    char *sep;
+    int len;
+
+    sep = strchr(cfgstring, ';');
+    if (!sep)
+        return strdup(cfgstring);
+
+    len = sep - cfgstring;
+
+    return strndup(cfgstring, len);
+}
+
 static void nbd_gfree_data(gpointer data)
 {
     free(data);
@@ -365,7 +390,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
         return true;
     }
 
-    key = strdup(create->cfgstring);
+    key = nbd_get_hash_key(create->cfgstring);
     if (!key) {
         nbd_fill_reply(rep, -ENOMEM, "No memory to dup %s!", create->cfgstring);
         nbd_err("No memory to dup %s!\n", create->cfgstring);
@@ -470,7 +495,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         goto err;
     }
 
-    key = strdup(delete->cfgstring);
+    key = nbd_get_hash_key(delete->cfgstring);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", delete->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", delete->cfgstring);
@@ -590,7 +615,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         goto err;
     }
 
-    key = strdup(map->cfgstring);
+    key = nbd_get_hash_key(map->cfgstring);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", map->cfgstring);
         nbd_err("Invalid cfgstring %s!\n", map->cfgstring);
@@ -705,7 +730,7 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
 {
     struct nbd_device *dev;
     char *cfg = map->cfgstring;
-    char *key;
+    char *key = NULL;
     char *nbd;
 
     nbd_info("Postmap request type: %d, cfg: %s, nbd: %s, time: %s\n",
@@ -720,7 +745,7 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
         goto err;
     }
 
-    key = strdup(cfg);
+    key = nbd_get_hash_key(cfg);
     if (!key) {
         nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", cfg);
         nbd_err("Invalid cfgstring %s!\n", cfg);
@@ -750,6 +775,7 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
     pthread_mutex_unlock(&dev->lock);
 
 err:
+    free(key);
     if (rep->exit)
         nbd_err("Postmap failed!\n");
     else
@@ -790,7 +816,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
             goto out;
         }
     } else {
-        key = strdup(unmap->cfgstring);
+        key = nbd_get_hash_key(unmap->cfgstring);
         if (!key) {
             nbd_fill_reply(rep, -EINVAL, "Invalid cfgstring %s!", unmap->cfgstring);
             nbd_err("Invalid cfgstring %s!\n", unmap->cfgstring);
@@ -1042,7 +1068,7 @@ int nbd_handle_request(int sock, int threads)
         goto err;
     }
 
-    key = strdup(cfg);
+    key = nbd_get_hash_key(cfg);
     if (!key) {
         nrep.exit = -EINVAL;
         buf = calloc(1, 4096);
