@@ -28,7 +28,7 @@
 #include "strlcpy.h"
 
 /* nbd ring buffer for log */
-#define LOG_ENTRY_LEN 256 /* rb[0] is reserved for pri */
+#define LOG_ENTRY_LEN 8192 /* rb[0] is reserved for pri */
 #define LOG_MSG_LEN (LOG_ENTRY_LEN - 1) /* the length of the log message */
 #define LOG_ENTRYS (1024 * 32)
 
