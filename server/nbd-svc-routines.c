@@ -254,6 +254,7 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
     json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
     json_object_object_add(devobj, "size", json_object_new_int64(dev->size));
     json_object_object_add(devobj, "blksize", json_object_new_int64(dev->blksize));
+    json_object_object_add(devobj, "timeout", json_object_new_int64(dev->timeout));
     json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
     json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
 
@@ -317,6 +318,9 @@ static int nbd_parse_from_json_config_file(void)
 
             json_object_object_get_ex(devobj, "blksize", &obj);
             dev->blksize = json_object_get_int64(obj);
+
+            json_object_object_get_ex(devobj, "timeout", &obj);
+            dev->timeout = json_object_get_int64(obj);
 
             json_object_object_get_ex(devobj, "prealloc", &obj);
             dev->prealloc = json_object_get_boolean(obj);
@@ -939,6 +943,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         json_object_object_add(devobj, "maptime", json_object_new_string(dev->time));
         json_object_object_add(devobj, "size", json_object_new_int64(dev->size));
         json_object_object_add(devobj, "blksize", json_object_new_int64(dev->blksize));
+        json_object_object_add(devobj, "timeout", json_object_new_int64(dev->timeout));
         json_object_object_add(devobj, "readonly", json_object_new_boolean(dev->readonly));
         json_object_object_add(devobj, "prealloc", json_object_new_boolean(dev->prealloc));
         json_object_object_add(devobj, "status", json_object_new_string(st));

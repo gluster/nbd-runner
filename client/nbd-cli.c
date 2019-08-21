@@ -459,16 +459,18 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
     const char *tmp, *tmp1;
     int status;
     char *sizep;
+    int tmo;
+    bool ro;
 
     if (!info) {
         nbd_err("Invalid argument and info is NULL!\n");
         return;
     }
 
-    nbd_info("%-20s%-15s%-25s%-15s%-15s%s\n",
-             "NBD-DEVS", "NBD-STAT", "NBD-MAPTIME", "BS-STAT", "BS-SIZE", "BACKSTORE");
-    nbd_info("%-20s%-15s%-25s%-15s%-15s%s\n",
-             "--------", "--------", "-----------", "-------", "-------", "---------");
+    nbd_info("%-20s%-15s%-25s%-15s%-15s%-10s%-10s%s\n",
+             "NBD-DEVS", "NBD-STAT", "NBD-MAPTIME", "BS-STAT", "BS-SIZE", "BS-RO", "BS-TMO", "BACKSTORE");
+    nbd_info("%-20s%-15s%-25s%-15s%-15s%-10s%-10s%s\n",
+             "--------", "--------", "-----------", "-------", "-------", "-----", "------", "---------");
 
     globalobj = json_tokener_parse(info);
 
@@ -498,12 +500,17 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                         nbd_err("failed to get sizep, no memory!\n");
                         goto err;
                     }
+                    json_object_object_get_ex(devobj, "readonly", &obj);
+                    ro = json_object_get_boolean(obj);
+                    json_object_object_get_ex(devobj, "timeout", &obj);
+                    tmo = json_object_get_int64(obj);
+
                     if (!strcmp(tmp, "dead"))
-                        nbd_info("%-15s%7s%-8s%s\n", "Dead", sizep, "", objkey);
+                        nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Dead", sizep, "", ro?"Y":"N", tmo, objkey);
                     else if (!strcmp(tmp, "mapped"))
-                        nbd_info("%-15s%7s%-8s%s\n", "Live", sizep, "", objkey);
+                        nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Live", sizep, "", ro?"Y":"N", tmo, objkey);
                     else
-                        nbd_info("%-15s%-15s%s", "--", "--", "--");
+                        nbd_info("%-15s%-15s%-10s%-10s%s\n", "--", "--", "--", "--", "--");
                 }
             }
         }
@@ -521,11 +528,17 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                     tmp = json_object_get_string(obj);
                     nbd_info("%-15s", tmp ? tmp : "--");
 
+                    json_object_object_get_ex(dobj, "readonly", &obj);
+                    ro = json_object_get_boolean(obj);
+                    json_object_object_get_ex(dobj, "timeout", &obj);
+                    tmo = json_object_get_int64(obj);
+                    nbd_info("%-10s%-10d%s", ro?"Y":"N", tmo);
+
                     json_object_object_get_ex(dobj, "backstore", &obj);
                     tmp = json_object_get_string(obj);
                     nbd_info("%s\n", tmp ? tmp : "--");
                 } else {
-                    nbd_info("%-25s%-15s%-15s%s\n", "--", "--", "--", "--");
+                    nbd_info("%-25s%-15s%-15s%-10s%-10s%s\n", "--", "--", "--", "--", "--", "--");
                 }
             }
         }
@@ -535,8 +548,8 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
         while (g_hash_table_iter_next(&iter, &key, &value)) {
             status = *(int *)value;
             if (!status)
-                nbd_info("%-20s%-15s%-25s%-15s%-15s%s\n", (char *)key, "Free",
-                        "--", "--", "--", "--");
+                nbd_info("%-20s%-15s%-25s%-15s%-15s%-10s%-10s%s\n", (char *)key, "Free",
+                        "--", "--", "--", "--", "--", "--");
         }
         break;
     case NBD_LIST_CREATED:
@@ -551,8 +564,12 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                         nbd_err("failed to get sizep, no memory!\n");
                         goto err;
                     }
-                    nbd_info("%-20s%-15s%-25s%-15s%7s%-8s%s\n", "--", "--", "--",
-                            "Created", sizep, "", objkey);
+                    json_object_object_get_ex(devobj, "readonly", &obj);
+                    ro = json_object_get_boolean(obj);
+                    json_object_object_get_ex(devobj, "timeout", &obj);
+                    tmo = json_object_get_int64(obj);
+                    nbd_info("%-20s%-15s%-25s%-15s%7s%-8s%-10s%-10d%s\n", "--", "--", "--",
+                            "Created", sizep, "", ro?"Y":"N", tmo, objkey);
                 }
             }
         }
@@ -579,8 +596,12 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                         nbd_err("failed to get sizep, no memory!\n");
                         goto err;
                     }
-                    nbd_info("%-25s%-15s%7s%-8s%s\n", tmp ? tmp : "--",
-                             "Dead", sizep, "", objkey);
+                    json_object_object_get_ex(devobj, "readonly", &obj);
+                    ro = json_object_get_boolean(obj);
+                    json_object_object_get_ex(devobj, "timeout", &obj);
+                    tmo = json_object_get_int64(obj);
+                    nbd_info("%-25s%-15s%7s%-8s%-10s%-10d%s\n", tmp ? tmp : "--",
+                             "Dead", sizep, "", ro?"Y":"N", tmo, objkey);
                 }
             }
         }
@@ -612,7 +633,11 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                         nbd_err("failed to get sizep, no memory!\n");
                         goto err;
                     }
-                    nbd_info("%-15s%7s%-8s%s\n", "Live", sizep, "", objkey);
+                    json_object_object_get_ex(devobj, "readonly", &obj);
+                    ro = json_object_get_boolean(obj);
+                    json_object_object_get_ex(devobj, "timeout", &obj);
+                    tmo = json_object_get_int64(obj);
+                    nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Live", sizep, "", ro?"Y":"N", tmo, objkey);
                 }
             }
         }
@@ -643,16 +668,20 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                         nbd_err("failed to get sizep, no memory!\n");
                         goto err;
                     }
+                    json_object_object_get_ex(devobj, "readonly", &obj);
+                    ro = json_object_get_boolean(obj);
+                    json_object_object_get_ex(devobj, "timeout", &obj);
+                    tmo = json_object_get_int64(obj);
                     if (!strcmp(tmp, "dead"))
-                        nbd_info("%-15s%7s%-8s%s\n", "Dead", sizep, "", objkey);
+                        nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Dead", sizep, "", ro?"Y":"N", tmo, objkey);
                     else if (!strcmp(tmp, "mapping"))
-                        nbd_info("%-15s%7s%-8s%s\n", "Mapping", sizep, "", objkey);
+                        nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Mapping", sizep, "", ro?"Y":"N", tmo, objkey);
                     else if (!strcmp(tmp, "mapped"))
-                        nbd_info("%-15s%7s%-8s%s\n", "Live", sizep, "", objkey);
+                        nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Live", sizep, "", ro?"Y":"N", tmo, objkey);
                     else if (!strcmp(tmp, "unmapping"))
-                        nbd_info("%-15s%7s%-8s%s\n", "Unpapping", sizep, "", objkey);
+                        nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Unpapping", sizep, "", ro?"Y":"N", tmo, objkey);
                     else
-                        nbd_info("%-15s%7s%-8s%s\n", "--", "--", "", "--");
+                        nbd_info("%-15s%7s%-8s%-10s%-10s%s\n", "--", "--", "", "--", "--", "--");
                 } else {
                     nbd_info("%-20s%-15s%-25s", "--", "--", "--");
                     json_object_object_get_ex(devobj, "status", &obj);
@@ -672,7 +701,11 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                         nbd_err("failed to get sizep, no memory!\n");
                         goto err;
                     }
-                    nbd_info("%7s%-8s%s\n", sizep, "", objkey);
+                    json_object_object_get_ex(devobj, "readonly", &obj);
+                    ro = json_object_get_boolean(obj);
+                    json_object_object_get_ex(devobj, "timeout", &obj);
+                    tmo = json_object_get_int64(obj);
+                    nbd_info("%7s%-8s%-10s%-10d%s\n", sizep, "", ro?"Y":"N", tmo, objkey);
                 }
             }
         }
@@ -681,24 +714,10 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
             status = *(int *)value;
             if (status) {
                 nbd_info("%-20s%-15s", (char *)key, "Inuse");
-                if (json_object_object_get_ex(globalobj, key, &dobj)) {
-                    json_object_object_get_ex(dobj, "maptime", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_info("%-25s", tmp ? tmp : "--");
-
-                    json_object_object_get_ex(dobj, "status", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_info("%-15s", tmp ? tmp : "--");
-
-                    json_object_object_get_ex(dobj, "backstore", &obj);
-                    tmp = json_object_get_string(obj);
-                    nbd_info("%s\n", tmp ? tmp : "--");
-                } else {
-                    nbd_info("%-25s%-15s%-15s%s\n", "--", "--", "--", "--");
-                }
+                nbd_info("%-25s%-15s%-15s%-10s%-10s%s\n", "--", "--", "--", "--", "--", "--");
             } else {
-                nbd_info("%-20s%-15s%-25s%-15s%-15s%s\n", (char *)key, "Free",
-                        "--", "--", "--", "--");
+                nbd_info("%-20s%-15s%-25s%-15s%-15s%-10s%-10s%s\n", (char *)key, "Free",
+                        "--", "--", "--", "--", "--", "--");
             }
         }
         break;
