@@ -459,7 +459,7 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
 
 static void
 nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readonly,
-                    const char *rhost, struct cli_reply **cli_rep)
+                    int timeout, const char *rhost, struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
     struct nbd_premap *map;
@@ -468,7 +468,6 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readon
     struct addrinfo *res = NULL;
     int sock = RPC_ANYSOCK;
     int tmp_index;
-    int timeout = 30; //This is the default timeout value in kernel space for each IO request
     int ret = -EINVAL;
     int len;
     int max_len = 1024;
@@ -834,6 +833,7 @@ static void *nbd_clid_connections_restore(void *arg)
     bool readonly;
     const char *tmp, *cfg;
     int nbd_index;
+    int timeout;
 
     nbd_info("clid restore thread starting!\n");
 
@@ -881,11 +881,14 @@ static void *nbd_clid_connections_restore(void *arg)
                 json_object_object_get_ex(devobj, "readonly", &obj);
                 readonly = json_object_get_boolean(obj);
 
+                json_object_object_get_ex(devobj, "timeout", &obj);
+                timeout = json_object_get_int64(obj);
+
                 cfg = objkey;
 
                 free(cli_rep);
                 cli_rep = NULL;
-                nbd_clid_map_device(htype, cfg, nbd_index, readonly,
+                nbd_clid_map_device(htype, cfg, nbd_index, readonly, timeout,
                         nbd_cfg->rhost, &cli_rep);
                 if (cli_rep && cli_rep->exit) {
                     nbd_err("nbd_clid_map_device failed, %s!\n", cli_rep->buf);
@@ -1034,9 +1037,8 @@ static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
         break;
     case NBD_CLI_MAP:
         pthread_mutex_lock(&nbd_lock);
-        nbd_clid_map_device(req.htype, req.map.cfgstring,
-                            req.map.nbd_index, req.map.readonly,
-                            rhost, &cli_rep);
+        nbd_clid_map_device(req.htype, req.map.cfgstring, req.map.nbd_index,
+                            req.map.readonly, req.map.timeout, rhost, &cli_rep);
         pthread_mutex_unlock(&nbd_lock);
         break;
     case NBD_CLI_UNMAP:

@@ -702,10 +702,11 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
     save_ret = rep->exit;
 
+    dev->timeout = map->timeout;
+
     if (!handler->map(dev, rep))
         goto err;
 
-    dev->timeout = map->timeout;
     dev->status = NBD_DEV_CONN_ST_MAPPING;
     rep->size = dev->size;
     rep->blksize = dev->blksize;

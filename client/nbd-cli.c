@@ -532,7 +532,7 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                     ro = json_object_get_boolean(obj);
                     json_object_object_get_ex(dobj, "timeout", &obj);
                     tmo = json_object_get_int64(obj);
-                    nbd_info("%-10s%-10d%s", ro?"Y":"N", tmo);
+                    nbd_info("%-10s%-10d", ro?"Y":"N", tmo);
 
                     json_object_object_get_ex(dobj, "backstore", &obj);
                     tmp = json_object_get_string(obj);
