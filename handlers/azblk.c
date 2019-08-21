@@ -241,7 +241,7 @@ static void azblk_multi_done(CURLM *curl_multi, CURLMsg *message)
     struct azblk_io_cb *io_cb;
     struct nbd_device *dev;
     CURL *curl_ezh;
-    long resp_code;
+    long resp_code = 0;
     int ret = 0;
 
     curl_ezh = message->easy_handle;
@@ -253,15 +253,18 @@ static void azblk_multi_done(CURLM *curl_multi, CURLMsg *message)
         curl_easy_getinfo(curl_ezh, CURLINFO_RESPONSE_CODE, &resp_code);
 
         if (az_is_throttle(resp_code)) {
-            nbd_dev_dbg(dev, "Curl HTTP error %ld. Azure is throttling the IO.\n", resp_code);
+            nbd_dev_dbg(dev, "Curl HTTP error %ld. Azure is throttling the IO at offset %zd.\n",
+                        resp_code, io_cb->nbd_req->offset);
             ret = -EAGAIN;
         } else {
             nbd_dev_err(dev,"Curl HTTP error %ld.\n", resp_code);
 
             if (io_cb->nbd_req->cmd == NBD_CMD_READ)
-                nbd_dev_err(dev, "Curl GET error %s.\n", io_cb->errmsg);
+                nbd_dev_err(dev, "Curl GET error %s IO at offset %zd.\n",
+                            io_cb->errmsg, io_cb->nbd_req->offset);
             else
-                nbd_dev_err(dev, "Curl PUT error %s.\n", io_cb->errmsg);
+                nbd_dev_err(dev, "Curl PUT error %s IO at offset %zd.\n",
+                            io_cb->errmsg, io_cb->nbd_req->offset);
 
             ret = -EIO;
         }
@@ -385,7 +388,7 @@ static int azblk_handle_socket(CURL *curl_ezh, curl_socket_t s, int action,
 
     if (action == CURL_POLL_IN
         || action == CURL_POLL_OUT
-            || action == CURL_POLL_INOUT) {
+        || action == CURL_POLL_INOUT) {
         if (socketp)
             context = (struct azblk_socket_context *)socketp;
         else {
@@ -396,16 +399,14 @@ static int azblk_handle_socket(CURL *curl_ezh, curl_socket_t s, int action,
 
     switch (action) {
     case CURL_POLL_IN:
-        uv_poll_start(&context->poll_handle, UV_READABLE,
-                  azblk_curl_perform);
+        uv_poll_start(&context->poll_handle, UV_READABLE, azblk_curl_perform);
         break;
     case CURL_POLL_OUT:
-        uv_poll_start(&context->poll_handle, UV_WRITABLE,
-                  azblk_curl_perform);
+        uv_poll_start(&context->poll_handle, UV_WRITABLE, azblk_curl_perform);
         break;
     case CURL_POLL_INOUT:
         uv_poll_start(&context->poll_handle, UV_READABLE | UV_WRITABLE,
-                  azblk_curl_perform);
+                      azblk_curl_perform);
         break;
     case CURL_POLL_REMOVE:
         if (socketp) {
@@ -421,7 +422,7 @@ static int azblk_handle_socket(CURL *curl_ezh, curl_socket_t s, int action,
     return 0;
 }
 
-void azblk_dev_loop(void *arg)
+static void azblk_dev_loop(void *arg)
 {
     struct azblk_dev *azdev = (struct azblk_dev *)arg;
     int ret;
@@ -518,8 +519,6 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
     int url_len;
     char err_msg[80];
 
-    nbd_info("cfgstring len=%zu, cfgstring=%s\n", strlen(cfgstring), cfgstring);
-
     if (!cfgstring || !dev) {
         nbd_fill_reply(rep, -EINVAL, "The cfgstring param is NULL.");
         nbd_err("The cfgstring param is NULL.\n");
@@ -549,7 +548,7 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
 
     url_len = str_end - str;
 
-    if ( url_len >= AZ_BLOB_URL_LEN) {
+    if (url_len >= AZ_BLOB_URL_LEN) {
         nbd_fill_reply(rep, -EINVAL, "Url too long.");
         nbd_err("Url too long.\n");
         azdev_free(azdev);
@@ -566,7 +565,7 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
     while (*str == ';' && *(++str) !=  '\0') {
         for (i = 0; i < AZBLK_PARAMS; i++) {
             if (strncmp(str, azblk_params[i].name,
-                    strlen(azblk_params[i].name)) == 0)
+                        strlen(azblk_params[i].name)) == 0)
                 break;
         }
 
@@ -590,8 +589,8 @@ static bool azblk_parse_config(struct nbd_device *dev, const char *cfgstring,
 
     azdev->cfg.blob_url = calloc(1, url_len);
     snprintf(azdev->cfg.blob_url, url_len,
-            azdev->cfg.http ? "http://%s" : "https://%s",
-            url);
+             azdev->cfg.http ? "http://%s" : "https://%s",
+             url);
 
     dev->priv = azdev;
 
@@ -606,7 +605,7 @@ error:
     return false;
 }
 
-int get_UTC(char *buf, int size)
+static int get_UTC(char *buf, int size)
 {
     time_t c_time;
     struct tm gm_time;
@@ -653,7 +652,7 @@ static bool azblk_sync_io(char *command,
 
     curl_easy_setopt(curl_ezh, CURLOPT_HTTPHEADER, headers);
 
-    res  = curl_easy_perform(curl_ezh);
+    res = curl_easy_perform(curl_ezh);
     if (res == CURLE_OK) {
         curl_easy_getinfo(curl_ezh,
                     CURLINFO_RESPONSE_CODE, resp_code);
@@ -717,9 +716,9 @@ static int azblk_set_lease(struct azblk_dev *azdev)
 
     curl_ezh = curl_easy_init();
     if (!curl_ezh) {
-            nbd_err("Could not init easy handle.\n");
-            return -EINVAL;
-        }
+        nbd_err("Could not init easy handle.\n");
+        return -EINVAL;
+    }
 
     ret = asprintf(&request_url,
                    azdev->cfg.sas ? "%s?comp=lease&%s" : "%s?comp=lease",
@@ -764,9 +763,9 @@ static int azblk_get_blob_properties(struct azblk_dev *azdev,
 
     curl_ezh = curl_easy_init();
     if (!curl_ezh) {
-            nbd_err("Could not init easy handle.\n");
-            return -EINVAL;
-        }
+        nbd_err("Could not init easy handle.\n");
+        return -EINVAL;
+    }
 
     ret = asprintf(&request_url,
                    azdev->cfg.sas ? "%s?%s" : "%s",
@@ -791,7 +790,7 @@ static int azblk_get_blob_properties(struct azblk_dev *azdev,
         if (az_not_found(http_response))
             return -ENODEV;
         nbd_err("Azure sync HEAD error %ld - %s.\n",
-                 http_response, az_ret_header->err_str);
+                http_response, az_ret_header->err_str);
         return -EINVAL;
     }
 
@@ -811,10 +810,9 @@ static bool azblk_create(struct nbd_device *dev, nbd_response *rep)
 
     curl_ezh = curl_easy_init();
     if (!curl_ezh) {
-            nbd_err("Could not init easy handle.\n");
-            return -EINVAL;
-        }
-
+        nbd_err("Could not init easy handle.\n");
+        return -EINVAL;
+    }
 
     ret = asprintf(&request_url,
                    azdev->cfg.sas ? "%s?%s" : "%s",
@@ -881,7 +879,7 @@ static bool azblk_add(struct nbd_device *dev, nbd_response *rep)
         nbd_err("Error getting blob properties.\n");
         nbd_fill_reply(rep, ret, "Error getting blob properties.");
         goto error;
-     }
+    }
 
     if (ret == 0) {
         if (dev->size != az_ret_header.max_size) {
