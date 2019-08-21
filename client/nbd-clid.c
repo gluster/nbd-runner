@@ -1005,6 +1005,9 @@ static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
     bzero(&req, sizeof(struct cli_request));
     ret = nbd_socket_read(sock, &req, sizeof(struct cli_request));
     if (ret != sizeof(struct cli_request)) {
+        if (!ret)
+            goto out;
+
         nbd_err("Nigo failed, ret: %d, sizeof(struct cli_request): %lu!\n",
                 ret, sizeof(struct cli_request));
         ret = -1;
