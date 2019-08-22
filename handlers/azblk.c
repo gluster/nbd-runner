@@ -942,7 +942,7 @@ static bool azblk_add(struct nbd_device *dev, nbd_response *rep)
 
 done:
 
-    azdev->cfg.size = az_ret_header.max_size;
+    azdev->cfg.size = dev->size;
     return true;
 
 error:
