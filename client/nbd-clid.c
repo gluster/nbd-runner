@@ -102,8 +102,8 @@ nbd_clid_create_backstore(handler_t htype, const char *cfg, ssize_t size,
     }
 
     if (rep.exit && rep.buf) {
-        nbd_clid_fill_reply(cli_rep, rep.exit, "Create failed: %s", rep.buf);
-        nbd_err("Create failed: %s\n", rep.buf);
+        nbd_clid_fill_reply(cli_rep, rep.exit, "%s", rep.buf);
+        nbd_err("Create failed: %d, %s\n", rep.exit, rep.buf);
     } else {
         nbd_info("Create succeeded!\n");
     }
@@ -176,8 +176,8 @@ nbd_clid_delete_backstore(handler_t htype, const char *cfg, const char *rhost,
     }
 
     if (rep.exit && rep.buf) {
-        nbd_clid_fill_reply(cli_rep, rep.exit, "Delete failed: %s", rep.buf);
-        nbd_err("Delete failed: %s\n", rep.buf);
+        nbd_clid_fill_reply(cli_rep, rep.exit, "%s", rep.buf);
+        nbd_err("Delete failed: %d, %s\n", rep.exit, rep.buf);
     } else {
         nbd_info("Delete succeeded!\n");
     }
@@ -554,8 +554,8 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readon
             goto err;
         }
     } else if (rep.exit && rep.buf) {
-        nbd_clid_fill_reply(cli_rep, rep.exit, "Map failed: %s", rep.buf);
-        nbd_err("Map failed: %s\n", rep.buf);
+        nbd_clid_fill_reply(cli_rep, rep.exit, "%s", rep.buf);
+        nbd_err("Map failed: %d, %s\n", rep.exit, rep.buf);
         goto err;
     }
 
@@ -677,8 +677,8 @@ nbd_clid_unmap_device(handler_t htype, const char *cfg, int nbd_index,
     if (rep.exit == -EEXIST) {
         nbd_info("%s\n", rep.buf ? rep.buf : "There is no map exist");
     } else if (rep.exit && rep.buf) {
-        nbd_clid_fill_reply(cli_rep, rep.exit, "Unmap failed: %s", rep.buf);
-        nbd_err("Unmap failed:exit: %d, %s\n", rep.exit, rep.buf);
+        nbd_clid_fill_reply(cli_rep, rep.exit, "%s", rep.buf);
+        nbd_err("Unmap failed: %d, %s\n", rep.exit, rep.buf);
         goto err;
     }
 
@@ -768,8 +768,8 @@ retry:
     }
 
     if (rep.exit && rep.buf) {
-        nbd_clid_fill_reply(cli_rep, rep.exit, "List failed: %s", rep.buf);
-        nbd_err("List failed: %s\n", rep.buf);
+        nbd_clid_fill_reply(cli_rep, rep.exit, "%s", rep.buf);
+        nbd_err("List failed: %d, %s\n", rep.exit, rep.buf);
         goto nla_put_failure;
     }
 
