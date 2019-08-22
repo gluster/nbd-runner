@@ -253,7 +253,7 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
     char *buf;
     int ret = 0;
 
-    nbd_info("nbd_device_connect cfg: %s, nbd_index: %d, readonly: %d, size: %zu, blk_size: %zu, timeout: %d\n",
+    nbd_info("cfg: %s, nbd_index: %d, readonly: %d, size: %zu, blk_size: %zu, timeout: %d\n",
              cfg, nbd_index, readonly, size, blk_size, timeout);
 
     nhdr.len = strlen(cfg);
@@ -476,8 +476,8 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readon
     int sockfd = -1;
     int eno;
 
-    nbd_info("Map request htype: %d, cfg: %s, nbd_index: %d, readonly: %d, rhost: %s\n",
-             htype, cfg, nbd_index, readonly, rhost);
+    nbd_info("Map request htype: %d, cfg: %s, nbd_index: %d, readonly: %d, timeout: %d, rhost: %s\n",
+             htype, cfg, nbd_index, readonly, timeout, rhost);
 
     if (nbd_index < -1)
         nbd_index = -1;
@@ -584,13 +584,13 @@ err:
         if (clnt) {
             if (rep.buf)
                 clnt_freeres(clnt, (xdrproc_t)xdr_nbd_response, (char *)&rep);
-        }
 
-        postmap.htype = htype;
-        strcpy(postmap.cfgstring, cfg);
-        if (nbd_postmap_1(&postmap, &rep, clnt) != RPC_SUCCESS) {
-            if (rep.exit && rep.buf)
-                nbd_err("nbd_postmap_1 failed: %s!\n", rep.buf);
+            postmap.htype = htype;
+            strcpy(postmap.cfgstring, cfg);
+            if (nbd_postmap_1(&postmap, &rep, clnt) != RPC_SUCCESS) {
+                if (rep.exit && rep.buf)
+                    nbd_err("nbd_postmap_1 failed: %s!\n", rep.buf);
+            }
         }
     } else {
         nbd_info("Map succeeded!\n");
