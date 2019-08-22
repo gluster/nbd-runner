@@ -1547,6 +1547,7 @@ error:
 static bool azblk_update_json(struct nbd_device *dev, json_object *devobj)
 {
     struct azblk_dev *azdev = dev->priv;
+    json_object *obj = NULL;
 
     if (!azdev) {
         nbd_err("Device is not allocated\n");
@@ -1556,17 +1557,39 @@ static bool azblk_update_json(struct nbd_device *dev, json_object *devobj)
     if (!azdev)
         return false;
 
-    if (azdev->cfg.sas)
-        json_object_object_add(devobj, "sas",
-                               json_object_new_string(azdev->cfg.sas));
-    if (azdev->cfg.blob_url)
-        json_object_object_add(devobj, "blob_url",
-                               json_object_new_string(azdev->cfg.blob_url));
-    if (azdev->cfg.lease_id)
-        json_object_object_add(devobj, "lease_id",
-                               json_object_new_string(azdev->cfg.lease_id));
+    if (azdev->cfg.sas) {
+        if (json_object_object_get_ex(devobj, "sas", &obj)) {
+            json_object_set_string(obj, azdev->cfg.sas);
+        } else {
+            json_object_object_add(devobj, "sas",
+                                   json_object_new_string(azdev->cfg.sas));
+        }
+    }
 
-    json_object_object_add(devobj, "http", json_object_new_int(azdev->cfg.http));
+    if (azdev->cfg.blob_url) {
+        if (json_object_object_get_ex(devobj, "blob_url", &obj)) {
+            json_object_set_string(obj, azdev->cfg.blob_url);
+        } else {
+            json_object_object_add(devobj, "blob_url",
+                                   json_object_new_string(azdev->cfg.blob_url));
+        }
+    }
+
+    if (azdev->cfg.lease_id) {
+        if (json_object_object_get_ex(devobj, "lease_id", &obj)) {
+            json_object_set_string(obj, azdev->cfg.lease_id);
+        } else {
+            json_object_object_add(devobj, "lease_id",
+                                   json_object_new_string(azdev->cfg.lease_id));
+        }
+    }
+
+    if (json_object_object_get_ex(devobj, "http", &obj)) {
+        json_object_set_int(obj, azdev->cfg.http);
+    } else {
+        json_object_object_add(devobj, "http",
+                               json_object_new_int(azdev->cfg.http));
+    }
 
     return true;
 }

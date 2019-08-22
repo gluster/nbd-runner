@@ -188,10 +188,11 @@ static int nbd_config_delete_backstore(struct nbd_device *dev, const char *key)
 /*
  * Update the device config to the config json file
  */
-static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
+static int nbd_update_json_config_file(struct nbd_device *dev)
 {
     json_object *globalobj = NULL;
     json_object *devobj = NULL;
+    json_object *obj = NULL;
     const char *st;
     char *key;
     int ret = 0;
@@ -206,13 +207,40 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
     globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
     if (globalobj) {
         if (json_object_object_get_ex(globalobj, key, &devobj)) {
-            if (replace) {
-                json_object_object_del(globalobj, key);
-            } else {
-                json_object_put(globalobj);
-                nbd_info("%s is already in the json conig file!\n", key);
-                return 0;
-            }
+            /* Once the create is done, this shouldn't changed in any case */
+            //json_object_object_get_ex(devobj, "type", &obj);
+            //json_object_set_int64(obj, dev->htype);
+
+            json_object_object_get_ex(devobj, "nbd", &obj);
+            json_object_set_string(obj, dev->nbd);
+
+            json_object_object_get_ex(devobj, "maptime", &obj);
+            json_object_set_string(obj, dev->time);
+
+            json_object_object_get_ex(devobj, "size", &obj);
+            json_object_set_int64(obj, dev->size);
+
+            json_object_object_get_ex(devobj, "blksize", &obj);
+            json_object_set_int64(obj, dev->blksize);
+
+            json_object_object_get_ex(devobj, "timeout", &obj);
+            json_object_set_int64(obj, dev->timeout);
+
+            /* Once the create is done, this shouldn't changed in any case */
+            //json_object_object_get_ex(devobj, "prealloc", &obj);
+            //json_object_set_boolean(obj, dev->prealloc);
+
+            json_object_object_get_ex(devobj, "readonly", &obj);
+            json_object_set_boolean(obj, dev->readonly);
+
+            json_object_object_get_ex(devobj, "status", &obj);
+            st = nbd_dev_status_lookup_str(dev->status);
+            json_object_set_string(obj, st);
+
+            if (dev->handler && dev->handler->update_json)
+                dev->handler->update_json(dev, devobj);
+
+            goto out;
         }
     } else {
         /* The config file is empty */
@@ -239,6 +267,7 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
      *   "maptime":"2019-04-01 15:53:13",
      *   "size":104857600,
      *   "blksize":0,
+     *   "timeout":30,
      *   "readonly":false,
      *   "prealloc":false,
      *   "dummy1":"value"
@@ -266,6 +295,8 @@ static int nbd_update_json_config_file(struct nbd_device *dev, bool replace)
 
 
     json_object_object_add(globalobj, key, devobj);
+
+out:
     json_object_to_file_ext(NBD_SAVE_CONFIG_FILE, globalobj, JSON_C_TO_STRING_PRETTY);
 
     ret = 0;
@@ -448,7 +479,7 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     strcpy(dev->bstore, key);
 
-    nbd_update_json_config_file(dev, false);
+    nbd_update_json_config_file(dev);
     g_hash_table_insert(nbd_devices_hash, key, dev);
 
     nbd_info("Create successed!\n");
@@ -597,6 +628,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     char *key = NULL;
     bool inserted = false;
     int save_ret;
+    int save_tmo;
 
     nbd_info("Premap request type: %d, cfg: %s, readonly: %d, timeout: %d\n",
              map->htype, map->cfgstring, map->readonly, map->timeout);
@@ -670,7 +702,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         pthread_mutex_init(&dev->sock_lock, NULL);
         pthread_mutex_init(&dev->lock, NULL);
         pthread_mutex_init(&dev->retry_lock, NULL);
-        nbd_update_json_config_file(dev, false);
+        nbd_update_json_config_file(dev);
         g_hash_table_insert(nbd_devices_hash, key, dev);
         inserted = true;
     }
@@ -702,17 +734,20 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
     save_ret = rep->exit;
 
+    save_tmo = dev->timeout;
     dev->timeout = map->timeout;
 
-    if (!handler->map(dev, rep))
+    if (!handler->map(dev, rep)) {
+        dev->timeout = save_tmo;
         goto err;
+    }
 
     dev->status = NBD_DEV_CONN_ST_MAPPING;
     rep->size = dev->size;
     rep->blksize = dev->blksize;
     INIT_LIST_HEAD(&dev->retry_io_queue);
 
-    nbd_update_json_config_file(dev, true);
+    nbd_update_json_config_file(dev);
 
     if (!rep->exit)
         rep->exit = save_ret;
@@ -783,7 +818,7 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
         nbd = strdup(dev->nbd);
         g_hash_table_insert(nbd_nbds_hash, nbd, dev);
     }
-    nbd_update_json_config_file(dev, true);
+    nbd_update_json_config_file(dev);
     pthread_mutex_unlock(&dev->lock);
 
 err:
@@ -847,7 +882,7 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
 
     pthread_mutex_lock(&dev->lock);
     dev->status = NBD_DEV_CONN_ST_UNMAPPING;
-    nbd_update_json_config_file(dev, true);
+    nbd_update_json_config_file(dev);
     g_hash_table_remove(nbd_nbds_hash, unmap->nbd);
     pthread_mutex_unlock(&dev->lock);
 
@@ -1218,7 +1253,7 @@ err:
     } else {
         dev->status = NBD_DEV_CONN_ST_DEAD;
     }
-    nbd_update_json_config_file(dev, true);
+    nbd_update_json_config_file(dev);
     pthread_mutex_unlock(&dev->lock);
 
     close(sock);
