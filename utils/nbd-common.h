@@ -43,6 +43,8 @@ struct nbd_device {
 
     dev_status_t status;
 
+    bool zombie;
+
     /*
      * The uniqe key string for each backstore
      *

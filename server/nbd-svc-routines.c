@@ -377,10 +377,8 @@ static int nbd_parse_from_json_config_file(void)
                 dev->handler = handler;
 
                 if (handler->load_json) {
-                    ktmp = malloc(NBD_CFGS_MAX);
-                    snprintf(ktmp, NBD_CFGS_MAX, "%s", key);
-                    handler->load_json(dev, devobj, ktmp);
-                    free(ktmp);
+                    if (!handler->load_json(dev, devobj, key))
+                        dev->zombie = true;
                 }
 
                 ktmp = strdup(key);
@@ -733,6 +731,26 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     }
 
     save_ret = rep->exit;
+
+    if (dev->zombie) {
+        json_object *globalobj = NULL;
+        json_object *devobj = NULL;
+
+        globalobj = json_object_from_file(NBD_SAVE_CONFIG_FILE);
+        if (!globalobj) {
+            nbd_fill_reply(rep, -EINVAL, "%s is empty!", NBD_SAVE_CONFIG_FILE);
+            nbd_err("%s is empty!\n", NBD_SAVE_CONFIG_FILE);
+            goto err;
+        }
+
+        json_object_object_get_ex(globalobj, key, &devobj);
+        if (!handler->load_json(dev, devobj, key)) {
+            nbd_fill_reply(rep, -EINVAL, "load_json failed!");
+            nbd_err("load_json failed!\n");
+            goto err;
+        }
+        dev->zombie = false;
+    }
 
     save_tmo = dev->timeout;
     dev->timeout = map->timeout;
