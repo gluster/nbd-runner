@@ -674,6 +674,8 @@ static void list_info(const char *info, GHashTable *list_hash, list_type ltype)
                     tmo = json_object_get_int64(obj);
                     if (!strcmp(tmp, "dead"))
                         nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Dead", sizep, "", ro?"Y":"N", tmo, objkey);
+                    else if (!strcmp(tmp, "created"))
+                        nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Created", sizep, "", ro?"Y":"N", tmo, objkey);
                     else if (!strcmp(tmp, "mapping"))
                         nbd_info("%-15s%7s%-8s%-10s%-10d%s\n", "Mapping", sizep, "", ro?"Y":"N", tmo, objkey);
                     else if (!strcmp(tmp, "mapped"))

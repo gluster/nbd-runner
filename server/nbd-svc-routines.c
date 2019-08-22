@@ -336,7 +336,7 @@ static int nbd_parse_from_json_config_file(void)
 
             strcpy(dev->bstore, key);
 
-            nbd_dbg("key: %s, type: %d, nbd: %s, maptime: %s, size: %zd, blksize: %zd, prealloc: %d, readonly: %d\n",
+            nbd_info("key: %s, type: %d, nbd: %s, maptime: %s, size: %zd, blksize: %zd, prealloc: %d, readonly: %d\n",
                     key, dev->htype, dev->nbd, dev->time, dev->size, dev->blksize, dev->prealloc, dev->readonly);
             handler = g_hash_table_lookup(nbd_handler_hash, &dev->htype);
             if (!handler) {
@@ -712,6 +712,8 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     rep->blksize = dev->blksize;
     INIT_LIST_HEAD(&dev->retry_io_queue);
 
+    nbd_update_json_config_file(dev, true);
+
     if (!rep->exit)
         rep->exit = save_ret;
 
@@ -766,9 +768,14 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
 
     pthread_mutex_lock(&dev->lock);
     if (!map->nbd[0]) {
-        /* Rollback to CREATED state */
-        nbd_info("Map failed and falling back to CREATED state!\n");
-        dev->status = NBD_DEV_CONN_ST_CREATED;
+        if (!dev->nbd[0]) {
+            /* In case of not restoring will rollback to CREATED state */
+            nbd_info("Map failed and falling back to CREATED state!\n");
+            dev->status = NBD_DEV_CONN_ST_CREATED;
+        } else {
+            nbd_info("Restore mapping failed and falling back to DEAD state!\n");
+            dev->status = NBD_DEV_CONN_ST_DEAD;
+        }
     } else {
         dev->status = NBD_DEV_CONN_ST_MAPPED;
         strcpy(dev->time, map->time);
@@ -840,8 +847,6 @@ bool_t nbd_unmap_1_svc(nbd_unmap *unmap, nbd_response *rep, struct svc_req *req)
 
     pthread_mutex_lock(&dev->lock);
     dev->status = NBD_DEV_CONN_ST_UNMAPPING;
-    dev->nbd[0] = '\0';
-    dev->time[0] = '\0';
     nbd_update_json_config_file(dev, true);
     g_hash_table_remove(nbd_nbds_hash, unmap->nbd);
     pthread_mutex_unlock(&dev->lock);
@@ -914,6 +919,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
          *     "size":1073741824,                             --> 8 extra chars
          *     "blksize":4096,                                --> 11 extra chars
          *     "readonly":false,                              --> 17 chars
+         *     "timeout":30,                                  --> 17 chars
          *     "prealloc":false,                              --> 17 chars
          *     "status":"mapped"                              --> 11 extra chars
          *   },                                               --> 2 extar chars
@@ -924,6 +930,7 @@ bool_t nbd_list_1_svc(nbd_list *list, nbd_response *rep, struct svc_req *req)
         l += strlen(dev->time) + 13;
         l += snprintf(tmp, max, "%zd", dev->size) + 8;
         l += snprintf(tmp, max, "%zd", dev->blksize) + 11;
+        l += 17;
         l += 17;
         l += 17;
         st = nbd_dev_status_lookup_str(dev->status);
@@ -1202,7 +1209,16 @@ err:
     /* After unmap, the status will be back to created */
     pthread_mutex_lock(&dev->lock);
     dev->handler->unmap(dev);
-    dev->status = NBD_DEV_CONN_ST_CREATED;
+    if (!ret) {
+        dev->status = NBD_DEV_CONN_ST_CREATED;
+        dev->nbd[0] = '\0';
+        dev->time[0] = '\0';
+        dev->timeout = 0;
+        dev->readonly = false;
+    } else {
+        dev->status = NBD_DEV_CONN_ST_DEAD;
+    }
+    nbd_update_json_config_file(dev, true);
     pthread_mutex_unlock(&dev->lock);
 
     close(sock);
