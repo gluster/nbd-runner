@@ -25,20 +25,20 @@ A cli utility, which aims at making backstore creation/deletion/mapping/unmaping
 |           |    | listening on    <-----------------> map/unmap/list    |
 |  Gluster  <----> TCP/24110       |     route       |  +                |
 |           |    |                 |                 |  |                |
-+-----------+    |                 |                 |  |                |
 +-----------+    |                 |                 |  | MAP will       |
-|           |    |                 |                 |  | setup          | socket
-|   Azblk   <---->                 |                 |  | the NBD        <--------> nbd-cli
-|           |    |                 |                 |  | devices        |
-+-----------+    |                 |                 |  |                |
-+-----------+    |                 |                 |  |                |
-|           |    |                 |                 |  |                |
-|   Ceph    <---->                 |                 |  |          READ  |
-|           |    |  IO HOST IP     |  MAPPED NBD(IO) |  v          WRITE |
++-----------+    |                 |                 |  | setup          |
+|           |    |                 |                 |  | the NBD        | socket
+|   Azblk   <---->                 |                 |  | devices        <--------> nbd-cli
+|           |    |                 |                 |  |          READ  |
++-----------+    |  IO HOST IP     |  MAPPED NBD(IO) |  v          WRITE |
 +-----------+    |  listening on   <-----------------> /dev/nbdXX  FLUSH |
-                 |  TCP/24111      |      route      |             TRIM  |
-                 |                 |                 |             ...   |
-                 |                 |                 |                   |
+|           |    |  TCP/24111      |      route      |             TRIM  |
+|   Ceph    <---->                 |                 |             ...   |
+|           |    |                 |                 |                   |
++-----------+    |                 |                 | Try to restore the|
+                 |  Liveness ping  |                 | connections again |
+                 |  listening on   <-----------------> if nbd-runner is  |
+                 |  TCP/24109      |                 | restarted         |
                  +-----------------+                 +-------------------+
 
 ```
@@ -68,7 +68,7 @@ $ make install
 ------
 **Prerequisites:** *this guide assumes that the following are already present*
 - [x] *The kernel or the nbd.ko module must be new enough, which have add the netlink feature supported*
-- [x] *Open 24110 and 24111(nbd-runnerd) 111(rpcbind) ports in your firewall*
+- [x] *Open 24109, 24110 and 24111(nbd-runnerd) 111(rpcbind) ports in your firewall*
 
 <b>nbd-runner service</b>: run nbd-runner on the node where you can access the gluster through gfapi or the zablk
 ```script

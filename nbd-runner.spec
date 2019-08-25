@@ -16,7 +16,7 @@
 Name:          nbd-runner
 Summary:       A daemon that handles the NBD device's IO requests in server side
 License:       GPLv2 or LGPLv3+
-Version:       0.4
+Version:       0.5
 Release:       0%{?dist}
 URL:           https://github.com/gluster/nbd-runner
 

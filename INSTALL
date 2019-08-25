@@ -13,14 +13,16 @@ Install from Source:
 
 4. Run ./configure [options].
 
- $ ./configure [--with-gluster=no, default is yes] [--with-tirpc=no, default is yes] [--with-clang=yes, default is no] [--disable-silent-rules]
+ $ ./configure [--with-gluster=no, default is yes] [--with-azblk=no, default is yes] [--with-tirpc=no, default is yes] [--with-clang=yes, default is no] [--disable-silent-rules]
  [...]
  ------------------ Summary ------------------
- nbd-runner version 0.3
+ nbd-runner version 0.5
  Prefix............: /usr/local
- Gluster handler...: no
- Use TIRPC.........: no
- C Compiler........: clang  -Werror -Wall -Wdeclaration-after-statement 
+ Gluster handler...: yes
+ Azblk handler.....: yes
+ Use TIRPC.........: yes
+ Travis build......: no
+ C Compiler........: gcc -g -O2
  Linker............: /usr/bin/ld -m elf_x86_64  
  ---------------------------------------------
 
@@ -38,10 +40,12 @@ Install from Source:
 Installation completed :-)
 
 Check,
- $ nbd-runner version
+ $ nbd-runner -v/--version
+ $ nbd-clid -v/--version
  $ nbd-cli version
 
- $ nbd-runner help
+ $ nbd-runner -h/--help
+ $ nbd-clid -h/--help
  $ nbd-cli help
 
 Make sure your version is the latest from the release, and the one you just installed.
