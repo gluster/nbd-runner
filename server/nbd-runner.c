@@ -95,7 +95,7 @@ static void event_handler(int listenfd, short event, void *arg)
 
     acceptfd = accept(listenfd, (struct sockaddr*)&addr_in, &sin_size);
     if(acceptfd < 0) {
-        nbd_err("error occure in accept: %s\n", strerror(errno));
+        nbd_err("error occured in accept: %s\n", strerror(errno));
         return;
     }
 

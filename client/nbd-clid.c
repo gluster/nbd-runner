@@ -196,7 +196,7 @@ err:
 /*
  * Return values:
  * 1,   means inused
- * 0,   means nbd device is not exist or already in free state
+ * 0,   means nbd device does not exist or already in free state
  * < 0, means something is wrong when checking the status
  */
 static int nbd_check_device_status(struct cli_reply **cli_rep, int nbd_index)
@@ -213,13 +213,13 @@ static int nbd_check_device_status(struct cli_reply **cli_rep, int nbd_index)
         goto out;
     }
 
-    /* Check whether the /dev/nbdX is already unmapped/exist or not */
+    /* Check whether the /dev/nbdX is already unmapped or not */
     sprintf(nbd, "/dev/nbd%d", nbd_index);
     status = g_hash_table_lookup(list_hash, nbd);
     if (!status) {
-        nbd_clid_fill_reply(cli_rep, 0, "/dev/nbd%d is not exist in nbd.ko!",
+        nbd_clid_fill_reply(cli_rep, 0, "/dev/nbd%d does not exist in nbd.ko!",
                             nbd_index);
-        nbd_info("/dev/nbd%d is not exist in nbd.ko!\n", nbd_index);
+        nbd_info("/dev/nbd%d does not exist in nbd.ko!\n", nbd_index);
         ret = 0;
         goto out;
     }
@@ -675,7 +675,7 @@ nbd_clid_unmap_device(handler_t htype, const char *cfg, int nbd_index,
     }
 
     if (rep.exit == -EEXIST) {
-        nbd_info("%s\n", rep.buf ? rep.buf : "There is no map exist");
+        nbd_info("%s\n", rep.buf ? rep.buf : "No map exists");
     } else if (rep.exit && rep.buf) {
         nbd_clid_fill_reply(cli_rep, rep.exit, "%s", rep.buf);
         nbd_err("Unmap failed: %d, %s\n", rep.exit, rep.buf);
@@ -859,7 +859,7 @@ static void *nbd_clid_connections_restore(void *arg)
         pthread_mutex_lock(&nbd_lock);
         globalobj = json_tokener_parse((char *)cli_rep->buf);
         if (!globalobj) {
-            nbd_info("There is no any stale devices or connections exist!\n");
+            nbd_info("There is no any stale devices or connections!\n");
             goto unlock;
         }
 
@@ -1017,7 +1017,7 @@ static int nbd_clid_ipc_handle(int fd, const struct nbd_config *nbd_cfg)
         goto out;
     }
 
-    /* Use the rhost from nbd-cli if exist */
+    /* Use the rhost from nbd-cli if exists */
     if (nbd_is_valid_host(req.rhost))
         rhost = req.rhost;
 

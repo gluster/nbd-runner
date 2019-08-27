@@ -174,7 +174,7 @@ static int nbd_config_delete_backstore(struct nbd_device *dev, const char *key)
         return 0;
 
     if (!json_object_object_get_ex(globalobj, key, &devobj)) {
-        nbd_err("%s is no exist in conig file!\n", key);
+        nbd_err("%s does no exist in config file!\n", key);
         json_object_put(globalobj);
         return -EINVAL;
     }
@@ -432,8 +432,8 @@ bool_t nbd_create_1_svc(nbd_create *create, nbd_response *rep,
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (dev) {
-        nbd_fill_reply(rep, -EEXIST, "%s is already exist!", create->cfgstring);
-        nbd_err("%s is already exist!\n", create->cfgstring);
+        nbd_fill_reply(rep, -EEXIST, "%s already exists!", create->cfgstring);
+        nbd_err("%s already exists!\n", create->cfgstring);
         free(key);
         return true;
     }
@@ -544,7 +544,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
          * then we need to delete the backstore to alloc one
          * tmp new dev.
          */
-        nbd_info("%s is not in the hash table, will try to delete enforce!\n",
+        nbd_info("%s is not in the hash table, will try to delete from the backend directly!\n",
                  delete->cfgstring);
         dev = calloc(1, sizeof(struct nbd_device));
         if (!dev) {
@@ -574,7 +574,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         g_usleep(NBD_RETRY_THREAD_THRESH);
         retry++;
     }
-    nbd_info("Retry %d times for waiting the device to be unmapped!", retry);
+    nbd_info("Waiting for the device to be unmapped, retried %d times!", retry);
 
     pthread_mutex_lock(&dev->lock);
     if (dev->status == NBD_DEV_CONN_ST_MAPPED) {
@@ -584,7 +584,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
         goto err;
     } else if (dev->status == NBD_DEV_CONN_ST_MAPPING) {
         nbd_fill_reply(rep, -EAGAIN, "Device %s is still unmapping, please try it again later!", key);
-        nbd_err("Device %s is still unmapping, please try it again first!\n", key);
+        nbd_err("Device %s is still unmapping, please try it again later!\n", key);
         pthread_mutex_unlock(&dev->lock);
         goto err;
     }
@@ -612,7 +612,7 @@ bool_t nbd_delete_1_svc(nbd_delete *delete, nbd_response *rep,
 
 err:
     if (rep->exit)
-        nbd_info("Delete successed!\n");
+        nbd_info("Delete succeeded!\n");
     else
         nbd_err("Delete failed!\n");
     free(key);
@@ -814,8 +814,8 @@ bool_t nbd_postmap_1_svc(nbd_postmap *map, nbd_response *rep, struct svc_req *re
 
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (!dev) {
-        nbd_fill_reply(rep, -ENOENT, "Device is none exist!");
-        nbd_err("Device is none exist!\n");
+        nbd_fill_reply(rep, -ENOENT, "Device does not exist!");
+        nbd_err("Device does not exist!\n");
         goto err;
     }
 

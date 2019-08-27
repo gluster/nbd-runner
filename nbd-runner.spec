@@ -16,7 +16,7 @@
 Name:          nbd-runner
 Summary:       A daemon that handles the NBD device's IO requests in server side
 License:       GPLv2 or LGPLv3+
-Version:       0.5.1
+Version:       0.5.2
 Release:       0%{?dist}
 URL:           https://github.com/gluster/nbd-runner
 
@@ -38,21 +38,19 @@ BuildRequires: libtirpc-devel >= 1.0.0
 BuildRequires: rpcgen
 %endif
 
-Requires:      kmod
-Requires:      json-c
-Requires:      rsyslog
-Requires:      nbd-runner-utils = %{version}-%{release}
-
 %if %{with gluster}
 BuildRequires: glusterfs-api-devel
-Requires:      glusterfs-api >= 6.6
-Requires:      %{name} = %{version}-%{release}
 %endif
 
 %if %{with azblk}
 BuildRequires: libcurl-devel
 BuildRequires: libuv-devel
 %endif
+
+Requires:      kmod
+Requires:      json-c
+Requires:      rsyslog
+Requires:      %{name}-utils = %{version}-%{release}
 
 %description
 A daemon that handles the userspace side of the NBD (Network Block Device)
@@ -77,13 +75,14 @@ find %{buildroot}%{_libdir}/nbd-runner/ -name '*.a' -delete
 find %{buildroot}%{_libdir}/nbd-runner/ -name '*.la' -delete
 
 %post
-%systemd_post nbd-runner.service
+#%systemd_post nbd-runner.service nbd-clid.service
+%systemd_postun_with_restart nbd-runner.service nbd-clid.service
 
 %preun
-%systemd_preun nbd-runner.service
+%systemd_preun nbd-runner.service nbd-clid.service
 
 %postun
-%systemd_postun_with_restart nbd-runner.service
+%systemd_postun_with_restart nbd-runner.service nbd-clid.service
 
 %files
 %{_sbindir}/nbd-runner
@@ -94,8 +93,7 @@ find %{buildroot}%{_libdir}/nbd-runner/ -name '*.la' -delete
 %config(noreplace) %{_sysconfdir}/sysconfig/nbd-runner
 %ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-runner.log
 
-
-######## nbd-runner-utils package
+######## nbd-runner-utils package ########
 %package -n nbd-runner-utils
 Summary:  A common utils library
 
@@ -107,9 +105,9 @@ The common utils library.
 %{_libdir}/nbd-runner/libutils.so*
 %license COPYING-GPLV2 COPYING-LGPLV3
 %doc README.md
+######## End ########
 
-
-######## nbd-cli package
+######## nbd-cli package ########
 %package -n nbd-cli
 Summary:  A client side service and a command utility
 Requires: nbd-runner-utils = %{version}-%{release}
@@ -126,13 +124,14 @@ A client side service and a command utility.
 %license COPYING-GPLV2 COPYING-LGPLV3
 %config(noreplace) %{_sysconfdir}/sysconfig/nbd-clid
 %ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-clid.log
+######## End ########
 
-
-######## gluster handler package
+######## gluster handler package ########
 %if %{with gluster}
 %package -n nbd-runner-gluster-handler
 Summary:  Gluster back-store handler
-Requires: nbd-runner = %{version}-%{release}
+Requires: %{name} = %{version}-%{release}
+Requires: glusterfs-api >= 6.6
 
 %description -n nbd-runner-gluster-handler
 gluster-handler provide a library for processing the Gluster storage stuff.
@@ -143,12 +142,13 @@ gluster-handler provide a library for processing the Gluster storage stuff.
 %doc README.md
 %ghost %attr(0600,-,-) %{_localstatedir}/log/nbd-runner/nbd-runner-glfs.log
 %endif
+######## End ########
 
-######## azblk handler package
+######## azblk handler package ########
 %if %{with azblk}
 %package -n nbd-runner-azblk-handler
 Summary:  Azblk back-store handler
-Requires: nbd-runner = %{version}-%{release}
+Requires: %{name} = %{version}-%{release}
 
 %description -n nbd-runner-azblk-handler
 azblk-handler provide a library for processing the Azure storage stuff.
@@ -158,8 +158,13 @@ azblk-handler provide a library for processing the Azure storage stuff.
 %{_libdir}/nbd-runner/libazblk_handler.so
 %doc README.md
 %endif
+######## End ########
 
 %changelog
+* Tue Aug 27 2019 Xiubo Li <xiubli@redhat.com> - 0.5.2-0
+- Update to 0.5.2-0
+- Fix the required packages
+
 * Mon Aug 26 2019 Xiubo Li <xiubli@redhat.com> - 0.5.1-0
 - Update to 0.5.1-0
 - Split to separate rpm packages

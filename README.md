@@ -189,7 +189,7 @@ The handler library name must be "libXXX_handler.so".
 
 **.delete:** Delete the backstore storage device/file.
 
-**.map:** This is called by "nbd-cli map" command, the "nbd-cli map" will map the backstore storage device/file to the NBD device(/dev/nbdX), here you need to make sure that the backstore storage device/file is exist and then open it.
+**.map:** This is called by "nbd-cli map" command, the "nbd-cli map" will map the backstore storage device/file to the NBD device(/dev/nbdX), here you need to make sure that the backstore storage device/file exists and then open it.
 
 **.unmap:** When unmapping, you should close the backstore storage device/file.
 

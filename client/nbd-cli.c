@@ -971,6 +971,52 @@ static gboolean nbd_cli_cmd_find(gconstpointer a, gconstpointer b)
     return !strncmp(b, clicmd->pattern, strlen((char *)b));
 }
 
+static int nbd_start_nbd_clid_daemon(void)
+{
+    int ret;
+    int i = 0;
+
+    ret = system("systemctl start nbd-clid > /dev/null");
+    if (ret == -1) {
+        nbd_err("system running nbd-clid startup failed!\n");
+        return -1;
+    }
+
+    if (!WIFEXITED(ret)) {
+        nbd_err("running nbd-clid startup failed in shell!\n");
+        return -1;
+    }
+
+    if (WEXITSTATUS(ret)) {
+        nbd_err("couldn't start nbd-clid!\n");
+        return -1;
+    }
+
+retry:
+    ret = system("systemctl is-active nbd-clid > /dev/null");
+    if (ret == -1) {
+        nbd_err("system nbd-clid active check failed!\n");
+        return -1;
+    }
+
+    if (!WIFEXITED(ret)) {
+        nbd_err("running nbd-clid active check failed in shell!\n");
+        return -1;
+    }
+
+    if (WEXITSTATUS(ret)) {
+        if (i++ >= 500) { //wait 5 seconds at most
+            nbd_err("failed to get the nbd-clid service started after waiting 5 seconds!\n");
+            return -1;
+        }
+
+        g_usleep(10000);
+        goto retry;
+    }
+
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     nbd_cli_opt_command cmd;
@@ -1005,6 +1051,9 @@ int main(int argc, char *argv[])
             break;
         }
     }
+
+    if (nbd_start_nbd_clid_daemon())
+        goto out;
 
     if (!nbd_minimal_kernel_version_check())
         goto out;
