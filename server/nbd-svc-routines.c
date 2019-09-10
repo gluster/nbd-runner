@@ -1139,26 +1139,27 @@ int nbd_handle_request(int sock, int threads)
         nrep.exit = -EINVAL;
         buf = calloc(1, 4096);
         nrep.len = snprintf(buf, 4096, "Invalid cfg %s for nego!", cfg);
+        if (nrep.len < 0)
+            nrep.len = 0;
         nbd_err("Invalid cfg %s for nego!\n", cfg);
     }
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (!dev) {
         nrep.exit = -EINVAL;
         buf = calloc(1, 4096);
-        ret = snprintf(buf, 4096, "No such device found: %s", cfg);
-        if (ret < 0)
+        nrep.len = snprintf(buf, 4096, "No such device found: %s", cfg);
+        if (nrep.len < 0)
             nrep.len = 0;
-        else
-            nrep.len = ret;
+        nbd_err("No such device found: %s", cfg);
     }
     free(cfg);
-    free(buf);
 
     pthread_mutex_lock(&dev->sock_lock);
     nbd_socket_write(sock, &nrep, sizeof(struct nego_reply));
     if (nrep.len && buf)
         nbd_socket_write(sock, buf, nrep.len);
     pthread_mutex_unlock(&dev->sock_lock);
+    free(buf);
     /* nego end */
 
     if (nrep.exit)
