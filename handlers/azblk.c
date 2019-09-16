@@ -257,16 +257,32 @@ static void azblk_multi_done(CURLM *curl_multi, CURLMsg *message)
                         resp_code, io_cb->nbd_req->offset);
             ret = -EAGAIN;
         } else {
-            nbd_dev_err(dev,"Curl HTTP error %ld.\n", resp_code);
-
-            if (io_cb->nbd_req->cmd == NBD_CMD_READ)
-                nbd_dev_err(dev, "Curl GET error %s IO at offset %zd.\n",
-                            io_cb->errmsg, io_cb->nbd_req->offset);
-            else
-                nbd_dev_err(dev, "Curl PUT error %s IO at offset %zd.\n",
-                            io_cb->errmsg, io_cb->nbd_req->offset);
-
             ret = -EIO;
+
+            if ((message->data.result == CURLE_SEND_ERROR ||
+                message->data.result == CURLE_RECV_ERROR ) &&
+                resp_code == 0)
+                    ret = -EAGAIN;
+
+            if (io_cb->nbd_req->cmd == NBD_CMD_READ) {
+                if ( ret == -EAGAIN )
+                    nbd_dev_dbg(dev, "Curl IO GET %s '%s' at offset %zd.\n",
+                            io_cb->errmsg, curl_easy_strerror(message->data.result),
+                            io_cb->nbd_req->offset);
+                else
+                    nbd_dev_err(dev, "Curl IO GET %s '%s' at offset %zd.\n",
+                            io_cb->errmsg, curl_easy_strerror(message->data.result),
+                            io_cb->nbd_req->offset);
+            } else {
+                if ( ret == -EAGAIN )
+                    nbd_dev_dbg(dev, "Curl IO PUT %s '%s' at offset %zd.\n",
+                            io_cb->errmsg, curl_easy_strerror(message->data.result),
+                            io_cb->nbd_req->offset);
+                else
+                    nbd_dev_err(dev, "Curl IO PUT %s '%s' at offset %zd.\n",
+                            io_cb->errmsg, curl_easy_strerror(message->data.result),
+                            io_cb->nbd_req->offset);
+            }
         }
     }
 
@@ -366,7 +382,7 @@ static void azblk_curl_perform(uv_poll_t *req, int status, int events)
 
     if (status < 0) {
         flags = CURL_CSELECT_ERR;
-        nbd_dev_err(context->azdev->dev, "CURL_CSELECT_ERR %s.\n",
+        nbd_dev_dbg(context->azdev->dev, "CURL_CSELECT_ERR %s.\n",
                     uv_err_name(status));
     }
     if (!status && events & UV_READABLE)
@@ -1174,7 +1190,7 @@ static void azblk_read(struct nbd_handler_request *req)
         goto error;
     }
 
-    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_ERRORBUFFER, io_cb->errmsg);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
@@ -1263,7 +1279,7 @@ static void azblk_write(struct nbd_handler_request *req)
     }
 
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_ERRORBUFFER, io_cb->errmsg);
-    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_URL, azdev->write_request_url);
@@ -1354,7 +1370,7 @@ static void azblk_discard(struct nbd_handler_request *req)
     }
 
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_ERRORBUFFER, io_cb->errmsg);
-    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1);
+    curl_easy_setopt(io_cb->curl_ezh, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TIMEOUT, azdev->io_timeout);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_TCP_KEEPALIVE, 1L);
     curl_easy_setopt(io_cb->curl_ezh, CURLOPT_URL, azdev->write_request_url);
