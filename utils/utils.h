@@ -61,7 +61,7 @@
  */
 #define NBD_EXIT_MAX  8192
 #define NBD_TLEN_MAX  1024  /* "2019-02-13 12:20:45" */
-#define NBD_DLEN_MAX  16    /* "/dev/nbdXX" */
+#define NBD_DLEN_MAX  32    /* "/dev/nbdXX" */
 
 #define ALLOWED_BSOFLAGS (O_DIRECT | O_RDWR | O_LARGEFILE)
 #define NBD_CMD_MASK_COMMAND 0x0000ffff

@@ -241,7 +241,8 @@ out:
 
 static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
                               int driver_id, ssize_t size, ssize_t blk_size,
-                              int timeout, int nbd_index, bool readonly)
+                              int timeout, int nbd_index, bool readonly,
+                              bool reconnect)
 {
     struct nlattr *sock_attr;
     struct nlattr *sock_opt;
@@ -255,6 +256,12 @@ static int nbd_device_connect(char *cfg, struct nl_sock *netfd, int sockfd,
 
     nbd_info("cfg: %s, nbd_index: %d, readonly: %d, size: %zu, blk_size: %zu, timeout: %d\n",
              cfg, nbd_index, readonly, size, blk_size, timeout);
+
+    if (reconnect && nbd_index < 0) {
+        nbd_err("Trying to reconfigure but get an invalid nbd_index: %d\n",
+                nbd_index);
+        return -EINVAL;
+    }
 
     nhdr.len = strlen(cfg);
     nbd_socket_write(sockfd, &nhdr, sizeof(struct nego_request));
@@ -284,7 +291,7 @@ retry:
     }
 
     genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, driver_id, 0, 0,
-            NBD_CMD_CONNECT, 0);
+                reconnect ? NBD_CMD_RECONFIGURE : NBD_CMD_CONNECT, 0);
 
     /* -1 means alloc the device dynamically */
     if (nbd_index < -1)
@@ -424,7 +431,7 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
 {
     struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
     struct nlattr *msg_attr[NBD_ATTR_MAX + 1];
-    struct nbd_postmap map;
+    struct nbd_postmap postmap;
     struct nbd_response rep = {0,};
     struct nl_cbk_args *args = arg;
     uint32_t index;
@@ -443,11 +450,11 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
     index = nla_get_u32(msg_attr[NBD_ATTR_INDEX]);
     nbd_info("Connected /dev/nbd%d\n", (int)index);
 
-    map.htype = args->htype;
-    snprintf(map.nbd, NBD_DLEN_MAX, "/dev/nbd%d", index);
-    time_string_now(map.time);
-    strcpy(map.cfgstring, args->cfg);
-    if (nbd_postmap_1(&map, &rep, args->clnt) != RPC_SUCCESS) {
+    postmap.htype = args->htype;
+    snprintf(postmap.nbd, NBD_DLEN_MAX, "/dev/nbd%d", index);
+    time_string_now(postmap.time);
+    strcpy(postmap.cfgstring, args->cfg);
+    if (nbd_postmap_1(&postmap, &rep, args->clnt) != RPC_SUCCESS) {
         if (rep.exit && rep.buf) {
             nbd_err("nbd_postmap_1 failed: %s!\n", rep.buf);
             return NL_STOP;
@@ -458,7 +465,7 @@ static int map_nl_callback(struct nl_msg *msg, void *arg)
 }
 
 static void
-nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readonly,
+nbd_clid_map_device(handler_t htype, const char *cfg, int32_t nbd_index, bool readonly,
                     int timeout, const char *rhost, struct cli_reply **cli_rep)
 {
     CLIENT *clnt = NULL;
@@ -467,6 +474,7 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readon
     struct nbd_response rep = {0,};
     struct addrinfo *res = NULL;
     int sock = RPC_ANYSOCK;
+    bool reconnect = false;
     int tmp_index;
     int ret = -EINVAL;
     int len;
@@ -542,13 +550,7 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readon
 
         ret = nbd_check_device_status(cli_rep, nbd_index);
         if (ret == 1) {
-            ret = unmap_device(netfd, driver_id, tmp_index);
-            if (ret) {
-                nbd_clid_fill_reply(cli_rep, ret, "unmap /dev/nbd%d failed!",
-                                    tmp_index);
-                nbd_err("unmap /dev/nbd%d failed!\n", tmp_index);
-                goto err;
-            }
+            reconnect = true;
         } else if (ret < 0) {
             nbd_err("nbd_check_device_status failed!\n");
             goto err;
@@ -571,11 +573,25 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int nbd_index, bool readon
 
     /* Setup the IOs sock fd to nbd device to start IOs */
     ret = nbd_device_connect(map->cfgstring, netfd, sockfd, driver_id, rep.size,
-                             rep.blksize, timeout, nbd_index, readonly);
+                             rep.blksize, timeout, nbd_index, readonly, reconnect);
     if (ret < 0) {
         nbd_clid_fill_reply(cli_rep, ret, "failed to init the /dev/nbd device!");
         nbd_err("failed to init the /dev/nbd device, ret: %d!\n", ret);
         goto err;
+    }
+
+    if (reconnect) {
+        postmap.htype = htype;
+        snprintf(postmap.nbd, NBD_DLEN_MAX, "/dev/nbd%d", nbd_index);
+        time_string_now(postmap.time);
+        strcpy(postmap.cfgstring, cfg);
+        if (nbd_postmap_1(&postmap, &rep, clnt) != RPC_SUCCESS) {
+            if (rep.exit && rep.buf) {
+                nbd_err("nbd_postmap_1 failed: %s!\n", rep.buf);
+                ret = rep.exit;
+                goto err;
+            }
+        }
     }
 
 err:
