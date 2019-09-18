@@ -308,6 +308,18 @@ retry:
     if (timeout)
         NLA_PUT_U64(msg, NBD_ATTR_TIMEOUT, timeout);
 
+    /*
+     * Sometimes we like to upgrade our server(nbd-runner) or for some reason
+     * the server has been rebooted without making all of our clients freak
+     * out and reconnect.
+     *
+     * We need to specify a dead connection timeout to allow us to pause all
+     * requests and wait for new connections to be opened. With this in place
+     * I can take down the nbd server for less than the dead connection timeout
+     * time and bring it back up and everything resumes gracefully.
+     */
+    NLA_PUT_U64(msg, NBD_ATTR_DEAD_CONN_TIMEOUT, 30);
+
     sock_attr = nla_nest_start(msg, NBD_ATTR_SOCKETS);
     if (!sock_attr) {
         ret = -errno;
