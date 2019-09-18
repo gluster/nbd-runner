@@ -16,8 +16,8 @@
 Name:          nbd-runner
 Summary:       A daemon that handles the NBD device's IO requests in server side
 License:       GPLv2 or LGPLv3+
-Version:       0.5.2
-Release:       1%{?dist}
+Version:       0.5.3
+Release:       0%{?dist}
 URL:           https://github.com/gluster/nbd-runner
 
 Source0:       https://github.com/gluster/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
@@ -164,6 +164,15 @@ azblk-handler provide a library for processing the Azure storage stuff.
 ######## End ########
 
 %changelog
+* Wed Sep 18 2019 Xiubo Li <xiubli@redhat.com> - 0.5.3-0
+- Update to 0.5.3-0
+- spec: disable devel library
+- server: fix use after free
+- azblk: Recover from Azure tcp RST
+- map: to reconfigure the dead socket without unmapping the nbd device
+- map: make sure the new index is not differ from the existing one
+- map: specify a dead connection timeout to resume connections gracefully
+
 * Mon Sep 02 2019 Xiubo Li <xiubli@redhat.com> - 0.5.2-1
 - Update to 0.5.2-1
 - Disable the devel library
