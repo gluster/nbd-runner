@@ -548,6 +548,12 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int32_t nbd_index, bool re
             goto err;
         }
 
+        if (nbd_index != -1 && tmp_index != nbd_index) {
+            nbd_clid_fill_reply(cli_rep, -EINVAL, "Invalid nbd index (%d), currently only (%d) is allowed, or you can unmap it and then try it again with the new index (%d)!", nbd_index, tmp_index, nbd_index);
+            nbd_err("Invalid nbd index (%d), currently only (%d) is allowed, or you can unmap it and then try it again with the new index (%d)!", nbd_index, tmp_index, nbd_index);
+            goto err;
+        }
+
         ret = nbd_check_device_status(cli_rep, nbd_index);
         if (ret == 1) {
             reconnect = true;
