@@ -17,10 +17,10 @@ Name:          nbd-runner
 Summary:       A daemon that handles the NBD device's IO requests in server side
 License:       GPLv2 or LGPLv3+
 Version:       0.5.3
-Release:       0%{?dist}
-URL:           https://github.com/gluster/nbd-runner
+Release:       1%{?dist}
+URL:           https://github.com/nbd-runner/nbd-runner
 
-Source0:       https://github.com/gluster/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
+Source0:       https://github.com/nbd-runner/%{name}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 BuildRequires: gcc
 BuildRequires: autoconf
@@ -77,8 +77,7 @@ find %{buildroot}%{_libdir}/nbd-runner/ -name '*.la' -delete
 %ldconfig_scriptlets -n nbd-runner-utils
 
 %post
-#%systemd_post nbd-runner.service nbd-clid.service
-%systemd_postun_with_restart nbd-runner.service nbd-clid.service
+%systemd_post nbd-runner.service nbd-clid.service
 
 %preun
 %systemd_preun nbd-runner.service nbd-clid.service
@@ -164,6 +163,10 @@ azblk-handler provide a library for processing the Azure storage stuff.
 ######## End ########
 
 %changelog
+* Thu Sep 19 2019 Xiubo Li <xiubli@redhat.com> - 0.5.3-1
+- Update to 0.5.3-1
+- Update the URL to nbd-runner/nbd-runner
+
 * Wed Sep 18 2019 Xiubo Li <xiubli@redhat.com> - 0.5.3-0
 - Update to 0.5.3-0
 - spec: disable devel library
