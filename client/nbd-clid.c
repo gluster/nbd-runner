@@ -89,14 +89,16 @@ nbd_clid_create_backstore(handler_t htype, const char *cfg, ssize_t size,
                           RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed, %s!");
+        nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed, %s!",
+                            strerror(eno));
         nbd_err("clnttcp_create failed, %s!\n", strerror(eno));
         goto err;
     }
 
     if (nbd_create_1(create, &rep, clnt) != RPC_SUCCESS) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "nbd_create_1 failed!");
+        nbd_clid_fill_reply(cli_rep, -eno, "nbd_create_1 failed, %s!",
+                            strerror(eno));
         nbd_err("nbd_create_1 failed, %s!\n", strerror(eno));
         goto err;
     }
@@ -147,7 +149,8 @@ nbd_clid_delete_backstore(handler_t htype, const char *cfg, const char *rhost,
     len = snprintf(delete->cfgstring, max_len, "%s", cfg);
     if (len < 0) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "snprintf error for cfgstring!");
+        nbd_clid_fill_reply(cli_rep, -eno, "snprintf error for cfgstring, %s!",
+                            strerror(eno));
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(eno));
         goto err;
     }
@@ -163,14 +166,16 @@ nbd_clid_delete_backstore(handler_t htype, const char *cfg, const char *rhost,
                           RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed!");
+        nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed, %s!",
+                            strerror(eno));
         nbd_err("clnttcp_create failed, %s!\n", strerror(eno));
         goto err;
     }
 
     if (nbd_delete_1(delete, &rep, clnt) != RPC_SUCCESS) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "nbd_delete_1 failed!");
+        nbd_clid_fill_reply(cli_rep, -eno, "nbd_delete_1 failed, %s!",
+                            strerror(eno));
         nbd_err("nbd_delete_1 failed, %s!\n", strerror(eno));
         goto err;
     }
@@ -516,7 +521,8 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int32_t nbd_index, bool re
     len = snprintf(map->cfgstring, max_len, "%s", cfg);
     if (len < 0) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "snprintf error for cfgstring!");
+        nbd_clid_fill_reply(cli_rep, -eno, "snprintf error for cfgstring, %s!",
+                            strerror(eno));
         nbd_err("snprintf error for cfgstring, %s!\n", strerror(eno));
         goto err;
     }
@@ -532,7 +538,8 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int32_t nbd_index, bool re
                           RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed!");
+        nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed, %s!",
+                            strerror(eno));
         nbd_err("clnttcp_create failed, %s!\n", strerror(eno));
         goto err;
     }
@@ -547,7 +554,8 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int32_t nbd_index, bool re
 
     if (nbd_premap_1(map, &rep, clnt) != RPC_SUCCESS) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "nbd_premap_1 failed!");
+        nbd_clid_fill_reply(cli_rep, -eno, "nbd_premap_1 failed, %s!",
+                            strerror(eno));
         nbd_err("nbd_premap_1 failed, %s!\n", strerror(eno));
         goto err;
     }
@@ -555,7 +563,8 @@ nbd_clid_map_device(handler_t htype, const char *cfg, int32_t nbd_index, bool re
     if (rep.exit == -EEXIST) {
         if (sscanf(rep.buf, "/dev/nbd%d", &tmp_index) != 1) {
             eno = errno;
-            nbd_clid_fill_reply(cli_rep, -eno, "Invalid nbd-device returned from server side!");
+            nbd_clid_fill_reply(cli_rep, -eno, "Invalid nbd-device returned from server side, %s!",
+                                strerror(eno));
             nbd_err("Invalid nbd-device returned from server side, %s!\n", strerror(eno));
             goto err;
         }
@@ -681,7 +690,8 @@ nbd_clid_unmap_device(handler_t htype, const char *cfg, int nbd_index,
     } else {
         len = snprintf(unmap->cfgstring, max_len, "%s", cfg);
         if (len < 0) {
-            nbd_clid_fill_reply(cli_rep, -errno, "snprintf error for cfgstring!");
+            nbd_clid_fill_reply(cli_rep, -errno, "snprintf error for cfgstring, %s!",
+                                strerror(errno));
             nbd_err("snprintf error for cfgstring, %s!\n", strerror(errno));
             goto err;
         }
@@ -697,7 +707,8 @@ nbd_clid_unmap_device(handler_t htype, const char *cfg, int nbd_index,
     clnt = clnttcp_create((struct sockaddr_in *)res->ai_addr, RPC_NBD,
                           RPC_NBD_VERS, &sock, 0, 0);
     if (!clnt) {
-        nbd_clid_fill_reply(cli_rep, -errno, "clnttcp_create failed!");
+        nbd_clid_fill_reply(cli_rep, -errno, "clnttcp_create failed, %s!",
+                            strerror(errno));
         nbd_err("clnttcp_create failed, %s!\n", strerror(errno));
         goto err;
     }
@@ -789,14 +800,16 @@ retry:
             goto retry;
         }
 
-        nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed!");
+        nbd_clid_fill_reply(cli_rep, -eno, "clnttcp_create failed, %s!",
+                            strerror(eno));
         nbd_err("clnttcp_create failed, %s!\n", strerror(eno));
         goto nla_put_failure;
     }
 
     if (nbd_list_1(&list, &rep, clnt) != RPC_SUCCESS) {
         eno = errno;
-        nbd_clid_fill_reply(cli_rep, -eno, "nbd_list_1 failed!");
+        nbd_clid_fill_reply(cli_rep, -eno, "nbd_list_1 failed, %s!",
+                            strerror(eno));
         nbd_err("nbd_list_1 failed, %s!\n", strerror(eno));
         goto nla_put_failure;
     }
