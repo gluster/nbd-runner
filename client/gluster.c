@@ -40,7 +40,7 @@ struct cli_cmd gluster_cmds[] = {
      .cmd     = NBD_CLI_UNMAP,
      .desc    = "Unmap the nbd device or VOLUME/FILEPATH, RUNNER_HOST will be 'localhost' as default",
     },
-    {.pattern = "list [insue|free|create|dead|live|all] [host RUNNER_HOST]",
+    {.pattern = "list [inuse|free|create|dead|live|all] [host RUNNER_HOST]",
      .cmd     = NBD_CLI_LIST,
      .desc    = "List the inused|free NBD devices or the created|dead|live backstores, all as\n\t\tdefault. 'create' means the backstores are just created or unmapped. 'dead' means\n\t\tthe IO connection is lost, this is mainly due to the nbd-runner service is restart\n\t\twithout unmapping. 'live' means everything is okay for both mapped and IO connection,\n\t\tRUNNER_HOST will be 'localhost' as default"
     },

@@ -139,12 +139,12 @@ if test "x$with_gluster" = "xyes"; then
         PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.6],
                           [AC_DEFINE(GFAPI_VERSION760, 1, [Define to 1 if gfapi >=7.6.0])],
                           [PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.3.6],,
-                                             [AC_MSG_ERROR([gfapi library >= 3.6 is required to build gluster-block])])])   
+                                             [AC_MSG_ERROR([gfapi library >= 3.6 is required to build nbd-runner])])])
     else
         # glusterfs-api versions have a prefix of "7."
         PKG_CHECK_MODULES([GFAPI], [glusterfs-api >= 7.6.6],
                           [AC_DEFINE(GFAPI_VERSION766, 1, [Define to 1 if gfapi >=7.6.6])],
-                          [AC_MSG_ERROR([gfapi library >= 6.6 is required to build gluster-block])])
+                          [AC_MSG_ERROR([gfapi library >= 6.6 is required to build nbd-runner])])
     fi
     AC_SUBST(GFAPI_CFLAGS)
     AC_SUBST(GFAPI_LIBS)

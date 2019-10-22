@@ -113,7 +113,7 @@ int nbd_ipc_connect(void)
 
 err:
     nbd_err("can not connect to nbd-clid daemon (%d)!\n", errno);
-    return ret;;
+    return ret;
 }
 
 void nbd_ipc_close(int sock)

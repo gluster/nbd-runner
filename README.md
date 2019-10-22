@@ -27,8 +27,8 @@ A cli utility, which aims at making backstore creation/deletion/mapping/unmaping
 |           |    |                 |                 |  |                |
 +-----------+    |                 |                 |  | MAP will       |
 +-----------+    |                 |                 |  | setup          |
-|           |    |                 |                 |  | the NBD        | socket
-|   Azblk   <---->                 |                 |  | devices        <--------> nbd-cli
+|           |    |                 |                 |  | the NBD        | /run/nbd-clid.sock
+|   Azblk   <---->                 |                 |  | devices        <-------------------> nbd-cli
 |           |    |                 |                 |  |          READ  |
 +-----------+    |  IO HOST IP     |  MAPPED NBD(IO) |  v          WRITE |
 +-----------+    |  listening on   <-----------------> /dev/nbdXX  FLUSH |
@@ -132,7 +132,7 @@ Commands:
 		Display version and exit
 ```
 
-<b>CLI</b>: you can choose to run nbd-cli from any node where the newer nbd.ko module is availible
+<b>nbd-cli</b>: you can choose to run nbd-cli from any node where the newer nbd.ko module is availible
 ```script
 $ nbd-cli help
 Usage:
