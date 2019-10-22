@@ -6,8 +6,10 @@ After=network-online.target rpcbind.service
 
 [Service]
 Type=simple
+Environment="NOFILE=1048576"
 EnvironmentFile=-/etc/sysconfig/nbd-runner
 ExecStart=@prefix@/sbin/nbd-runner --threads 2
+ExecStartPost=-/bin/bash -c "prlimit --pid $MAINPID --core=unlimited --nofile=$NOFILE:$NOFILE"
 KillMode=process
 TimeoutStartSec=600
 

@@ -6,8 +6,10 @@ After=network-online.target nbd-runner.service
 [Service]
 Type=simple
 PIDFile=/run/nbd-clid.pid
+Environment="NOFILE=1048576"
 EnvironmentFile=-/etc/sysconfig/nbd-clid
 ExecStart=@prefix@/sbin/nbd-clid
+ExecStartPost=-/bin/bash -c "prlimit --pid $MAINPID --core=unlimited --nofile=$NOFILE:$NOFILE"
 KillMode=process
 TimeoutStartSec=600
 
