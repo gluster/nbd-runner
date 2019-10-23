@@ -1131,6 +1131,7 @@ int nbd_handle_request(int sock, int threads)
     ret = nbd_socket_read(sock, cfg, nhdr.len);
     if (ret != nhdr.len) {
         ret = -1;
+        free(cfg);
         goto err;
     }
 
