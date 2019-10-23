@@ -263,8 +263,8 @@ static bool glfs_create(struct nbd_device *dev, nbd_response *rep)
         e = errno;
         nbd_fill_reply(rep, -e, "Failed to create file %s on volume %s, %s!",
                        info->path, info->volume, strerror(e));
-        nbd_err("Failed to create file %s on volume %s!\n",
-                info->path, info->volume);
+        nbd_err("Failed to create file %s on volume %s, %s!\n",
+                info->path, info->volume, strerror(e));
         goto err;
     }
 
@@ -486,8 +486,8 @@ static ssize_t glfs_get_blksize(struct nbd_device *dev, nbd_response *rep)
     }
 
     if (glfs_lstat(glfs, info->path, &st) < 0) {
-        nbd_fill_reply(rep, -errno, "failed to lstat file %s in volume: %s!",
-                       info->path, info->volume);
+        nbd_fill_reply(rep, -errno, "failed to lstat file %s in volume: %s, %s!",
+                       info->path, info->volume, strerror(errno));
         nbd_err("failed to lstat file %s in volume: %s, %s!\n",
                 info->path, info->volume, strerror(errno));
         ret = -1;
