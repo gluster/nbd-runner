@@ -124,7 +124,7 @@ static struct glfs *nbd_volume_init(char *volume, nbd_response *rep)
         goto out;
     }
 
-    g_hash_table_insert(glfs_volume_hash, key, glfs);
+    g_hash_table_insert(glfs_volume_hash, strdup(key), glfs);
     return glfs;
 
 out:
@@ -570,6 +570,14 @@ static bool glfs_load_json(struct nbd_device *dev, json_object *devobj, char *ke
     return true;
 }
 
+static void glfs_destroy(void)
+{
+    if (glfs_volume_hash)
+        g_hash_table_destroy(glfs_volume_hash);
+
+    free(glfs_host);
+}
+
 static void free_key(gpointer key)
 {
     free(key);
@@ -594,7 +602,7 @@ static struct nbd_handler glfs_handler = {
     .get_size       = glfs_get_size,
     .get_blksize    = glfs_get_blksize,
     .handle_request = glfs_handle_request,
-
+    .destroy        = glfs_destroy,
     .load_json      = glfs_load_json,
 };
 
