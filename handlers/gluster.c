@@ -339,11 +339,11 @@ static bool glfs_delete(struct nbd_device *dev, nbd_response *rep)
         goto err;
     }
 
+    free(info);
+    dev->priv = NULL;
     ret = true;
 
 err:
-    free(info);
-    dev->priv = NULL;
     return ret;
 }
 
