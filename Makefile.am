@@ -2,9 +2,6 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = rpc utils client server handlers
 
-DISTCLEANFILES = Makefile.in autom4te.cache nbd-runner.service     \
-				 nbd-clid.service
-
 EXTRA_DIST = autogen.sh README.md COPYING-GPLV2 COPYING-LGPLV3     \
 			 INSTALL nbd-runner.sysconfig.in nbd-runner.service.in \
 			 nbd-clid.service.in build-aux/pkg-version nbd-runner.8\
@@ -30,6 +27,9 @@ uninstall-local:
 	rm -f $(DESTDIR)${sysconfigdir}/nbd-clid
 	rm -f $(DESTDIR)${systemddir}/nbd-runner.service
 	rm -f $(DESTDIR)${systemddir}/nbd-clid.service
+
+distclean-local:
+	rm -rf Makefile.in autom4te.cache nbd-runner.service nbd-clid.service
 
 gitclean: clean distclean
 	find . -path gnulib -prune -name Makefile.in -exec rm -f {} \;
