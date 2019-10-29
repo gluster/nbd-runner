@@ -244,7 +244,7 @@ log_internal(int pri, struct nbd_device *dev, const char *funcname,
         handler = dev->handler;
         n = sprintf(buf, "%s:%d %s/%s: ", funcname, linenr,
                 handler ? handler->name: "",
-                dev ? dev->nbd: "");
+                dev->nbd);
     } else {
         n = sprintf(buf, "%s:%d: ", funcname, linenr);
     }
