@@ -710,15 +710,15 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     case NBD_DEV_CONN_ST_MAPPED:
         nbd_fill_reply(rep, -EBUSY, "%s already mapped to %s!", key, dev->nbd);
         nbd_err("%s already map to %s!\n", key, dev->nbd);
-        goto err;
+        goto err1;
     case NBD_DEV_CONN_ST_MAPPING:
         nbd_fill_reply(rep, -EBUSY, "%s already in mapping state!", key);
         nbd_err("%s already in mapping state!\n", key);
-        goto err;
+        goto err1;
     case NBD_DEV_CONN_ST_UNMAPPING:
         nbd_fill_reply(rep, -EBUSY, "%s is still in unmapping state!", key);
         nbd_err("%s is still in in unmapping state!\n", key);
-        goto err;
+        goto err1;
     case NBD_DEV_CONN_ST_CREATED:
         break;
     case NBD_DEV_CONN_ST_DEAD:
@@ -727,7 +727,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     default:
         nbd_fill_reply(rep, -EINVAL, "%s is in Unknown state %d!", key, dev->status);
         nbd_err("%s is in Unknown state %d!\n", key, dev->status);
-        goto err;
+        goto err1;
     }
 
     save_ret = rep->exit;
@@ -740,14 +740,14 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
         if (!globalobj) {
             nbd_fill_reply(rep, -EINVAL, "%s is empty!", NBD_SAVE_CONFIG_FILE);
             nbd_err("%s is empty!\n", NBD_SAVE_CONFIG_FILE);
-            goto err;
+            goto err1;
         }
 
         json_object_object_get_ex(globalobj, key, &devobj);
         if (!handler->load_json(dev, devobj, key)) {
             nbd_fill_reply(rep, -EINVAL, "load_json failed!");
             nbd_err("load_json failed!\n");
-            goto err;
+            goto err1;
         }
         dev->zombie = false;
     }
@@ -757,7 +757,7 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
 
     if (!handler->map(dev, rep)) {
         dev->timeout = save_tmo;
-        goto err;
+        goto err1;
     }
 
     dev->status = NBD_DEV_CONN_ST_MAPPING;
@@ -774,9 +774,10 @@ bool_t nbd_premap_1_svc(nbd_premap *map, nbd_response *rep, struct svc_req *req)
     snprintf(rep->host, NBD_HOST_MAX, "%s", ihost);
     snprintf(rep->port, NBD_PORT_MAX, "%d", NBD_MAP_SVC_PORT);
 
-err:
+err1:
     pthread_mutex_unlock(&dev->lock);
 
+err:
     if (!rep->exit || rep->exit == -EEXIST)
         nbd_info("Premap successed!\n");
     else
