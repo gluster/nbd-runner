@@ -109,14 +109,14 @@ struct nego_request {
 };
 
 struct nego_reply {
-    __u32 exit;
-    __u32 len;
+    __s32 exit;
+    __s32 len;
     __u8  error[0];
 };
 
 struct cli_reply {
-    __u32 exit;
-    __u32 len;
+    __s32 exit;
+    __s32 len;
     __u8  buf[0];
 };
 
