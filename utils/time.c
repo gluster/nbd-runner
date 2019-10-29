@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "utils.h"
 
@@ -21,6 +22,7 @@ int time_string_now(char* buf)
 {
     struct tm *tm;
     struct timeval tv;
+    int l = 0;
 
     if (!buf)
         return -EINVAL;
@@ -36,8 +38,10 @@ int time_string_now(char* buf)
     tm->tm_year += 1900;
     tm->tm_mon += 1;
 
-    snprintf(buf, NBD_TLEN_MAX, "%4d-%02d-%02d %02d:%02d:%02d", tm->tm_year,
-             tm->tm_mon, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+    l = snprintf(buf, NBD_TLEN_MAX, "%4d-%02d-%02d %02d:%02d:%02d",
+                tm->tm_year, tm->tm_mon, tm->tm_mday,
+                tm->tm_hour, tm->tm_min, tm->tm_sec);
+    assert(l < NBD_TLEN_MAX);
 
     return 0;
 }
