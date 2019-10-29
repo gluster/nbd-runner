@@ -851,7 +851,7 @@ static void *nbd_ping_liveness_start(void *arg)
             nbd_err("The nbd-runner daemon is down, sock: %d!\n", sock);
         }
 
-        if (sock) {
+        if (sock > 0) {
             nbd_socket_read(sock, buf, 1024);
             if(strcmp(timestamp, buf) || need_to_restore_again) {
                 if (!need_to_restore_again)
