@@ -84,6 +84,7 @@ int nbd_ipc_connect(void)
     ret = nbd_ipc_unix_addr(&sun);
     if (ret) {
         nbd_err("Failed to get the unix address!\n");
+        close(fd);
         goto err;
     }
 
