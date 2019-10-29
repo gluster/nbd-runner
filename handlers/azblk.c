@@ -1570,9 +1570,6 @@ static bool azblk_update_json(struct nbd_device *dev, json_object *devobj)
         return false;
     }
 
-    if (!azdev)
-        return false;
-
     if (azdev->cfg.sas) {
         if (json_object_object_get_ex(devobj, "sas", &obj)) {
             json_object_set_string(obj, azdev->cfg.sas);
