@@ -1124,44 +1124,62 @@ int nbd_handle_request(int sock, int threads)
     bzero(&nhdr, sizeof(struct nego_request));
     ret = nbd_socket_read(sock, &nhdr, sizeof(struct nego_request));
     if (ret != sizeof(struct nego_request)) {
+        nbd_err("Failed to read nego head!\n");
         ret = -1;
         goto err;
     }
 
     cfg = calloc(1, nhdr.len + 1);
+    if (!cfg) {
+        nbd_err("Failed to alloc memory for nhdr.len!\n");
+        ret = -1;
+        goto err;
+    }
     ret = nbd_socket_read(sock, cfg, nhdr.len);
     if (ret != nhdr.len) {
+        nbd_err("Failed to read nego head contents!\n");
         ret = -1;
-        free(cfg);
+        goto err;
+    }
+
+    buf = calloc(1, 4096);
+    if (!buf) {
+        nbd_err("Failed to alloc memory for buf!\n");
+        ret = -1;
         goto err;
     }
 
     key = nbd_get_hash_key(cfg);
     if (!key) {
         nrep.exit = -EINVAL;
-        buf = calloc(1, 4096);
         nrep.len = snprintf(buf, 4096, "Invalid cfg %s for nego!", cfg);
         if (nrep.len < 0)
             nrep.len = 0;
         nbd_err("Invalid cfg %s for nego!\n", cfg);
+        goto failed;
     }
+
     dev = g_hash_table_lookup(nbd_devices_hash, key);
     if (!dev) {
         nrep.exit = -EINVAL;
-        buf = calloc(1, 4096);
         nrep.len = snprintf(buf, 4096, "No such device found: %s", cfg);
         if (nrep.len < 0)
             nrep.len = 0;
         nbd_err("No such device found: %s", cfg);
     }
-    free(cfg);
 
-    pthread_mutex_lock(&dev->sock_lock);
+failed:
+    if (dev) {
+        pthread_mutex_lock(&dev->sock_lock);
+    }
+
     nbd_socket_write(sock, &nrep, sizeof(struct nego_reply));
-    if (nrep.len && buf)
+    if (nrep.len)
         nbd_socket_write(sock, buf, nrep.len);
-    pthread_mutex_unlock(&dev->sock_lock);
-    free(buf);
+
+    if (dev) {
+        pthread_mutex_unlock(&dev->sock_lock);
+    }
     /* nego end */
 
     if (nrep.exit)
@@ -1174,7 +1192,8 @@ int nbd_handle_request(int sock, int threads)
 
     if (!thread_pool) {
         nbd_err("Creating new thread pool failed!\n");
-        return -1;
+        ret = -1;
+        goto err;
     }
 
     dev->retry_thread = g_thread_try_new("retry thread", nbd_request_retry, (gpointer)dev, NULL);
@@ -1192,7 +1211,7 @@ int nbd_handle_request(int sock, int threads)
             if (!ret)
                 continue;
             ret = -1;
-            goto err;
+            goto err1;
         }
 
         if (request.magic != htonl(NBD_REQUEST_MAGIC))
@@ -1201,7 +1220,7 @@ int nbd_handle_request(int sock, int threads)
         if(request.type == htonl(NBD_CMD_DISC)) {
             nbd_dbg("Unmap request received for dev: %s!\n", key);
             ret = 0;
-            goto err;
+            goto err1;
         }
 
         cmd = ntohl(request.type) & NBD_CMD_MASK_COMMAND;
@@ -1221,7 +1240,7 @@ int nbd_handle_request(int sock, int threads)
         if (!req) {
             nbd_err("Failed to alloc memory for pool request!\n");
             ret = -1;
-            goto err;
+            goto err1;
         }
 
         req->dev = dev;
@@ -1239,7 +1258,7 @@ int nbd_handle_request(int sock, int threads)
                 nbd_err("Failed to alloc memory for data!\n");
                 free(req);
                 ret = -1;
-                goto err;
+                goto err1;
             }
         }
 
@@ -1251,10 +1270,7 @@ int nbd_handle_request(int sock, int threads)
         g_thread_pool_push(thread_pool, req, NULL);
     }
 
-err:
-    free(key);
-    g_thread_pool_free(thread_pool, false, true);
-
+err1:
     if (dev->retry_thread) {
         dev->stop_retry_thread = 1;
         g_thread_join(dev->retry_thread);
@@ -1277,7 +1293,21 @@ err:
     nbd_update_json_config_file(dev);
     pthread_mutex_unlock(&dev->lock);
 
+err:
+    if (thread_pool)
+        g_thread_pool_free(thread_pool, false, true);
+
+    if (cfg)
+        free(cfg);
+
+    if (key)
+        free(key);
+
+    if (buf)
+        free(buf);
+
     close(sock);
+
     return ret;
 }
 
