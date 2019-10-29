@@ -1002,8 +1002,7 @@ static int nbd_setup_pid_file(void)
     fd = open(NBD_CLID_PID_FILE_DEFAULT, O_WRONLY|O_CREAT, 0644);
     if (fd < 0) {
         nbd_err("Failed to create pid file: %s\n", NBD_CLID_PID_FILE_DEFAULT);
-        ret = -1;
-        goto err;
+        return -1;
     }
 
     if (lockf(fd, F_TLOCK, 0) < 0) {
