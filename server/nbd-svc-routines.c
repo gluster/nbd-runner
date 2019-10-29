@@ -1404,7 +1404,7 @@ static void free_handler(gpointer value)
 {
     struct nbd_handler *handler = value;
 
-    if (!handler && handler->destroy)
+    if (handler && handler->destroy)
         handler->destroy();
 }
 
