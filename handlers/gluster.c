@@ -511,6 +511,13 @@ static void glfs_async_cbk(glfs_fd_t *gfd, ssize_t ret,
 {
     struct nbd_handler_request *req = data;
 
+    /*
+     * ENOENT for READ operation means EOF,
+     * see glusterfs commit 9fe5c6d3
+     */
+    if ((errno == ENOENT) && (req->cmd == NBD_CMD_READ))
+        errno = 0;
+
     req->done(req, -errno);
 }
 
