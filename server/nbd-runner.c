@@ -54,7 +54,7 @@ static void usage(void)
            "\t-h, --help\n"
            "\t\tDisplay help for nbd-runner command\n\n"
            "\t-t, --threads=<NUMBER>\n"
-           "\t\tSpecify the IO thread number for each mapped backstore, 1 as default\n\n"
+           "\t\tSpecify the IO thread number for each mapped backstore, %d as default\n\n"
            "\t-r, --rhost=<RUNNER_HOST>\n"
            "\t\tSpecify the listenning IP for the nbd-runner server to receive/reply the control\n"
            "\t\tcommands(create/delete/map/unmap/list, etc) from nbd-cli, INADDR_ANY as default\n\n"
@@ -71,8 +71,8 @@ static void usage(void)
            "\t\tShow version info and exit.\n\n"
            "\tNOTE:\n"
            "\t\tThe RUNNER_HOST and the IO_HOST will be useful if you'd like the control commands\n"
-           "\t\troute different from the IOs route via different NICs, or just omit them as default\n"
-          );
+           "\t\troute different from the IOs route via different NICs, or just omit them as default\n",
+           NBD_DEF_THREADS);
 }
 
 static void *worker_thread(void *arg)
